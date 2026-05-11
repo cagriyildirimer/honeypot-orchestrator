@@ -12,13 +12,13 @@ class FakeSSHHoneypot(BaseHoneypotService):
         writer: asyncio.StreamWriter,
     ) -> None:
         src_ip, src_port = self.peer(writer)
-        # Bağlantı kurulur kurulmaz kaynak IP/port bilgisi kaydedilir.
+        # Baglanti kurulur kurulmaz kaynak IP/port bilgisi kaydedilir.
         await self.log_event("connection", src_ip=src_ip, src_port=src_port)
         try:
-            # SSH istemcisinin beklediği banner taklit edilir; gerçek SSH oturumu açılmaz.
+            # SSH istemcisinin bekledigi banner taklit edilir; gercek SSH oturumu acilmaz.
             await self.write(writer, "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3\r\n")
             await self.write(writer, "login as: ")
-            # Girilen kullanıcı adı ve parola yalnızca lab içi gözlem için loglanır.
+            # Girilen kullanici adi ve parola yalnizca lab ici gozlem icin loglanir.
             username = await self.read_line(reader)
             await self.write(writer, f"{username}@localhost's password: ")
             password = await self.read_line(reader)
@@ -30,13 +30,13 @@ class FakeSSHHoneypot(BaseHoneypotService):
                 password=password,
                 summary=f"Fake SSH login attempt for {username}",
             )
-            # Honeypot her giriş denemesini başarısız gösterir.
+            # Honeypot her giris denemesini basarisiz gosterir.
             await self.write(writer, "Permission denied, please try again.\r\n")
         except (BrokenPipeError, ConnectionResetError):
-            # İstemci oturum tamamlanmadan koparsa ayrı olay olarak işaretlenir.
+            # Istemci oturum tamamlanmadan koparsa ayri olay olarak isaretlenir.
             await self.log_event("client_disconnected", src_ip=src_ip, src_port=src_port)
         except Exception as exc:
-            # Beklenmeyen hatalar olay tipine hata sınıfı eklenerek loglanır.
+            # Beklenmeyen hatalar olay tipine hata sinifi eklenerek loglanir.
             await self.log_event(
                 "connection_error",
                 src_ip=src_ip,

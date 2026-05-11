@@ -14,23 +14,23 @@ from honeypot_orchestrator.web.server import WebDashboard
 class Orchestrator:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
-        # Bütün servisler aynı JSONL logger'ı kullanır; olaylar tek dosyada toplanır.
+        # Butun servisler ayni JSONL logger'i kullanir; olaylar tek dosyada toplanir.
         self.logger = JSONLEventLogger(config.logging.path)
-        # config.yaml içindeki enabled servislerden gerçek servis nesneleri oluşturulur.
+        # config.yaml icindeki enabled servislerden gercek servis nesneleri olusturulur.
         self.services = self._build_services()
-        # Web paneli orkestratörden servis durumunu ve log yolunu okuyacak şekilde bağlanır.
+        # Web paneli orkestratorden servis durumunu ve log yolunu okuyacak sekilde baglanir.
         self.web_dashboard = WebDashboard(config.web.host, config.web.port, self)
 
     async def start(self) -> None:
-        # Önce honeypot servisleri dinlemeye başlar.
+        # Once honeypot servisleri dinlemeye baslar.
         for service in self.services:
             await service.start()
 
-        # Web paneli isteğe bağlıdır; config.web.enabled false ise hiç açılmaz.
+        # Web paneli istege baglidir; config.web.enabled false ise hic acilmaz.
         if self.config.web.enabled:
             await self.web_dashboard.start()
 
-        # Başlangıç olayı log dosyasına yazılır; panelde de görülebilir.
+        # Baslangic olayi log dosyasina yazilir; panelde de gorulebilir.
         await self.logger.log(
             {
                 "service": "orchestrator",
@@ -41,7 +41,7 @@ class Orchestrator:
         self.print_startup_summary()
 
     async def stop(self) -> None:
-        # Kapanışın başladığını loglayarak sonradan inceleme için iz bırakır.
+        # Kapanisin basladigini loglayarak sonradan inceleme icin iz birakir.
         await self.logger.log(
             {
                 "service": "orchestrator",
@@ -50,16 +50,16 @@ class Orchestrator:
             }
         )
 
-        # Panel açıksa önce onu kapatır.
+        # Panel aciksa once onu kapatir.
         if self.config.web.enabled:
             await self.web_dashboard.stop()
 
-        # Servisleri ters sırada kapatmak, başlatma sırasının simetrik kapanmasını sağlar.
+        # Servisleri ters sirada kapatmak, baslatma sirasinin simetrik kapanmasini saglar.
         for service in reversed(self.services):
             await service.stop()
 
     def service_status(self) -> list[dict[str, object]]:
-        # Web API'nin döndürdüğü sade servis durum listesini üretir.
+        # Web API'nin dondurdugu sade servis durum listesini uretir.
         return [
             {
                 "name": service.name,
@@ -71,7 +71,7 @@ class Orchestrator:
         ]
 
     def print_startup_summary(self) -> None:
-        # Terminalde kullanıcının hangi portların açıldığını hızlıca görmesini sağlar.
+        # Terminalde kullanicinin hangi portlarin acildigini hizlica gormesini saglar.
         print("Honeypot Orchestrator started")
         if self.config.web.enabled:
             print(f"Dashboard: http://{self.config.web.host}:{self.config.web.port}")
@@ -79,7 +79,7 @@ class Orchestrator:
             print(f"{service.name}: {service.host}:{service.port}")
 
     def _build_services(self) -> list[object]:
-        # Config'teki servis adını ilgili Python sınıfına eşleyen küçük kayıt tablosu.
+        # Config'teki servis adini ilgili Python sinifina esleyen kucuk kayit tablosu.
         registry = {
             "http": HTTPHoneypot,
             "ssh": FakeSSHHoneypot,
@@ -88,11 +88,11 @@ class Orchestrator:
         }
         services = []
         for name, service_config in self.config.services.items():
-            # enabled: false olan servisler dinlemeye açılmaz.
+            # enabled: false olan servisler dinlemeye acilmaz.
             if not service_config.enabled:
                 continue
             service_cls = registry.get(name)
-            # Tanınmayan servis adları hata vermeden atlanır.
+            # Taninmayan servis adlari hata vermeden atlanir.
             if service_cls is None:
                 continue
             # Her servis kendi portunda dinler ama ortak logger'a olay yazar.
