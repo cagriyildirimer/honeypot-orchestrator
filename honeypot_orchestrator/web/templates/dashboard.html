@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Honeypot Director</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body class="logged-in">
+    <div class="background-orbit orbit-a"></div>
+    <div class="background-orbit orbit-b"></div>
+
+    <main class="app-shell">
+      <section class="view view-dashboard">
+        <header class="hero">
+          <div>
+            <div class="eyebrow">Live Control Room</div>
+            <h1>Honeypot Director</h1>
+            <p class="lead">
+              Start services on demand, review the latest noise across your lab,
+              and keep a tight grip on exposed ports.
+            </p>
+          </div>
+          <div class="hero-actions">
+            <div class="session-pill">
+              <span>Signed in as</span>
+              <strong id="sessionUser">-</strong>
+            </div>
+            <button id="refreshButton" type="button" class="secondary">Refresh</button>
+            <button id="logoutButton" type="button">Log Out</button>
+          </div>
+        </header>
+
+        <section class="stats-grid" aria-label="Statistics">
+          <article class="stat-card pulse">
+            <span>Running Services</span>
+            <strong id="runningServices">0</strong>
+            <small>Only the ports you intentionally expose.</small>
+          </article>
+          <article class="stat-card">
+            <span>Total Recent Events</span>
+            <strong id="totalEvents">0</strong>
+            <small>Last 1000 records from the JSONL stream.</small>
+          </article>
+          <article class="stat-card">
+            <span>Login Attempts</span>
+            <strong id="loginAttempts">0</strong>
+            <small>SSH, FTP, and Telnet credential captures.</small>
+          </article>
+          <article class="stat-card">
+            <span>Dashboard</span>
+            <strong id="dashboardAddress">-</strong>
+            <small>Web control endpoint.</small>
+          </article>
+        </section>
+
+        <section class="workspace">
+          <div class="panel panel-services">
+            <div class="section-heading">
+              <div>
+                <h2>Service Controls</h2>
+                <p>Bring listeners online only when you want them visible.</p>
+              </div>
+              <span id="serviceSummary" class="soft-badge">0 active</span>
+            </div>
+            <div id="services" class="service-grid"></div>
+          </div>
+
+          <aside class="panel panel-sidebar">
+            <div class="section-heading">
+              <div>
+                <h2>Event Filters</h2>
+                <p>Trim the stream to the signals you care about.</p>
+              </div>
+            </div>
+            <form id="filtersForm" class="filters-form">
+              <label>
+                <span>Service</span>
+                <select id="serviceFilter">
+                  <option value="">All services</option>
+                </select>
+              </label>
+              <label>
+                <span>Event type</span>
+                <select id="eventTypeFilter">
+                  <option value="">All event types</option>
+                </select>
+              </label>
+              <label>
+                <span>Event limit</span>
+                <input id="limitInput" type="number" min="10" max="100" step="10" value="50">
+              </label>
+              <button type="submit" class="secondary">Apply Filters</button>
+            </form>
+
+            <div class="panel mini-panel">
+              <h3>Activity Snapshot</h3>
+              <ul id="activitySummary" class="summary-list"></ul>
+            </div>
+
+            <div id="toast" class="toast" hidden></div>
+          </aside>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <h2>Recent Events</h2>
+              <p>Newest entries appear first as traffic hits your decoys.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Service</th>
+                  <th>Type</th>
+                  <th>Source</th>
+                  <th>Summary</th>
+                </tr>
+              </thead>
+              <tbody id="events"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="/static/common.js"></script>
+    <script src="/static/dashboard.js"></script>
+  </body>
+</html>

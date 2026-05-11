@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Honeypot Director Login</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="background-orbit orbit-a"></div>
+    <div class="background-orbit orbit-b"></div>
+
+    <main class="app-shell">
+      <section class="view view-login">
+        <div class="login-panel">
+          <div class="eyebrow">Secure Console</div>
+          <h1>Honeypot Director</h1>
+          <p class="lead">
+            Launch only the decoy services you need, watch traffic in real time,
+            and keep the lab isolated behind a protected dashboard.
+          </p>
+          <form id="loginForm" class="login-form">
+            <label>
+              <span>Username</span>
+              <input id="usernameInput" name="username" type="text" autocomplete="username" required>
+            </label>
+            <label>
+              <span>Password</span>
+              <input id="passwordInput" name="password" type="password" autocomplete="current-password" required>
+            </label>
+            <button id="loginButton" type="submit">Enter Dashboard</button>
+          </form>
+          <p id="loginError" class="error-text" hidden></p>
+        </div>
+      </section>
+    </main>
+    <script src="/static/common.js"></script>
+    <script src="/static/login.js"></script>
+  </body>
+</html>

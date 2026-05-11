@@ -16,7 +16,17 @@ Dashboard:
 http://127.0.0.1:8000
 ```
 
-Default services:
+Default login:
+
+- Username: `admin`
+- Password: `admin123`
+
+Behavior:
+
+- On startup, only the web dashboard opens.
+- Honeypot services are started and stopped from the dashboard.
+
+Available services:
 
 - HTTP honeypot: `127.0.0.1:8080`
 - Fake SSH login: `127.0.0.1:2222`

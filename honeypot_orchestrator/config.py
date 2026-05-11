@@ -22,6 +22,13 @@ class WebConfig:
 
 
 @dataclass(frozen=True)
+class AuthConfig:
+    # Web paneli girisi icin kullanici adi ve parola bilgisini tutar.
+    username: str
+    password: str
+
+
+@dataclass(frozen=True)
 class LoggingConfig:
     # Olay kayitlarinin yazilacagi JSONL dosyasinin yolu.
     path: Path
@@ -32,6 +39,7 @@ class AppConfig:
     host: str
     logging: LoggingConfig
     web: WebConfig
+    auth: AuthConfig
     services: dict[str, ServiceConfig]
 
 
@@ -44,6 +52,7 @@ def load_config(path: str | Path) -> AppConfig:
 
     logging_raw = _as_dict(raw.get("logging"))
     web_raw = _as_dict(raw.get("web"))
+    auth_raw = _as_dict(raw.get("auth"))
     services_raw = _as_dict(raw.get("services"))
 
     services = {
@@ -63,6 +72,10 @@ def load_config(path: str | Path) -> AppConfig:
             enabled=bool(web_raw.get("enabled", True)),
             host=str(web_raw.get("host", base_host)),
             port=int(web_raw.get("port", 8000)),
+        ),
+        auth=AuthConfig(
+            username=str(auth_raw.get("username", "admin")),
+            password=str(auth_raw.get("password", "admin")),
         ),
         services=services,
     )

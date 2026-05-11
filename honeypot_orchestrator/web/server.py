@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
 from collections import Counter
+from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
@@ -21,6 +23,8 @@ class WebDashboard:
         self.orchestrator = orchestrator
         # Panel de kucuk bir asyncio HTTP sunucusu olarak calisir.
         self._server: asyncio.AbstractServer | None = None
+        # Basit oturumlar bellek ici token seti ile tutulur.
+        self._sessions: set[str] = set()
 
     async def start(self) -> None:
         # Tarayici istekleri handle_client metoduna yonlendirilir.
@@ -32,6 +36,7 @@ class WebDashboard:
         self._server.close()
         await self._server.wait_closed()
         self._server = None
+        self._sessions.clear()
 
     async def handle_client(
         self,
@@ -39,102 +44,286 @@ class WebDashboard:
         writer: asyncio.StreamWriter,
     ) -> None:
         try:
-            # Ilk satirdan HTTP metodu ve istenen yol okunur.
-            request_line = await asyncio.wait_for(reader.readline(), timeout=10)
-            method, target, _ = _parse_request_line(request_line.decode("utf-8", "replace"))
-            while True:
-                # Header'lar bu MVP'de kullanilmiyor; bos satira kadar tuketiliyor.
-                line = await asyncio.wait_for(reader.readline(), timeout=5)
-                if line in {b"\r\n", b"\n", b""}:
-                    break
-
-            # Panel sadece GET isteklerini kabul eder.
-            if method != "GET":
-                await self.respond(writer, 405, "text/plain; charset=utf-8", b"Method not allowed")
-                return
-
-            parsed = urlparse(target)
-            if parsed.path == "/":
-                # Ana HTML dosyasi dogrudan diskten okunup gonderilir.
-                body = (WEB_DIR / "templates" / "index.html").read_bytes()
-                await self.respond(writer, 200, "text/html; charset=utf-8", body)
-            elif parsed.path == "/static/styles.css":
-                # CSS ve JS icin ayri statik rotalar vardir.
-                body = (WEB_DIR / "static" / "styles.css").read_bytes()
-                await self.respond(writer, 200, "text/css; charset=utf-8", body)
-            elif parsed.path == "/static/app.js":
-                body = (WEB_DIR / "static" / "app.js").read_bytes()
-                await self.respond(writer, 200, "application/javascript; charset=utf-8", body)
-            elif parsed.path == "/api/status":
-                # Calisan servislerin durum bilgisi JSON olarak doner.
-                await self.respond_json(
-                    writer,
-                    {
-                        "services": self.orchestrator.service_status(),
-                        "log_path": str(self.orchestrator.config.logging.path),
-                    },
-                )
-            elif parsed.path == "/api/events":
-                # limit parametresi son kac olayin donecegini belirler.
-                query = parse_qs(parsed.query)
-                limit = int(query.get("limit", ["50"])[0])
-                await self.respond_json(
-                    writer,
-                    {"events": read_recent_events(self.orchestrator.config.logging.path, limit)},
-                )
-            elif parsed.path == "/api/stats":
-                # Son kayitlar uzerinden servis ve olay tipine gore basit sayaclar uretilir.
-                records = read_recent_events(self.orchestrator.config.logging.path, 1000)
-                by_service = Counter(record.get("service", "unknown") for record in records)
-                by_type = Counter(record.get("event_type", "unknown") for record in records)
-                await self.respond_json(
-                    writer,
-                    {
-                        "total_recent_events": len(records),
-                        "by_service": dict(by_service),
-                        "by_type": dict(by_type),
-                    },
-                )
-            else:
-                # Bilinmeyen yollar 404 ile kapanir.
-                await self.respond(writer, 404, "text/plain; charset=utf-8", b"Not found")
+            request = await self._read_request(reader)
+            response = await self._route_request(request)
+            await self._send_response(writer, response)
         except Exception as exc:
-            # Panelde beklenmeyen bir hata olursa tarayiciya 500 cevabi verilir.
             body = f"Internal server error: {type(exc).__name__}".encode("utf-8")
-            await self.respond(writer, 500, "text/plain; charset=utf-8", body)
+            await self._send_response(
+                writer,
+                _response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    "text/plain; charset=utf-8",
+                    body,
+                ),
+            )
         finally:
             writer.close()
             await writer.wait_closed()
 
-    async def respond_json(self, writer: asyncio.StreamWriter, payload: dict[str, Any]) -> None:
-        # Python sozlugunu JSON byte govdesine donusturur.
-        body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
-        await self.respond(writer, 200, "application/json; charset=utf-8", body)
+    async def _route_request(self, request: dict[str, Any]) -> dict[str, Any]:
+        method = request["method"]
+        path = request["path"]
+        cookies = request["cookies"]
+        authenticated = self._is_authenticated(cookies)
 
-    async def respond(
+        if path == "/":
+            return self._redirect("/dashboard" if authenticated else "/login")
+
+        if path == "/login":
+            if authenticated:
+                return self._redirect("/dashboard")
+            body = (WEB_DIR / "templates" / "login.html").read_bytes()
+            return _response(HTTPStatus.OK, "text/html; charset=utf-8", body)
+
+        if path == "/dashboard":
+            if not authenticated:
+                return self._redirect("/login")
+            body = (WEB_DIR / "templates" / "dashboard.html").read_bytes()
+            return _response(HTTPStatus.OK, "text/html; charset=utf-8", body)
+
+        if path == "/static/styles.css":
+            body = (WEB_DIR / "static" / "styles.css").read_bytes()
+            return _response(HTTPStatus.OK, "text/css; charset=utf-8", body)
+
+        if path == "/static/common.js":
+            body = (WEB_DIR / "static" / "common.js").read_bytes()
+            return _response(HTTPStatus.OK, "application/javascript; charset=utf-8", body)
+
+        if path == "/static/login.js":
+            body = (WEB_DIR / "static" / "login.js").read_bytes()
+            return _response(HTTPStatus.OK, "application/javascript; charset=utf-8", body)
+
+        if path == "/static/dashboard.js":
+            body = (WEB_DIR / "static" / "dashboard.js").read_bytes()
+            return _response(HTTPStatus.OK, "application/javascript; charset=utf-8", body)
+
+        if path == "/api/login" and method == "POST":
+            payload = _decode_json_body(request["body"])
+            return await self._handle_login(payload)
+
+        if path == "/api/logout" and method == "POST":
+            return await self._handle_logout(cookies)
+
+        if path == "/api/session" and method == "GET":
+            return self._json_response(
+                {
+                    "authenticated": authenticated,
+                    "username": self.orchestrator.config.auth.username if authenticated else "",
+                }
+            )
+
+        if path.startswith("/api/") and not authenticated:
+            return self._json_response(
+                {"error": "Authentication required."},
+                status=HTTPStatus.UNAUTHORIZED,
+            )
+
+        if path == "/api/status" and method == "GET":
+            return self._json_response(
+                {
+                    "services": self.orchestrator.service_status(),
+                    "log_path": str(self.orchestrator.config.logging.path),
+                    "web": {
+                        "host": self.orchestrator.config.web.host,
+                        "port": self.orchestrator.config.web.port,
+                    },
+                }
+            )
+
+        if path == "/api/events" and method == "GET":
+            query = request["query"]
+            limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=200)
+            service_filter = query.get("service", [""])[0].strip().lower()
+            event_filter = query.get("event_type", [""])[0].strip().lower()
+            events = read_recent_events(self.orchestrator.config.logging.path, limit * 4)
+            filtered = [
+                event
+                for event in events
+                if (not service_filter or str(event.get("service", "")).lower() == service_filter)
+                and (not event_filter or str(event.get("event_type", "")).lower() == event_filter)
+            ]
+            return self._json_response({"events": filtered[:limit]})
+
+        if path == "/api/stats" and method == "GET":
+            records = read_recent_events(self.orchestrator.config.logging.path, 1000)
+            by_service = Counter(record.get("service", "unknown") for record in records)
+            by_type = Counter(record.get("event_type", "unknown") for record in records)
+            return self._json_response(
+                {
+                    "total_recent_events": len(records),
+                    "by_service": dict(by_service),
+                    "by_type": dict(by_type),
+                }
+            )
+
+        if path.startswith("/api/services/") and method == "POST":
+            parts = [part for part in path.split("/") if part]
+            if len(parts) == 4 and parts[1] == "services":
+                service_name = parts[2]
+                action = parts[3]
+                return await self._handle_service_action(service_name, action)
+
+        if path == "/api/services" and method == "GET":
+            return self._json_response({"services": self.orchestrator.service_status()})
+
+        if path.startswith("/api/"):
+            return self._json_response(
+                {"error": "Not found."},
+                status=HTTPStatus.NOT_FOUND,
+            )
+
+        return _response(HTTPStatus.NOT_FOUND, "text/plain; charset=utf-8", b"Not found")
+
+    async def _handle_login(self, payload: dict[str, Any]) -> dict[str, Any]:
+        username = str(payload.get("username", ""))
+        password = str(payload.get("password", ""))
+        if (
+            username != self.orchestrator.config.auth.username
+            or password != self.orchestrator.config.auth.password
+        ):
+            await self.orchestrator.logger.log(
+                {
+                    "service": "web",
+                    "event_type": "login_failed",
+                    "summary": f"Dashboard login failed for {username or 'unknown'}.",
+                }
+            )
+            return self._json_response(
+                {"ok": False, "error": "Invalid username or password."},
+                status=HTTPStatus.UNAUTHORIZED,
+            )
+
+        token = secrets.token_urlsafe(24)
+        self._sessions.add(token)
+        await self.orchestrator.logger.log(
+            {
+                "service": "web",
+                "event_type": "login_success",
+                "summary": f"Dashboard login success for {username}.",
+            }
+        )
+        return self._json_response(
+            {"ok": True, "username": username},
+            cookies=[_build_cookie("session", token)],
+        )
+
+    async def _handle_logout(self, cookies: dict[str, str]) -> dict[str, Any]:
+        token = cookies.get("session", "")
+        self._sessions.discard(token)
+        return self._json_response(
+            {"ok": True},
+            cookies=[_build_cookie("session", "", max_age=0)],
+        )
+
+    async def _handle_service_action(self, service_name: str, action: str) -> dict[str, Any]:
+        try:
+            if action == "start":
+                payload = await self.orchestrator.start_service(service_name)
+            elif action == "stop":
+                payload = await self.orchestrator.stop_service(service_name)
+            else:
+                return self._json_response(
+                    {"error": "Unsupported action."},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+        except KeyError:
+            return self._json_response(
+                {"error": f"Unknown service: {service_name}."},
+                status=HTTPStatus.NOT_FOUND,
+            )
+        except OSError as exc:
+            return self._json_response(
+                {
+                    "error": f"Could not {action} {service_name}.",
+                    "detail": str(exc),
+                },
+                status=HTTPStatus.CONFLICT,
+            )
+
+        return self._json_response(payload)
+
+    async def _read_request(self, reader: asyncio.StreamReader) -> dict[str, Any]:
+        request_line = await asyncio.wait_for(reader.readline(), timeout=10)
+        method, target, _ = _parse_request_line(request_line.decode("utf-8", "replace"))
+        headers: dict[str, str] = {}
+        while True:
+            line = await asyncio.wait_for(reader.readline(), timeout=5)
+            if line in {b"\r\n", b"\n", b""}:
+                break
+            key, _, value = line.decode("utf-8", "replace").partition(":")
+            if key and value:
+                headers[key.strip().lower()] = value.strip()
+
+        body = b""
+        content_length = _safe_int(headers.get("content-length", "0"), default=0, minimum=0, maximum=65536)
+        if content_length:
+            body = await asyncio.wait_for(reader.readexactly(content_length), timeout=10)
+
+        parsed = urlparse(target)
+        return {
+            "method": method.upper(),
+            "target": target,
+            "path": parsed.path,
+            "query": parse_qs(parsed.query),
+            "headers": headers,
+            "cookies": _parse_cookies(headers.get("cookie", "")),
+            "body": body,
+        }
+
+    async def _send_response(
         self,
         writer: asyncio.StreamWriter,
-        status: int,
-        content_type: str,
-        body: bytes,
+        response: dict[str, Any],
     ) -> None:
-        # HTTP durum koduna kisa aciklama metni ekler.
-        reason = {
-            200: "OK",
-            404: "Not Found",
-            405: "Method Not Allowed",
-            500: "Internal Server Error",
-        }.get(status, "OK")
-        # Basit HTTP yanit basliklari ve govde tek seferde gonderilir.
-        headers = (
-            f"HTTP/1.1 {status} {reason}\r\n"
-            f"Content-Type: {content_type}\r\n"
-            f"Content-Length: {len(body)}\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-        ).encode("utf-8")
-        writer.write(headers + body)
+        status = response["status"]
+        body = response["body"]
+        headers = {
+            "Content-Type": response["content_type"],
+            "Content-Length": str(len(body)),
+            "Connection": "close",
+        }
+        headers.update(response.get("headers", {}))
+        header_lines = [f"HTTP/1.1 {status.value} {status.phrase}"]
+        for key, value in headers.items():
+            if isinstance(value, list):
+                for item in value:
+                    header_lines.append(f"{key}: {item}")
+            else:
+                header_lines.append(f"{key}: {value}")
+        header_blob = ("\r\n".join(header_lines) + "\r\n\r\n").encode("utf-8")
+        writer.write(header_blob + body)
         await writer.drain()
+
+    def _is_authenticated(self, cookies: dict[str, str]) -> bool:
+        token = cookies.get("session", "")
+        return token in self._sessions
+
+    def _json_response(
+        self,
+        payload: dict[str, Any],
+        *,
+        status: HTTPStatus = HTTPStatus.OK,
+        cookies: list[str] | None = None,
+    ) -> dict[str, Any]:
+        headers: dict[str, Any] = {}
+        if cookies:
+            headers["Set-Cookie"] = cookies
+        body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+        return {
+            "status": status,
+            "content_type": "application/json; charset=utf-8",
+            "body": body,
+            "headers": headers,
+        }
+
+    def _redirect(self, location: str) -> dict[str, Any]:
+        return _response(
+            HTTPStatus.FOUND,
+            "text/plain; charset=utf-8",
+            f"Redirecting to {location}".encode("utf-8"),
+            headers={"Location": location},
+        )
 
 
 def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
@@ -143,8 +332,7 @@ def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
         return []
     lines = path.read_text(encoding="utf-8").splitlines()
     records = []
-    # En fazla 500 kayit okunur; panelin asiri buyuk dosyada yavaslamasi onlenir.
-    for line in lines[-max(1, min(limit, 500)) :]:
+    for line in lines[-max(1, min(limit, 2000)) :]:
         try:
             # Bozuk JSON satirlari paneli kirmasin diye atlanir.
             records.append(json.loads(line))
@@ -153,9 +341,56 @@ def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
     return list(reversed(records))
 
 
+def _response(
+    status: HTTPStatus,
+    content_type: str,
+    body: bytes,
+    headers: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "content_type": content_type,
+        "body": body,
+        "headers": headers or {},
+    }
+
+
+def _decode_json_body(body: bytes) -> dict[str, Any]:
+    if not body:
+        return {}
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def _parse_request_line(request_line: str) -> tuple[str, str, str]:
-    # Eksik istek satirinda ana sayfaya GET varsayimi yapilir.
     parts = request_line.strip().split()
     if len(parts) >= 3:
         return parts[0], parts[1], parts[2]
     return "GET", "/", "HTTP/1.1"
+
+
+def _parse_cookies(cookie_header: str) -> dict[str, str]:
+    cookies: dict[str, str] = {}
+    for fragment in cookie_header.split(";"):
+        key, _, value = fragment.strip().partition("=")
+        if key:
+            cookies[key] = value
+    return cookies
+
+
+def _build_cookie(name: str, value: str, *, max_age: int | None = None) -> str:
+    parts = [f"{name}={value}", "Path=/", "HttpOnly", "SameSite=Strict"]
+    if max_age is not None:
+        parts.append(f"Max-Age={max_age}")
+    return "; ".join(parts)
+
+
+def _safe_int(value: str, *, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(parsed, maximum))
