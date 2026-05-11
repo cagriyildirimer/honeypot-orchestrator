@@ -1,6 +1,7 @@
 const state = {
   username: "",
   services: [],
+  profile: null,
   stats: null,
   filters: {
     service: "",
@@ -20,6 +21,24 @@ function showToast(message, tone = "neutral") {
   showToast.timer = setTimeout(() => {
     toast.hidden = true;
   }, 2600);
+}
+
+function renderProfileSelector(profileStatus) {
+  state.profile = profileStatus;
+  const profileSelect = document.querySelector("#profileSelect");
+  const activeProfile = profileStatus && profileStatus.current ? profileStatus.current.name : "";
+  profileSelect.innerHTML = "";
+
+  for (const profile of (profileStatus && profileStatus.available) || []) {
+    const option = document.createElement("option");
+    option.value = profile.name;
+    option.textContent = profile.display_name;
+    option.selected = profile.name === activeProfile;
+    profileSelect.appendChild(option);
+  }
+
+  document.querySelector("#activeProfile").textContent =
+    text(profileStatus && profileStatus.current ? profileStatus.current.display_name : "-");
 }
 
 function populateFilterOptions(services, stats) {
@@ -52,12 +71,27 @@ function renderServices(services) {
   const container = document.querySelector("#services");
   container.innerHTML = "";
 
+  if (!services.length) {
+    const empty = document.createElement("article");
+    empty.className = "service-card is-stopped";
+    empty.innerHTML = `
+      <div class="service-head">
+        <div>
+          <strong>No Services</strong>
+          <span>Apply a profile to expose matching ports.</span>
+        </div>
+      </div>
+      <p>This profile does not currently expose any listeners.</p>
+    `;
+    container.appendChild(empty);
+    document.querySelector("#serviceSummary").textContent = "0 active";
+    return;
+  }
+
   for (const service of services) {
     const host = service.display_host || service.host;
     const card = document.createElement("article");
     card.className = `service-card ${service.running ? "is-running" : "is-stopped"}`;
-    const actionLabel = service.running ? "Stop Service" : "Start Service";
-    const actionName = service.running ? "stop" : "start";
     card.innerHTML = `
       <div class="service-head">
         <div>
@@ -70,12 +104,10 @@ function renderServices(services) {
       </div>
       <p>
         ${service.running
-          ? "This listener is active and accepting traffic."
-          : "Currently offline. Bring it online only when needed."}
+          ? "This listener is active under the selected profile."
+          : "This listener belongs to the selected profile but is not active."}
       </p>
-      <button type="button" data-service="${service.name}" data-action="${actionName}">
-        ${actionLabel}
-      </button>
+      <p>Template: <strong>${text(service.template)}</strong></p>
     `;
     container.appendChild(card);
   }
@@ -93,7 +125,7 @@ function renderActivitySummary(stats) {
 
   if (!byService.length) {
     const item = document.createElement("li");
-    item.textContent = "No events yet. Start a service to begin collecting traffic.";
+    item.textContent = "No events yet. Apply a profile to begin collecting traffic.";
     list.appendChild(item);
     return;
   }
@@ -133,6 +165,7 @@ function renderEvents(events) {
 function renderDashboard(status, stats, events) {
   state.services = status.services;
   state.stats = stats;
+  renderProfileSelector(status.profile);
   renderServices(status.services);
   renderEvents(events.events);
   renderActivitySummary(stats);
@@ -190,27 +223,23 @@ async function logout() {
   }
 }
 
-async function handleServiceAction(event) {
-  const button = event.target.closest("button[data-service]");
-  if (!button) {
+async function applyProfile() {
+  const button = document.querySelector("#applyProfileButton");
+  const profile = document.querySelector("#profileSelect").value;
+  if (!profile) {
     return;
   }
-  const service = button.dataset.service;
-  const action = button.dataset.action;
-  button.disabled = true;
 
+  button.disabled = true;
   try {
-    const payload = await requestJson(`/api/services/${service}/${action}`, {
+    const payload = await requestJson("/api/profile", {
       method: "POST",
+      body: JSON.stringify({ profile }),
     });
+    state.profile = payload;
     await refreshDashboard();
-    const label =
-      payload.action === "started"
-        ? "started"
-        : payload.action === "stopped"
-          ? "stopped"
-          : payload.action.replaceAll("_", " ");
-    showToast(`${service.toUpperCase()} ${label}.`, "success");
+    const serviceCount = ((payload.current && payload.current.services) || []).length;
+    showToast(`${text(payload.current.display_name)} applied with ${serviceCount} service${serviceCount === 1 ? "" : "s"}.`, "success");
   } catch (error) {
     showToast(error.message, "error");
   } finally {
@@ -241,8 +270,8 @@ function stopAutoRefresh() {
 async function bootstrapDashboard() {
   document.querySelector("#logoutButton").addEventListener("click", logout);
   document.querySelector("#refreshButton").addEventListener("click", refreshDashboard);
+  document.querySelector("#applyProfileButton").addEventListener("click", applyProfile);
   document.querySelector("#filtersForm").addEventListener("submit", applyFilters);
-  document.querySelector("#services").addEventListener("click", handleServiceAction);
 
   try {
     const session = await requestJson("/api/session");

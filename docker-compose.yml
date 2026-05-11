@@ -10,6 +10,7 @@ services:
       - "2323:2323"
     environment:
       HONEYPOT_HOST: "0.0.0.0"
+      HONEYPOT_PROFILE: "empty"
       HONEYPOT_WEB_HOST: "0.0.0.0"
       HONEYPOT_SERVICE_HTTP_HOST: "0.0.0.0"
       HONEYPOT_SERVICE_SSH_HOST: "0.0.0.0"

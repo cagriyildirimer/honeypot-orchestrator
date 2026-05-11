@@ -2,10 +2,25 @@ from __future__ import annotations
 
 import asyncio
 
+from honeypot_orchestrator.profiles import HoneypotProfile
 from honeypot_orchestrator.services.base import BaseHoneypotService
 
 
 class HTTPHoneypot(BaseHoneypotService):
+    def __init__(
+        self,
+        name: str,
+        host: str,
+        port: int,
+        logger,
+        profile: HoneypotProfile,
+    ) -> None:
+        super().__init__(name=name, host=host, port=port, logger=logger)
+        self.profile = profile
+
+    def set_profile(self, profile: HoneypotProfile) -> None:
+        self.profile = profile
+
     async def handle_client(
         self,
         reader: asyncio.StreamReader,
@@ -26,6 +41,7 @@ class HTTPHoneypot(BaseHoneypotService):
                     headers[key.strip().lower()] = value.strip()
 
             method, path, _ = _parse_request_line(request_line)
+            http_profile = self.profile.http
             # Istek metodu, yol ve User-Agent gibi temel izler loglanir.
             await self.log_event(
                 "http_request",
@@ -33,14 +49,16 @@ class HTTPHoneypot(BaseHoneypotService):
                 src_port=src_port,
                 method=method,
                 path=path,
+                profile=self.profile.name,
+                template=http_profile.template_name,
                 user_agent=headers.get("user-agent", ""),
                 summary=f"{method} {path}",
             )
-            # Gercek uygulama sunmadan basit bir 200 OK yaniti dondurur.
-            body = "<html><body><h1>It works</h1></body></html>\n"
+            body = http_profile.body_html
             response = (
-                "HTTP/1.1 200 OK\r\n"
+                f"HTTP/1.1 {http_profile.default_status}\r\n"
                 "Content-Type: text/html; charset=utf-8\r\n"
+                f"Server: {http_profile.server_header}\r\n"
                 f"Content-Length: {len(body.encode('utf-8'))}\r\n"
                 "Connection: close\r\n"
                 "\r\n"

@@ -23,8 +23,9 @@ Default login:
 
 Behavior:
 
-- On startup, only the web dashboard opens.
-- Honeypot services are started and stopped from the dashboard.
+- On startup, the default `empty` profile is applied automatically.
+- The `empty` profile keeps honeypot listeners offline until you choose a profile and click `Apply Profile`.
+- The dashboard switches between profiles instead of starting or stopping services one by one.
 
 Available services:
 
@@ -51,6 +52,7 @@ Plain Docker:
 docker build -t honeypot-orchestrator .
 docker run --rm -p 8000:8000 -p 8080:8080 -p 2222:2222 -p 2121:2121 -p 2323:2323 \
   -e HONEYPOT_HOST=0.0.0.0 \
+  -e HONEYPOT_PROFILE=empty \
   -e HONEYPOT_WEB_HOST=0.0.0.0 \
   -e HONEYPOT_AUTH_USERNAME=admin \
   -e HONEYPOT_AUTH_PASSWORD=admin123 \
@@ -62,9 +64,11 @@ docker run --rm -p 8000:8000 -p 8080:8080 -p 2222:2222 -p 2121:2121 -p 2323:2323
 Container notes:
 
 - The container listens on `0.0.0.0` through environment overrides.
+- The active profile can be selected with `HONEYPOT_PROFILE`.
 - Logs are written to `/app/logs/events.jsonl` inside the container.
 - The web health endpoint is available at `/healthz`.
 - Config values can be overridden with environment variables such as:
+  - `HONEYPOT_PROFILE`
   - `HONEYPOT_WEB_PORT`
   - `HONEYPOT_AUTH_USERNAME`
   - `HONEYPOT_AUTH_PASSWORD`

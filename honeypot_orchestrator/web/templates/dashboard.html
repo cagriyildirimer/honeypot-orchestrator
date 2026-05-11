@@ -17,8 +17,8 @@
             <div class="eyebrow">Live Control Room</div>
             <h1>Honeypot Director</h1>
             <p class="lead">
-              Start services on demand, review the latest noise across your lab,
-              and keep a tight grip on exposed ports.
+              Apply a host profile, review the latest noise across your lab,
+              and watch the matching decoy listeners come online.
             </p>
           </div>
           <div class="hero-actions">
@@ -35,7 +35,7 @@
           <article class="stat-card pulse">
             <span>Running Services</span>
             <strong id="runningServices">0</strong>
-            <small>Only the ports you intentionally expose.</small>
+            <small>Listeners exposed by the active host profile.</small>
           </article>
           <article class="stat-card">
             <span>Total Recent Events</span>
@@ -48,9 +48,9 @@
             <small>SSH, FTP, and Telnet credential captures.</small>
           </article>
           <article class="stat-card">
-            <span>Dashboard</span>
-            <strong id="dashboardAddress">-</strong>
-            <small>Web control endpoint.</small>
+            <span>Active Profile</span>
+            <strong id="activeProfile">-</strong>
+            <small>Persona pack applied across active listeners.</small>
           </article>
         </section>
 
@@ -58,8 +58,8 @@
           <div class="panel panel-services">
             <div class="section-heading">
               <div>
-                <h2>Service Controls</h2>
-                <p>Bring listeners online only when you want them visible.</p>
+                <h2>Active Profile Services</h2>
+                <p>Applying a profile automatically starts its assigned listeners.</p>
               </div>
               <span id="serviceSummary" class="soft-badge">0 active</span>
             </div>
@@ -74,6 +74,11 @@
               </div>
             </div>
             <form id="filtersForm" class="filters-form">
+              <label>
+                <span>Profile</span>
+                <select id="profileSelect"></select>
+              </label>
+              <button id="applyProfileButton" type="button">Apply Profile</button>
               <label>
                 <span>Service</span>
                 <select id="serviceFilter">

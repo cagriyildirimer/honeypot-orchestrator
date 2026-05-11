@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from honeypot_orchestrator.config import AppConfig
 from honeypot_orchestrator.event_logger import JSONLEventLogger
+from honeypot_orchestrator.profiles import HoneypotProfile, get_profile, list_profiles, load_profile
 from honeypot_orchestrator.services.base import BaseHoneypotService
 from honeypot_orchestrator.services.ftp import FTPHoneypot
 from honeypot_orchestrator.services.http import HTTPHoneypot
@@ -16,6 +16,7 @@ from honeypot_orchestrator.web.server import WebDashboard
 class Orchestrator:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
+        self.profile = load_profile(config.profile)
         # Butun servisler ayni JSONL logger'i kullanir; olaylar tek dosyada toplanir.
         self.logger = JSONLEventLogger(config.logging.path)
         # Tum servisler adlarina gore burada saklanir; panel istediklerini ayaga kaldirir.
@@ -28,6 +29,8 @@ class Orchestrator:
         # Bu yeni akista uygulama acilisinda yalnizca web paneli dinlemeye baslar.
         if self.config.web.enabled:
             await self.web_dashboard.start()
+
+        await self._apply_profile(self.profile, emit_log=False)
 
         # Baslangic olayi log dosyasina yazilir; panelde de gorulebilir.
         await self.logger.log(
@@ -59,58 +62,47 @@ class Orchestrator:
 
     def service_status(self, display_host: str | None = None) -> list[dict[str, object]]:
         # Web API'nin dondurdugu sade servis durum listesini uretir.
+        visible_services = set(self.profile.services)
         return [
             {
                 "name": service.name,
                 "host": service.host,
                 "display_host": self._display_host(service.host, display_host),
+                "template": self._service_template_name(service.name),
                 "port": service.port,
                 "running": service.running,
                 "enabled": True,
             }
             for service in self.services.values()
+            if service.name in visible_services
         ]
 
-    async def start_service(self, name: str) -> dict[str, Any]:
-        async with self._service_lock:
-            service = self._get_service(name)
-            if service.running:
-                return self._service_payload(service, "already_running")
-            await service.start()
-            await self.logger.log(
-                {
-                    "service": "orchestrator",
-                    "event_type": "service_action",
-                    "summary": f"Started {name} from dashboard.",
-                    "target_service": name,
-                    "action": "start",
-                }
-            )
-            return self._service_payload(service, "started")
+    def profile_status(self) -> dict[str, object]:
+        configured_services = self._configured_profile_services(self.profile)
+        return {
+            "current": {
+                "name": self.profile.name,
+                "display_name": self.profile.display_name,
+                "services": configured_services,
+            },
+            "available": list_profiles(),
+        }
 
-    async def stop_service(self, name: str) -> dict[str, Any]:
+    async def set_profile(self, name: str) -> dict[str, object]:
         async with self._service_lock:
-            service = self._get_service(name)
-            if not service.running:
-                return self._service_payload(service, "already_stopped")
-            await service.stop()
-            await self.logger.log(
-                {
-                    "service": "orchestrator",
-                    "event_type": "service_action",
-                    "summary": f"Stopped {name} from dashboard.",
-                    "target_service": name,
-                    "action": "stop",
-                }
-            )
-            return self._service_payload(service, "stopped")
+            profile = get_profile(name)
+            if profile is None:
+                raise KeyError(name)
+            await self._apply_profile(profile, emit_log=True)
+            return self.profile_status()
 
     def print_startup_summary(self) -> None:
         # Terminalde kullanicinin web panelin hangi adreste acildigini hizlica gormesini saglar.
         print("Honeypot Orchestrator started")
         if self.config.web.enabled:
             print(f"Dashboard: http://{self.config.web.host}:{self.config.web.port}")
-        print("Services are controlled from the dashboard.")
+        print(f"Active profile: {self.profile.display_name}")
+        print("Profile listeners are applied automatically.")
 
     def _build_services(self) -> dict[str, BaseHoneypotService]:
         # Config'teki servis adini ilgili Python sinifina esleyen kucuk kayit tablosu.
@@ -130,34 +122,121 @@ class Orchestrator:
             if service_cls is None:
                 continue
             # Her servis kendi portunda dinler ama ortak logger'a olay yazar.
-            services[name] = service_cls(
+            services[name] = self._create_service(
+                service_cls=service_cls,
                 name=name,
                 host=service_config.host,
                 port=service_config.port,
-                logger=self.logger,
             )
         return services
-
-    def _get_service(self, name: str) -> BaseHoneypotService:
-        service = self.services.get(name)
-        if service is None:
-            raise KeyError(name)
-        return service
-
-    def _service_payload(self, service: BaseHoneypotService, action: str) -> dict[str, Any]:
-        return {
-            "action": action,
-            "service": {
-                "name": service.name,
-                "host": service.host,
-                "display_host": service.host,
-                "port": service.port,
-                "running": service.running,
-                "enabled": True,
-            },
-        }
 
     def _display_host(self, host: str, display_host: str | None) -> str:
         if host in {"0.0.0.0", "::", ""} and display_host:
             return display_host
         return host
+
+    def _service_template_name(self, service_name: str) -> str:
+        if service_name == "http":
+            return self.profile.http.template_name
+        if service_name == "ssh":
+            return self.profile.ssh.template_name
+        if service_name == "ftp":
+            return self.profile.ftp.template_name
+        if service_name == "telnet":
+            return self.profile.telnet.template_name
+        return service_name
+
+    def _configured_profile_services(self, profile: HoneypotProfile) -> list[str]:
+        return [service_name for service_name in profile.services if service_name in self.services]
+
+    async def _apply_profile(self, profile: HoneypotProfile, *, emit_log: bool) -> None:
+        target_services = set(self._configured_profile_services(profile))
+        started_services: list[str] = []
+        stopped_services: list[str] = []
+
+        for service_name, service in self.services.items():
+            if service.running and service_name not in target_services:
+                await service.stop()
+                stopped_services.append(service_name)
+
+        self.profile = profile
+        self._sync_service_profiles(profile)
+
+        for service_name in self._configured_profile_services(profile):
+            service = self.services.get(service_name)
+            if service is None or service.running:
+                continue
+            await service.start()
+            started_services.append(service_name)
+
+        if emit_log:
+            await self.logger.log(
+                {
+                    "service": "orchestrator",
+                    "event_type": "profile_changed",
+                    "summary": f"Active profile switched to {profile.display_name}.",
+                    "profile": profile.name,
+                    "started_services": started_services,
+                    "stopped_services": stopped_services,
+                }
+            )
+
+    def _sync_service_profiles(self, profile: HoneypotProfile) -> None:
+        http_service = self.services.get("http")
+        if isinstance(http_service, HTTPHoneypot):
+            http_service.set_profile(profile)
+        ssh_service = self.services.get("ssh")
+        if isinstance(ssh_service, FakeSSHHoneypot):
+            ssh_service.set_profile(profile)
+        ftp_service = self.services.get("ftp")
+        if isinstance(ftp_service, FTPHoneypot):
+            ftp_service.set_profile(profile)
+        telnet_service = self.services.get("telnet")
+        if isinstance(telnet_service, TelnetHoneypot):
+            telnet_service.set_profile(profile)
+
+    def _create_service(
+        self,
+        service_cls: type[BaseHoneypotService],
+        name: str,
+        host: str,
+        port: int,
+    ) -> BaseHoneypotService:
+        if service_cls is HTTPHoneypot:
+            return service_cls(
+                name=name,
+                host=host,
+                port=port,
+                logger=self.logger,
+                profile=self.profile,
+            )
+        if service_cls is FakeSSHHoneypot:
+            return service_cls(
+                name=name,
+                host=host,
+                port=port,
+                logger=self.logger,
+                profile=self.profile,
+            )
+        if service_cls is FTPHoneypot:
+            return service_cls(
+                name=name,
+                host=host,
+                port=port,
+                logger=self.logger,
+                profile=self.profile,
+            )
+        if service_cls is TelnetHoneypot:
+            return service_cls(
+                name=name,
+                host=host,
+                port=port,
+                logger=self.logger,
+                profile=self.profile,
+            )
+        return service_cls(
+            name=name,
+            host=host,
+            port=port,
+            logger=self.logger,
+        )

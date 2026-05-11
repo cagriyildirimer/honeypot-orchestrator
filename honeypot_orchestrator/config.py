@@ -38,6 +38,7 @@ class LoggingConfig:
 @dataclass(frozen=True)
 class AppConfig:
     host: str
+    profile: str
     logging: LoggingConfig
     web: WebConfig
     auth: AuthConfig
@@ -68,6 +69,7 @@ def load_config(path: str | Path) -> AppConfig:
 
     return AppConfig(
         host=base_host,
+        profile=_env_str("HONEYPOT_PROFILE", str(raw.get("profile", "linux_server"))),
         logging=LoggingConfig(
             path=Path(_env_str("HONEYPOT_LOG_PATH", str(logging_raw.get("path", "logs/events.jsonl"))))
         ),

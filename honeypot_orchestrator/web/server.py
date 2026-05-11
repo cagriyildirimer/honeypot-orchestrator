@@ -127,6 +127,7 @@ class WebDashboard:
             return self._json_response(
                 {
                     "services": self.orchestrator.service_status(display_host),
+                    "profile": self.orchestrator.profile_status(),
                     "log_path": str(self.orchestrator.config.logging.path),
                     "web": {
                         "host": self.orchestrator.config.web.host,
@@ -162,17 +163,29 @@ class WebDashboard:
                 }
             )
 
-        if path.startswith("/api/services/") and method == "POST":
-            parts = [part for part in path.split("/") if part]
-            if len(parts) == 4 and parts[1] == "services":
-                service_name = parts[2]
-                action = parts[3]
-                return await self._handle_service_action(service_name, action)
-
-        if path == "/api/services" and method == "GET":
-            return self._json_response(
-                {"services": self.orchestrator.service_status(_request_display_host(request))}
-            )
+        if path == "/api/profile" and method == "POST":
+            payload = _decode_json_body(request["body"])
+            profile_name = str(payload.get("profile", "")).strip()
+            if not profile_name:
+                return self._json_response(
+                    {"error": "Profile name is required."},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            try:
+                return self._json_response(await self.orchestrator.set_profile(profile_name))
+            except KeyError:
+                return self._json_response(
+                    {"error": f"Unknown profile: {profile_name}."},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+            except OSError as exc:
+                return self._json_response(
+                    {
+                        "error": f"Could not apply profile: {profile_name}.",
+                        "detail": str(exc),
+                    },
+                    status=HTTPStatus.CONFLICT,
+                )
 
         if path.startswith("/api/"):
             return self._json_response(
@@ -222,33 +235,6 @@ class WebDashboard:
             {"ok": True},
             cookies=[_build_cookie("session", "", max_age=0)],
         )
-
-    async def _handle_service_action(self, service_name: str, action: str) -> dict[str, Any]:
-        try:
-            if action == "start":
-                payload = await self.orchestrator.start_service(service_name)
-            elif action == "stop":
-                payload = await self.orchestrator.stop_service(service_name)
-            else:
-                return self._json_response(
-                    {"error": "Unsupported action."},
-                    status=HTTPStatus.BAD_REQUEST,
-                )
-        except KeyError:
-            return self._json_response(
-                {"error": f"Unknown service: {service_name}."},
-                status=HTTPStatus.NOT_FOUND,
-            )
-        except OSError as exc:
-            return self._json_response(
-                {
-                    "error": f"Could not {action} {service_name}.",
-                    "detail": str(exc),
-                },
-                status=HTTPStatus.CONFLICT,
-            )
-
-        return self._json_response(payload)
 
     async def _read_request(self, reader: asyncio.StreamReader) -> dict[str, Any]:
         request_line = await asyncio.wait_for(reader.readline(), timeout=10)
