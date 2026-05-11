@@ -53,6 +53,7 @@ function renderServices(services) {
   container.innerHTML = "";
 
   for (const service of services) {
+    const host = service.display_host || service.host;
     const card = document.createElement("article");
     card.className = `service-card ${service.running ? "is-running" : "is-stopped"}`;
     const actionLabel = service.running ? "Stop Service" : "Start Service";
@@ -61,7 +62,7 @@ function renderServices(services) {
       <div class="service-head">
         <div>
           <strong>${text(service.name)}</strong>
-          <span>${text(service.host)}:${text(service.port)}</span>
+          <span>${text(host)}:${text(service.port)}</span>
         </div>
         <span class="status ${service.running ? "running" : "stopped"}">
           ${service.running ? "Live" : "Idle"}
@@ -141,7 +142,8 @@ function renderDashboard(status, stats, events) {
   document.querySelector("#runningServices").textContent = running;
   document.querySelector("#totalEvents").textContent = stats.total_recent_events || 0;
   document.querySelector("#loginAttempts").textContent = stats.by_type.login_attempt || 0;
-  document.querySelector("#dashboardAddress").textContent = `${status.web.host}:${status.web.port}`;
+  document.querySelector("#dashboardAddress").textContent =
+    `${text(status.web.display_host || status.web.host)}:${text(status.web.port)}`;
   document.querySelector("#sessionUser").textContent = state.username || "-";
 }
 

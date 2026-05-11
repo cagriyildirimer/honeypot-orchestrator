@@ -35,6 +35,42 @@ Available services:
 
 Events are written to `logs/events.jsonl`.
 
+## Docker
+
+The project is ready to run in Docker and Docker Compose.
+
+Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Plain Docker:
+
+```bash
+docker build -t honeypot-orchestrator .
+docker run --rm -p 8000:8000 -p 8080:8080 -p 2222:2222 -p 2121:2121 -p 2323:2323 \
+  -e HONEYPOT_HOST=0.0.0.0 \
+  -e HONEYPOT_WEB_HOST=0.0.0.0 \
+  -e HONEYPOT_AUTH_USERNAME=admin \
+  -e HONEYPOT_AUTH_PASSWORD=admin123 \
+  -e HONEYPOT_LOG_PATH=/app/logs/events.jsonl \
+  -v honeypot_logs:/app/logs \
+  honeypot-orchestrator
+```
+
+Container notes:
+
+- The container listens on `0.0.0.0` through environment overrides.
+- Logs are written to `/app/logs/events.jsonl` inside the container.
+- The web health endpoint is available at `/healthz`.
+- Config values can be overridden with environment variables such as:
+  - `HONEYPOT_WEB_PORT`
+  - `HONEYPOT_AUTH_USERNAME`
+  - `HONEYPOT_AUTH_PASSWORD`
+  - `HONEYPOT_SERVICE_HTTP_PORT`
+  - `HONEYPOT_SERVICE_SSH_ENABLED`
+
 ## Safety Boundary
 
 This project is for defensive lab use only. It does not include real exploit code,

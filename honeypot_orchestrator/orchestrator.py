@@ -57,12 +57,13 @@ class Orchestrator:
         for service in reversed(list(self.services.values())):
             await service.stop()
 
-    def service_status(self) -> list[dict[str, object]]:
+    def service_status(self, display_host: str | None = None) -> list[dict[str, object]]:
         # Web API'nin dondurdugu sade servis durum listesini uretir.
         return [
             {
                 "name": service.name,
                 "host": service.host,
+                "display_host": self._display_host(service.host, display_host),
                 "port": service.port,
                 "running": service.running,
                 "enabled": True,
@@ -149,8 +150,14 @@ class Orchestrator:
             "service": {
                 "name": service.name,
                 "host": service.host,
+                "display_host": service.host,
                 "port": service.port,
                 "running": service.running,
                 "enabled": True,
             },
         }
+
+    def _display_host(self, host: str, display_host: str | None) -> str:
+        if host in {"0.0.0.0", "::", ""} and display_host:
+            return display_host
+        return host

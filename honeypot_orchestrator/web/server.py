@@ -98,6 +98,9 @@ class WebDashboard:
             body = (WEB_DIR / "static" / "dashboard.js").read_bytes()
             return _response(HTTPStatus.OK, "application/javascript; charset=utf-8", body)
 
+        if path == "/healthz" and method == "GET":
+            return self._json_response({"ok": True, "service": "web"})
+
         if path == "/api/login" and method == "POST":
             payload = _decode_json_body(request["body"])
             return await self._handle_login(payload)
@@ -120,12 +123,14 @@ class WebDashboard:
             )
 
         if path == "/api/status" and method == "GET":
+            display_host = _request_display_host(request)
             return self._json_response(
                 {
-                    "services": self.orchestrator.service_status(),
+                    "services": self.orchestrator.service_status(display_host),
                     "log_path": str(self.orchestrator.config.logging.path),
                     "web": {
                         "host": self.orchestrator.config.web.host,
+                        "display_host": display_host,
                         "port": self.orchestrator.config.web.port,
                     },
                 }
@@ -165,7 +170,9 @@ class WebDashboard:
                 return await self._handle_service_action(service_name, action)
 
         if path == "/api/services" and method == "GET":
-            return self._json_response({"services": self.orchestrator.service_status()})
+            return self._json_response(
+                {"services": self.orchestrator.service_status(_request_display_host(request))}
+            )
 
         if path.startswith("/api/"):
             return self._json_response(
@@ -386,6 +393,19 @@ def _build_cookie(name: str, value: str, *, max_age: int | None = None) -> str:
     if max_age is not None:
         parts.append(f"Max-Age={max_age}")
     return "; ".join(parts)
+
+
+def _request_display_host(request: dict[str, Any]) -> str:
+    host_header = str(request.get("headers", {}).get("host", "")).strip()
+    if not host_header:
+        return "127.0.0.1"
+    if host_header.startswith("["):
+        closing = host_header.find("]")
+        if closing != -1:
+            return host_header[1:closing]
+        return host_header
+    host, _, _ = host_header.partition(":")
+    return host or "127.0.0.1"
 
 
 def _safe_int(value: str, *, default: int, minimum: int, maximum: int) -> int:

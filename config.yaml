@@ -15,17 +15,17 @@ auth:
 services:
   http:
     enabled: true
-    host: "127.0.0.1"
+    host: "0.0.0.0"
     port: 8080
   ssh:
     enabled: true
-    host: "127.0.0.1"
+    host: "0.0.0.0"
     port: 2222
   ftp:
     enabled: true
-    host: "127.0.0.1"
+    host: "0.0.0.0"
     port: 2121
   telnet:
     enabled: true
-    host: "127.0.0.1"
+    host: "0.0.0.0"
     port: 2323
