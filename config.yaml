@@ -1,0 +1,27 @@
+host: "127.0.0.1"
+
+logging:
+  path: "logs/events.jsonl"
+
+web:
+  enabled: true
+  host: "127.0.0.1"
+  port: 8000
+
+services:
+  http:
+    enabled: true
+    host: "127.0.0.1"
+    port: 8080
+  ssh:
+    enabled: true
+    host: "127.0.0.1"
+    port: 2222
+  ftp:
+    enabled: true
+    host: "127.0.0.1"
+    port: 2121
+  telnet:
+    enabled: true
+    host: "127.0.0.1"
+    port: 2323
