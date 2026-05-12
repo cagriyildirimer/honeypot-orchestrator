@@ -33,7 +33,7 @@ Available services:
 - Fake SSH login: `127.0.0.1:2222`
 - FTP banner/login: `127.0.0.1:2121`
 - Telnet login: `127.0.0.1:2323`
-- DNS over TCP honeypot: `127.0.0.1:53`
+- DNS over TCP honeypot: `127.0.0.1:1053`
 - NetBIOS session honeypot: `127.0.0.1:139`
 - LDAP bind/search honeypot: `127.0.0.1:389`
 - LDAPS TLS front honeypot: `127.0.0.1:636`
@@ -53,11 +53,52 @@ Docker Compose:
 docker compose up --build
 ```
 
+LAN IP mode with macvlan:
+
+```bash
+chmod +x scripts/start-lan.sh
+scripts/start-lan.sh --ip 192.168.1.240
+```
+
+The script auto-detects the default interface, gateway, and subnet. If you omit `--ip`,
+it proposes a high address in the detected `/24` subnet and asks for confirmation:
+
+```bash
+scripts/start-lan.sh
+```
+
+Run in the background:
+
+```bash
+scripts/start-lan.sh --ip 192.168.1.240 --detached
+```
+
+Manual LAN IP mode is still available:
+
+```bash
+HONEYPOT_LAN_PARENT=eth0 \
+HONEYPOT_LAN_SUBNET=192.168.1.0/24 \
+HONEYPOT_LAN_GATEWAY=192.168.1.1 \
+HONEYPOT_LAN_IP=192.168.1.240 \
+docker compose -f docker-compose.lan.yml up --build
+```
+
+In LAN IP mode the container has its own address, so host port publishing is not used.
+Reserve `HONEYPOT_LAN_IP` in your router/DHCP server or choose an address outside the DHCP pool to avoid duplicate IPs. Docker Compose macvlan does not request an address from DHCP by itself; it attaches the container to the LAN with the IP you provide.
+
+Dashboard in LAN IP mode:
+
+```text
+http://192.168.1.240:8000
+```
+
+Windows Server profile services in LAN IP mode use standard service ports on the container IP, such as DNS `53`, LDAP `389`, SMB `445`, MSSQL `1433`, and RDP `3389`.
+
 Plain Docker:
 
 ```bash
 docker build -t honeypot-orchestrator .
-docker run --rm -p 8000:8000 -p 8080:8080 -p 2222:2222 -p 2121:2121 -p 2323:2323 -p 53:53 -p 139:139 -p 389:389 -p 636:636 -p 1433:1433 -p 3389:3389 -p 1445:1445 \
+docker run --rm -p 8000:8000 -p 8080:8080 -p 2222:2222 -p 2121:2121 -p 2323:2323 -p 1053:1053 -p 139:139 -p 389:389 -p 636:636 -p 1433:1433 -p 3389:3389 -p 1445:1445 \
   -e HONEYPOT_HOST=0.0.0.0 \
   -e HONEYPOT_PROFILE=empty \
   -e HONEYPOT_WEB_HOST=0.0.0.0 \

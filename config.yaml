@@ -33,7 +33,7 @@ services:
   dns:
     enabled: true
     host: "0.0.0.0"
-    port: 53
+    port: 1053
   netbios:
     enabled: true
     host: "0.0.0.0"

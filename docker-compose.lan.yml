@@ -1,0 +1,55 @@
+services:
+  honeypot-orchestrator:
+    build: .
+    container_name: honeypot-orchestrator-lan
+    cap_add:
+      - NET_BIND_SERVICE
+    environment:
+      HONEYPOT_HOST: "0.0.0.0"
+      HONEYPOT_PROFILE: "empty"
+      HONEYPOT_WEB_HOST: "0.0.0.0"
+      HONEYPOT_WEB_PORT: "8000"
+      HONEYPOT_SERVICE_HTTP_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_HTTP_PORT: "80"
+      HONEYPOT_SERVICE_SSH_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_SSH_PORT: "22"
+      HONEYPOT_SERVICE_FTP_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_FTP_PORT: "21"
+      HONEYPOT_SERVICE_TELNET_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_TELNET_PORT: "23"
+      HONEYPOT_SERVICE_DNS_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_DNS_PORT: "53"
+      HONEYPOT_SERVICE_NETBIOS_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_NETBIOS_PORT: "139"
+      HONEYPOT_SERVICE_LDAP_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_LDAP_PORT: "389"
+      HONEYPOT_SERVICE_LDAPS_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_LDAPS_PORT: "636"
+      HONEYPOT_SERVICE_MSSQL_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_MSSQL_PORT: "1433"
+      HONEYPOT_SERVICE_RDP_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_RDP_PORT: "3389"
+      HONEYPOT_SERVICE_SMB_HOST: "0.0.0.0"
+      HONEYPOT_SERVICE_SMB_PORT: "445"
+      HONEYPOT_AUTH_USERNAME: "admin"
+      HONEYPOT_AUTH_PASSWORD: "admin123"
+      HONEYPOT_LOG_PATH: "/app/logs/events.jsonl"
+    volumes:
+      - honeypot_logs:/app/logs
+    networks:
+      honeypot_lan:
+        ipv4_address: "${HONEYPOT_LAN_IP:?Set HONEYPOT_LAN_IP to the reserved LAN IP for the container}"
+    restart: unless-stopped
+
+volumes:
+  honeypot_logs:
+
+networks:
+  honeypot_lan:
+    driver: macvlan
+    driver_opts:
+      parent: "${HONEYPOT_LAN_PARENT:?Set HONEYPOT_LAN_PARENT to the Ubuntu network interface, for example eth0 or ens33}"
+    ipam:
+      config:
+        - subnet: "${HONEYPOT_LAN_SUBNET:?Set HONEYPOT_LAN_SUBNET, for example 192.168.12.0/24}"
+          gateway: "${HONEYPOT_LAN_GATEWAY:?Set HONEYPOT_LAN_GATEWAY, for example 192.168.12.1}"

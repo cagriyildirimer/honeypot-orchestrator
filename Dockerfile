@@ -18,7 +18,7 @@ RUN mkdir -p /app/logs && chown -R honeypot:honeypot /app
 
 USER honeypot
 
-EXPOSE 8000 8080 2222 2121 2323
+EXPOSE 8000 80 8080 21 22 23 53 139 389 445 636 1433 3389 1445
 
 VOLUME ["/app/logs"]
 
