@@ -180,6 +180,39 @@ h3 {
   line-height: 1.7;
 }
 
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.meta-chip {
+  min-width: 180px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(157, 179, 200, 0.12);
+  background: rgba(5, 15, 27, 0.38);
+}
+
+.meta-chip span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.meta-chip strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
 .login-form,
 .filters-form {
   display: grid;
@@ -342,6 +375,44 @@ label span {
   gap: 12px;
 }
 
+.service-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.port-chip,
+.event-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.port-chip {
+  background: rgba(157, 179, 200, 0.1);
+  color: var(--text);
+}
+
+.port-chip.standard {
+  background: rgba(102, 224, 194, 0.16);
+  color: #9ef3df;
+}
+
+.port-chip.lab {
+  background: rgba(255, 214, 102, 0.14);
+  color: #ffe4a5;
+}
+
+.port-chip.template {
+  background: rgba(102, 170, 255, 0.12);
+  color: #c7dcff;
+}
+
 .status {
   border-radius: 999px;
   display: inline-flex;
@@ -374,6 +445,12 @@ label span {
   padding: 0;
   display: grid;
   gap: 10px;
+}
+
+.mini-lead {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .summary-list li {
@@ -420,6 +497,11 @@ th {
 
 td {
   font-size: 14px;
+}
+
+.event-chip {
+  background: rgba(102, 224, 194, 0.12);
+  color: #aef6e6;
 }
 
 tr:last-child td {

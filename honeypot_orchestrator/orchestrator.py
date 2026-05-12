@@ -164,24 +164,36 @@ class Orchestrator:
         return [service_name for service_name in profile.services if service_name in self.services]
 
     async def _apply_profile(self, profile: HoneypotProfile, *, emit_log: bool) -> None:
+        previous_profile = self.profile
+        previously_running = {
+            service_name for service_name, service in self.services.items() if service.running
+        }
         target_services = set(self._configured_profile_services(profile))
         started_services: list[str] = []
         stopped_services: list[str] = []
 
-        for service_name, service in self.services.items():
-            if service.running and service_name not in target_services:
-                await service.stop()
-                stopped_services.append(service_name)
-
         self.profile = profile
         self._sync_service_profiles(profile)
+        try:
+            for service_name, service in self.services.items():
+                if service.running and service_name not in target_services:
+                    await service.stop()
+                    stopped_services.append(service_name)
 
-        for service_name in self._configured_profile_services(profile):
-            service = self.services.get(service_name)
-            if service is None or service.running:
-                continue
-            await service.start()
-            started_services.append(service_name)
+            for service_name in self._configured_profile_services(profile):
+                service = self.services.get(service_name)
+                if service is None or service.running:
+                    continue
+                await service.start()
+                started_services.append(service_name)
+        except Exception:
+            await self._rollback_profile_change(
+                previous_profile=previous_profile,
+                previously_running=previously_running,
+                started_services=started_services,
+                stopped_services=stopped_services,
+            )
+            raise
 
         if emit_log:
             await self.logger.log(
@@ -194,6 +206,34 @@ class Orchestrator:
                     "stopped_services": stopped_services,
                 }
             )
+
+    async def _rollback_profile_change(
+        self,
+        *,
+        previous_profile: HoneypotProfile,
+        previously_running: set[str],
+        started_services: list[str],
+        stopped_services: list[str],
+    ) -> None:
+        for service_name in reversed(started_services):
+            service = self.services.get(service_name)
+            if service is not None and service.running:
+                try:
+                    await service.stop()
+                except OSError:
+                    continue
+
+        self.profile = previous_profile
+        self._sync_service_profiles(previous_profile)
+
+        for service_name in stopped_services:
+            service = self.services.get(service_name)
+            if service is None or service_name not in previously_running or service.running:
+                continue
+            try:
+                await service.start()
+            except OSError:
+                continue
 
     def _sync_service_profiles(self, profile: HoneypotProfile) -> None:
         http_service = self.services.get("http")

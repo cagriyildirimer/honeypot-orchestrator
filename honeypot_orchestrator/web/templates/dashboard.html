@@ -20,6 +20,20 @@
               Apply a host profile, review the latest noise across your lab,
               and watch the matching decoy listeners come online.
             </p>
+            <div class="hero-meta">
+              <div class="meta-chip">
+                <span>Dashboard</span>
+                <strong id="dashboardAddress">-</strong>
+              </div>
+              <div class="meta-chip">
+                <span>Log Stream</span>
+                <strong id="logPath">-</strong>
+              </div>
+              <div class="meta-chip">
+                <span>Last Refresh</span>
+                <strong id="lastUpdated">-</strong>
+              </div>
+            </div>
           </div>
           <div class="hero-actions">
             <div class="session-pill">
@@ -35,7 +49,7 @@
           <article class="stat-card pulse">
             <span>Running Services</span>
             <strong id="runningServices">0</strong>
-            <small>Listeners exposed by the active host profile.</small>
+            <small id="serviceFootnote">Listeners exposed by the active host profile.</small>
           </article>
           <article class="stat-card">
             <span>Total Recent Events</span>
@@ -100,6 +114,7 @@
 
             <div class="panel mini-panel">
               <h3>Activity Snapshot</h3>
+              <p class="mini-lead">Highest-volume services from the current event window.</p>
               <ul id="activitySummary" class="summary-list"></ul>
             </div>
 
@@ -122,6 +137,7 @@
                   <th>Service</th>
                   <th>Type</th>
                   <th>Source</th>
+                  <th>Profile</th>
                   <th>Summary</th>
                 </tr>
               </thead>

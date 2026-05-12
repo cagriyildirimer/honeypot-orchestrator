@@ -67,7 +67,7 @@ def load_config(path: str | Path) -> AppConfig:
         for name, value in services_raw.items()
     }
 
-    return AppConfig(
+    config = AppConfig(
         host=base_host,
         profile=_env_str("HONEYPOT_PROFILE", str(raw.get("profile", "linux_server"))),
         logging=LoggingConfig(
@@ -84,6 +84,8 @@ def load_config(path: str | Path) -> AppConfig:
         ),
         services=services,
     )
+    _validate_config(config)
+    return config
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -180,3 +182,38 @@ def _env_bool(name: str, default: bool) -> bool:
 def _service_env_key(service_name: str, field: str) -> str:
     normalized = service_name.upper().replace("-", "_")
     return f"HONEYPOT_SERVICE_{normalized}_{field}"
+
+
+def _validate_config(config: AppConfig) -> None:
+    bind_targets: list[tuple[str, str, int]] = []
+    if not (1 <= config.web.port <= 65535):
+        raise ValueError(f"Invalid web port: {config.web.port}")
+    if config.web.enabled:
+        bind_targets.append(("web", config.web.host, config.web.port))
+
+    for service_name, service in config.services.items():
+        if not (1 <= service.port <= 65535):
+            raise ValueError(f"Invalid port for service {service_name}: {service.port}")
+        if service.enabled:
+            bind_targets.append((service_name, service.host, service.port))
+
+    for index, (left_name, left_host, left_port) in enumerate(bind_targets):
+        for right_name, right_host, right_port in bind_targets[index + 1 :]:
+            if left_port != right_port:
+                continue
+            if _hosts_conflict(left_host, right_host):
+                raise ValueError(
+                    f"Port conflict detected between {left_name} ({left_host}:{left_port}) "
+                    f"and {right_name} ({right_host}:{right_port})."
+                )
+
+
+def _hosts_conflict(left: str, right: str) -> bool:
+    left_normalized = left.strip() or "0.0.0.0"
+    right_normalized = right.strip() or "0.0.0.0"
+    wildcard_hosts = {"0.0.0.0", "::"}
+    return (
+        left_normalized == right_normalized
+        or left_normalized in wildcard_hosts
+        or right_normalized in wildcard_hosts
+    )

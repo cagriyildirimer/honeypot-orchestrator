@@ -4,6 +4,7 @@ import asyncio
 import json
 import secrets
 from collections import Counter
+from datetime import UTC, datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -136,6 +137,9 @@ class WebDashboard:
                     },
                 }
             )
+
+        if path == "/api/overview" and method == "GET":
+            return self._json_response(self._build_overview_payload(request))
 
         if path == "/api/events" and method == "GET":
             query = request["query"]
@@ -318,14 +322,47 @@ class WebDashboard:
             headers={"Location": location},
         )
 
+    def _build_overview_payload(self, request: dict[str, Any]) -> dict[str, Any]:
+        display_host = _request_display_host(request)
+        query = request["query"]
+        limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=200)
+        service_filter = query.get("service", [""])[0].strip().lower()
+        event_filter = query.get("event_type", [""])[0].strip().lower()
+        records = read_recent_events(self.orchestrator.config.logging.path, 1000)
+        filtered = [
+            event
+            for event in records
+            if (not service_filter or str(event.get("service", "")).lower() == service_filter)
+            and (not event_filter or str(event.get("event_type", "")).lower() == event_filter)
+        ]
+        by_service = Counter(record.get("service", "unknown") for record in records)
+        by_type = Counter(record.get("event_type", "unknown") for record in records)
+        return {
+            "services": self.orchestrator.service_status(display_host),
+            "profile": self.orchestrator.profile_status(),
+            "log_path": str(self.orchestrator.config.logging.path),
+            "web": {
+                "host": self.orchestrator.config.web.host,
+                "display_host": display_host,
+                "port": self.orchestrator.config.web.port,
+            },
+            "stats": {
+                "total_recent_events": len(records),
+                "by_service": dict(by_service),
+                "by_type": dict(by_type),
+            },
+            "events": filtered[:limit],
+            "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        }
+
 
 def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
     # Log dosyasi henuz olusmadiysa panel bos liste gosterir.
     if not path.exists():
         return []
-    lines = path.read_text(encoding="utf-8").splitlines()
+    lines = _tail_lines(path, max(1, min(limit, 2000)))
     records = []
-    for line in lines[-max(1, min(limit, 2000)) :]:
+    for line in lines:
         try:
             # Bozuk JSON satirlari paneli kirmasin diye atlanir.
             records.append(json.loads(line))
@@ -400,3 +437,24 @@ def _safe_int(value: str, *, default: int, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(minimum, min(parsed, maximum))
+
+
+def _tail_lines(path: Path, limit: int) -> list[str]:
+    if limit <= 0:
+        return []
+    with path.open("rb") as file:
+        file.seek(0, 2)
+        position = file.tell()
+        buffer = bytearray()
+        newline_count = 0
+        chunk_size = 4096
+
+        while position > 0 and newline_count <= limit:
+            read_size = min(chunk_size, position)
+            position -= read_size
+            file.seek(position)
+            chunk = file.read(read_size)
+            buffer[:0] = chunk
+            newline_count = buffer.count(b"\n")
+
+    return buffer.decode("utf-8", errors="replace").splitlines()[-limit:]

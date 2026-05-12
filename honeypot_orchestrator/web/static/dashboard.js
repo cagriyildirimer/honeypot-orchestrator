@@ -12,6 +12,20 @@ const state = {
   refreshInFlight: false,
 };
 
+const STANDARD_PORTS = {
+  dns: 53,
+  ftp: 21,
+  http: 80,
+  ldap: 389,
+  ldaps: 636,
+  mssql: 1433,
+  netbios: 139,
+  rdp: 3389,
+  smb: 445,
+  ssh: 22,
+  telnet: 23,
+};
+
 function showToast(message, tone = "neutral") {
   const toast = document.querySelector("#toast");
   if (!toast) {
@@ -35,9 +49,47 @@ function setText(selector, value) {
   return true;
 }
 
+function formatTimestamp(value) {
+  if (!value || value === "-") {
+    return "-";
+  }
+  const normalized = String(value).replace(" UTC", "Z").replace(" ", "T");
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function standardPortNote(service) {
+  const standardPort = STANDARD_PORTS[service.name];
+  if (!standardPort) {
+    return "Custom listener";
+  }
+  if (standardPort === service.port) {
+    return `Standard port ${standardPort}`;
+  }
+  return `Lab port ${service.port}, typical ${standardPort}`;
+}
+
+function servicePortTone(service) {
+  const standardPort = STANDARD_PORTS[service.name];
+  return standardPort && standardPort === service.port ? "standard" : "lab";
+}
+
 function renderProfileSelector(profileStatus) {
   state.profile = profileStatus;
   const profileSelect = document.querySelector("#profileSelect");
+  if (!profileSelect) {
+    return;
+  }
   const activeProfile = profileStatus && profileStatus.current ? profileStatus.current.name : "";
   profileSelect.innerHTML = "";
 
@@ -58,6 +110,9 @@ function renderProfileSelector(profileStatus) {
 function populateFilterOptions(services, stats) {
   const serviceFilter = document.querySelector("#serviceFilter");
   const eventTypeFilter = document.querySelector("#eventTypeFilter");
+  if (!serviceFilter || !eventTypeFilter) {
+    return;
+  }
   const currentService = state.filters.service;
   const currentEventType = state.filters.eventType;
 
@@ -65,7 +120,7 @@ function populateFilterOptions(services, stats) {
   for (const service of services) {
     const option = document.createElement("option");
     option.value = service.name;
-    option.textContent = service.name.toUpperCase();
+    option.textContent = `${service.name.toUpperCase()} · ${service.port}`;
     option.selected = option.value === currentService;
     serviceFilter.appendChild(option);
   }
@@ -83,6 +138,9 @@ function populateFilterOptions(services, stats) {
 
 function renderServices(services) {
   const container = document.querySelector("#services");
+  if (!container) {
+    return;
+  }
   container.innerHTML = "";
 
   if (!services.length) {
@@ -99,6 +157,7 @@ function renderServices(services) {
     `;
     container.appendChild(empty);
     setText("#serviceSummary", "0 active");
+    setText("#serviceFootnote", "No listeners enabled for this profile.");
     return;
   }
 
@@ -116,21 +175,29 @@ function renderServices(services) {
           ${service.running ? "Live" : "Idle"}
         </span>
       </div>
+      <div class="service-meta">
+        <span class="port-chip ${servicePortTone(service)}">${text(standardPortNote(service))}</span>
+        <span class="port-chip template">${text(service.template)}</span>
+      </div>
       <p>
         ${service.running
           ? "This listener is active under the selected profile."
           : "This listener belongs to the selected profile but is not active."}
       </p>
-      <p>Template: <strong>${text(service.template)}</strong></p>
     `;
     container.appendChild(card);
   }
 
-  setText("#serviceSummary", `${services.filter((service) => service.running).length} active`);
+  const activeCount = services.filter((service) => service.running).length;
+  setText("#serviceSummary", `${activeCount} active`);
+  setText("#serviceFootnote", `${activeCount} of ${services.length} profile listeners are currently online.`);
 }
 
 function renderActivitySummary(stats) {
   const list = document.querySelector("#activitySummary");
+  if (!list) {
+    return;
+  }
   list.innerHTML = "";
   const byService = Object.entries((stats && stats.by_service) || {})
     .sort((left, right) => right[1] - left[1])
@@ -152,11 +219,14 @@ function renderActivitySummary(stats) {
 
 function renderEvents(events) {
   const body = document.querySelector("#events");
+  if (!body) {
+    return;
+  }
   body.innerHTML = "";
 
   if (!events.length) {
     const row = document.createElement("tr");
-    row.innerHTML = '<td colspan="5" class="empty-row">No matching events found.</td>';
+    row.innerHTML = '<td colspan="6" class="empty-row">No matching events found.</td>';
     body.appendChild(row);
     return;
   }
@@ -165,33 +235,33 @@ function renderEvents(events) {
     const row = document.createElement("tr");
     const source = event.src_ip ? `${event.src_ip}:${event.src_port || ""}` : "-";
     row.innerHTML = `
-      <td>${text(event.timestamp)}</td>
+      <td>${text(formatTimestamp(event.timestamp))}</td>
       <td>${text(event.service)}</td>
-      <td>${text(event.event_type)}</td>
+      <td><span class="event-chip">${text(event.event_type)}</span></td>
       <td>${text(source)}</td>
+      <td>${text(event.profile || (state.profile && state.profile.current ? state.profile.current.name : "-"))}</td>
       <td>${text(event.summary || event.path || event.command || event.error || event.detail)}</td>
     `;
     body.appendChild(row);
   }
 }
 
-function renderDashboard(status, stats, events) {
-  state.services = status.services;
-  state.stats = stats;
-  renderProfileSelector(status.profile);
-  renderServices(status.services);
-  renderEvents(events.events);
-  renderActivitySummary(stats);
-  populateFilterOptions(status.services, stats);
+function renderDashboard(payload) {
+  state.services = payload.services || [];
+  state.stats = payload.stats || {};
+  renderProfileSelector(payload.profile);
+  renderServices(state.services);
+  renderEvents(payload.events || []);
+  renderActivitySummary(state.stats);
+  populateFilterOptions(state.services, state.stats);
 
-  const running = status.services.filter((service) => service.running).length;
+  const running = state.services.filter((service) => service.running).length;
   setText("#runningServices", String(running));
-  setText("#totalEvents", String(stats.total_recent_events || 0));
-  setText("#loginAttempts", String(stats.by_type.login_attempt || 0));
-  setText(
-    "#dashboardAddress",
-    `${text(status.web.display_host || status.web.host)}:${text(status.web.port)}`,
-  );
+  setText("#totalEvents", String(state.stats.total_recent_events || 0));
+  setText("#loginAttempts", String((state.stats.by_type && state.stats.by_type.login_attempt) || 0));
+  setText("#dashboardAddress", `${text(payload.web.display_host || payload.web.host)}:${text(payload.web.port)}`);
+  setText("#logPath", text(payload.log_path));
+  setText("#lastUpdated", formatTimestamp(payload.generated_at));
   setText("#sessionUser", state.username || "-");
 }
 
@@ -211,12 +281,8 @@ async function refreshDashboard() {
       query.set("event_type", state.filters.eventType);
     }
 
-    const [status, events, stats] = await Promise.all([
-      requestJson("/api/status"),
-      requestJson(`/api/events?${query.toString()}`),
-      requestJson("/api/stats"),
-    ]);
-    renderDashboard(status, stats, events);
+    const payload = await requestJson(`/api/overview?${query.toString()}`);
+    renderDashboard(payload);
   } catch (error) {
     showToast(error.message, "error");
     if (error.message === "Authentication required.") {
@@ -240,7 +306,11 @@ async function logout() {
 
 async function applyProfile() {
   const button = document.querySelector("#applyProfileButton");
-  const profile = document.querySelector("#profileSelect").value;
+  const profileSelect = document.querySelector("#profileSelect");
+  if (!button || !profileSelect) {
+    return;
+  }
+  const profile = profileSelect.value;
   if (!profile) {
     return;
   }
@@ -264,15 +334,18 @@ async function applyProfile() {
 
 function applyFilters(event) {
   event.preventDefault();
-  state.filters.service = document.querySelector("#serviceFilter").value;
-  state.filters.eventType = document.querySelector("#eventTypeFilter").value;
-  state.filters.limit = Number(document.querySelector("#limitInput").value) || 50;
+  const serviceFilter = document.querySelector("#serviceFilter");
+  const eventTypeFilter = document.querySelector("#eventTypeFilter");
+  const limitInput = document.querySelector("#limitInput");
+  state.filters.service = serviceFilter ? serviceFilter.value : "";
+  state.filters.eventType = eventTypeFilter ? eventTypeFilter.value : "";
+  state.filters.limit = Number(limitInput ? limitInput.value : 50) || 50;
   refreshDashboard();
 }
 
 function startAutoRefresh() {
   stopAutoRefresh();
-  state.refreshTimer = setInterval(refreshDashboard, 4000);
+  state.refreshTimer = setInterval(refreshDashboard, 5000);
 }
 
 function stopAutoRefresh() {
@@ -283,10 +356,10 @@ function stopAutoRefresh() {
 }
 
 async function bootstrapDashboard() {
-  document.querySelector("#logoutButton").addEventListener("click", logout);
-  document.querySelector("#refreshButton").addEventListener("click", refreshDashboard);
-  document.querySelector("#applyProfileButton").addEventListener("click", applyProfile);
-  document.querySelector("#filtersForm").addEventListener("submit", applyFilters);
+  document.querySelector("#logoutButton")?.addEventListener("click", logout);
+  document.querySelector("#refreshButton")?.addEventListener("click", refreshDashboard);
+  document.querySelector("#applyProfileButton")?.addEventListener("click", applyProfile);
+  document.querySelector("#filtersForm")?.addEventListener("submit", applyFilters);
 
   try {
     const session = await requestJson("/api/session");
