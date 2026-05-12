@@ -207,6 +207,9 @@ export HONEYPOT_LAN_GATEWAY="$LAN_GATEWAY"
 export HONEYPOT_LAN_IP="$LAN_IP"
 export HONEYPOT_LAN_NETWORK="$LAN_NETWORK"
 
+echo "Stopping host-published compose stack, if it is running"
+docker compose -f docker-compose.yml down --remove-orphans >/dev/null 2>&1 || true
+
 if (( RECREATE_NETWORK )); then
   if docker network inspect "$HONEYPOT_LAN_NETWORK" >/dev/null 2>&1; then
     echo "Recreating macvlan network: $HONEYPOT_LAN_NETWORK"
@@ -240,6 +243,9 @@ if (( DETACHED )); then
   echo "Container network details:"
   docker inspect honeypot-orchestrator-lan \
     --format '  IP={{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} Gateway={{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}'
+  echo "Published host ports:"
+  docker inspect honeypot-orchestrator-lan \
+    --format '  {{json .NetworkSettings.Ports}}'
 else
   docker compose -f docker-compose.lan.yml up --build
 fi

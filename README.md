@@ -79,6 +79,14 @@ If Docker created the network with wrong settings earlier, recreate it:
 scripts/start-lan.sh --ip 192.168.1.240 --recreate-network --detached
 ```
 
+LAN mode stops the normal host-published Compose stack first. In this mode
+`http://<ubuntu-host-ip>:8000` should not be the active dashboard path; use the
+container IP instead:
+
+```text
+http://192.168.1.240:8000
+```
+
 Verify the assigned container IP:
 
 ```bash
