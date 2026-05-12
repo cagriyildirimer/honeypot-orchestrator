@@ -83,6 +83,12 @@ class WebDashboard:
             body = (WEB_DIR / "templates" / "dashboard.html").read_bytes()
             return _response(HTTPStatus.OK, "text/html; charset=utf-8", body)
 
+        if path == "/logs":
+            if not authenticated:
+                return self._redirect("/login")
+            body = (WEB_DIR / "templates" / "logs.html").read_bytes()
+            return _response(HTTPStatus.OK, "text/html; charset=utf-8", body)
+
         if path == "/static/styles.css":
             body = (WEB_DIR / "static" / "styles.css").read_bytes()
             return _response(HTTPStatus.OK, "text/css; charset=utf-8", body)
@@ -97,6 +103,10 @@ class WebDashboard:
 
         if path == "/static/dashboard.js":
             body = (WEB_DIR / "static" / "dashboard.js").read_bytes()
+            return _response(HTTPStatus.OK, "application/javascript; charset=utf-8", body)
+
+        if path == "/static/logs.js":
+            body = (WEB_DIR / "static" / "logs.js").read_bytes()
             return _response(HTTPStatus.OK, "application/javascript; charset=utf-8", body)
 
         if path == "/healthz" and method == "GET":

@@ -3,37 +3,59 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Honeypot Director Login</title>
+    <title>Honeypot Director Access</title>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
-  <body>
-    <div class="background-orbit orbit-a"></div>
-    <div class="background-orbit orbit-b"></div>
-
-    <main class="app-shell">
-      <section class="view view-login">
-        <div class="login-panel">
-          <div class="eyebrow">Secure Console</div>
-          <h1>Honeypot Director</h1>
-          <p class="lead">
-            Launch only the decoy services you need, watch traffic in real time,
-            and keep the lab isolated behind a protected dashboard.
-          </p>
-          <form id="loginForm" class="login-form">
-            <label>
-              <span>Username</span>
-              <input id="usernameInput" name="username" type="text" autocomplete="username" required>
-            </label>
-            <label>
-              <span>Password</span>
-              <input id="passwordInput" name="password" type="password" autocomplete="current-password" required>
-            </label>
-            <button id="loginButton" type="submit">Enter Dashboard</button>
-          </form>
-          <p id="loginError" class="error-text" hidden></p>
+  <body class="login-page">
+    <main class="login-shell">
+      <section class="login-spotlight">
+        <div class="brand-block large">
+          <div class="brand-mark">HD</div>
+          <div>
+            <div class="eyebrow">Secure Console</div>
+            <h1 class="brand-title xl">Honeypot Director</h1>
+          </div>
+        </div>
+        <h2 class="login-title">A sharper control surface for decoy infrastructure.</h2>
+        <p class="login-copy">
+          Launch realistic personas, expose only the listeners you need, and review traffic from a modern
+          defensive operations console.
+        </p>
+        <div class="feature-strip">
+          <div class="feature-card">
+            <span>Profiles</span>
+            <strong>One-click persona switching</strong>
+          </div>
+          <div class="feature-card">
+            <span>Visibility</span>
+            <strong>Dedicated control room and log center</strong>
+          </div>
+          <div class="feature-card">
+            <span>Signals</span>
+            <strong>Human-readable event stream with protocol context</strong>
+          </div>
         </div>
       </section>
+
+      <section class="login-panel">
+        <div class="section-kicker">Authentication</div>
+        <h2>Enter the control room</h2>
+        <p class="support-text">Use the configured dashboard credentials to continue.</p>
+        <form id="loginForm" class="login-form">
+          <label class="field-block">
+            <span>Username</span>
+            <input id="usernameInput" name="username" type="text" autocomplete="username" required>
+          </label>
+          <label class="field-block">
+            <span>Password</span>
+            <input id="passwordInput" name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <button id="loginButton" type="submit">Enter Dashboard</button>
+        </form>
+        <p id="loginError" class="error-text" hidden></p>
+      </section>
     </main>
+
     <script src="/static/common.js"></script>
     <script src="/static/login.js"></script>
   </body>

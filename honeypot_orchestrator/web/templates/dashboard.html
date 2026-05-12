@@ -3,122 +3,96 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Honeypot Director</title>
+    <title>Honeypot Director Dashboard</title>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
-  <body class="logged-in">
-    <div class="background-orbit orbit-a"></div>
-    <div class="background-orbit orbit-b"></div>
+  <body class="app-page">
+    <div class="app-frame">
+      <aside class="sidebar">
+        <a class="brand" href="/dashboard" aria-label="Honeypot Director dashboard">
+          <span class="brand-mark">HD</span>
+          <span class="brand-text">Honeypot Director</span>
+        </a>
 
-    <main class="app-shell">
-      <section class="view view-dashboard">
-        <header class="hero">
+        <nav class="nav-stack" aria-label="Primary navigation">
+          <a class="nav-link active" href="/dashboard">Dashboard</a>
+          <a class="nav-link" href="/logs">Logs</a>
+        </nav>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
           <div>
-            <div class="eyebrow">Live Control Room</div>
-            <h1>Honeypot Director</h1>
-            <p class="lead">
-              Apply a host profile, review the latest noise across your lab,
-              and watch the matching decoy listeners come online.
-            </p>
-            <div class="hero-meta">
-              <div class="meta-chip">
-                <span>Dashboard</span>
-                <strong id="dashboardAddress">-</strong>
-              </div>
-              <div class="meta-chip">
-                <span>Log Stream</span>
-                <strong id="logPath">-</strong>
-              </div>
-              <div class="meta-chip">
-                <span>Last Refresh</span>
-                <strong id="lastUpdated">-</strong>
-              </div>
-            </div>
+            <h1>Dashboard</h1>
+            <p class="page-subtitle">Profile, listener, and recent activity overview.</p>
           </div>
-          <div class="hero-actions">
-            <div class="session-pill">
+          <div class="topbar-actions">
+            <div class="user-pill">
               <span>Signed in as</span>
               <strong id="sessionUser">-</strong>
             </div>
-            <button id="refreshButton" type="button" class="secondary">Refresh</button>
-            <button id="logoutButton" type="button">Log Out</button>
+            <button id="refreshButton" type="button" class="button secondary">Refresh</button>
+            <button id="logoutButton" type="button" class="button">Log out</button>
           </div>
         </header>
 
-        <section class="stats-grid" aria-label="Statistics">
-          <article class="stat-card pulse">
+        <section class="toolbar-panel" aria-label="Profile controls">
+          <div class="profile-control">
+            <label class="field-block">
+              <span>Active Profile</span>
+              <select id="profileSelect"></select>
+            </label>
+            <button id="applyProfileButton" type="button" class="button">Apply</button>
+          </div>
+          <div class="refresh-note">
+            <span>Last refresh</span>
+            <strong id="lastUpdated">-</strong>
+          </div>
+        </section>
+
+        <section class="metric-grid" aria-label="Dashboard metrics">
+          <article class="metric-card">
             <span>Running Services</span>
             <strong id="runningServices">0</strong>
-            <small id="serviceFootnote">Listeners exposed by the active host profile.</small>
+            <small id="serviceFootnote">No listeners online.</small>
           </article>
-          <article class="stat-card">
-            <span>Total Recent Events</span>
-            <strong id="totalEvents">0</strong>
-            <small>Last 1000 records from the JSONL stream.</small>
+          <article class="metric-card">
+            <span>Recent Events</span>
+            <strong id="heroTotalEvents">0</strong>
+            <small>Last 1000 log records.</small>
           </article>
-          <article class="stat-card">
+          <article class="metric-card">
             <span>Login Attempts</span>
             <strong id="loginAttempts">0</strong>
-            <small>SSH, FTP, and Telnet credential captures.</small>
+            <small>Credential-oriented events.</small>
           </article>
-          <article class="stat-card">
-            <span>Active Profile</span>
+          <article class="metric-card">
+            <span>Profile</span>
             <strong id="activeProfile">-</strong>
-            <small>Persona pack applied across active listeners.</small>
+            <small>Currently applied persona.</small>
           </article>
         </section>
 
-        <section class="workspace">
-          <div class="panel panel-services">
+        <section class="dashboard-grid">
+          <section class="panel services-panel">
             <div class="section-heading">
               <div>
-                <h2>Active Profile Services</h2>
-                <p>Applying a profile automatically starts its assigned listeners.</p>
+                <h2>Services</h2>
+                <p>Listeners exposed by the selected profile.</p>
               </div>
-              <span id="serviceSummary" class="soft-badge">0 active</span>
+              <span id="serviceSummary" class="status-counter">0 active</span>
             </div>
             <div id="services" class="service-grid"></div>
-          </div>
+          </section>
 
-          <aside class="panel panel-sidebar">
-            <div class="section-heading">
+          <aside class="panel">
+            <div class="section-heading compact">
               <div>
-                <h2>Event Filters</h2>
-                <p>Trim the stream to the signals you care about.</p>
+                <h2>Top Services</h2>
+                <p>Most active services in the current log window.</p>
               </div>
             </div>
-            <form id="filtersForm" class="filters-form">
-              <label>
-                <span>Profile</span>
-                <select id="profileSelect"></select>
-              </label>
-              <button id="applyProfileButton" type="button">Apply Profile</button>
-              <label>
-                <span>Service</span>
-                <select id="serviceFilter">
-                  <option value="">All services</option>
-                </select>
-              </label>
-              <label>
-                <span>Event type</span>
-                <select id="eventTypeFilter">
-                  <option value="">All event types</option>
-                </select>
-              </label>
-              <label>
-                <span>Event limit</span>
-                <input id="limitInput" type="number" min="10" max="100" step="10" value="50">
-              </label>
-              <button type="submit" class="secondary">Apply Filters</button>
-            </form>
-
-            <div class="panel mini-panel">
-              <h3>Activity Snapshot</h3>
-              <p class="mini-lead">Highest-volume services from the current event window.</p>
-              <ul id="activitySummary" class="summary-list"></ul>
-            </div>
-
-            <div id="toast" class="toast" hidden></div>
+            <ul id="activitySummary" class="summary-list"></ul>
           </aside>
         </section>
 
@@ -126,10 +100,11 @@
           <div class="section-heading">
             <div>
               <h2>Recent Events</h2>
-              <p>Newest entries appear first as traffic hits your decoys.</p>
+              <p>Latest 10 captured records.</p>
             </div>
+            <a class="text-link" href="/logs">Open logs</a>
           </div>
-          <div class="table-wrap">
+          <div class="table-shell">
             <table>
               <thead>
                 <tr>
@@ -145,8 +120,11 @@
             </table>
           </div>
         </section>
-      </section>
-    </main>
+
+        <div id="toast" class="toast" hidden></div>
+      </main>
+    </div>
+
     <script src="/static/common.js"></script>
     <script src="/static/dashboard.js"></script>
   </body>
