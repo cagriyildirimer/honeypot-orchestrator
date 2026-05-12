@@ -73,6 +73,18 @@ Run in the background:
 scripts/start-lan.sh --ip 192.168.1.240 --detached
 ```
 
+If Docker created the network with wrong settings earlier, recreate it:
+
+```bash
+scripts/start-lan.sh --ip 192.168.1.240 --recreate-network --detached
+```
+
+Verify the assigned container IP:
+
+```bash
+docker inspect honeypot-orchestrator-lan --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+```
+
 Manual LAN IP mode is still available:
 
 ```bash
@@ -85,6 +97,7 @@ docker compose -f docker-compose.lan.yml up --build
 
 In LAN IP mode the container has its own address, so host port publishing is not used.
 Reserve `HONEYPOT_LAN_IP` in your router/DHCP server or choose an address outside the DHCP pool to avoid duplicate IPs. Docker Compose macvlan does not request an address from DHCP by itself; it attaches the container to the LAN with the IP you provide.
+With Docker macvlan, the Ubuntu host usually cannot reach the container IP directly. Test the dashboard from another machine on the same LAN, or add a host-side macvlan interface if you also need host-to-container access.
 
 Dashboard in LAN IP mode:
 

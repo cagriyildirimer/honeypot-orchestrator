@@ -4,11 +4,12 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/start-lan.sh [--ip LAN_IP] [--parent IFACE] [--subnet CIDR] [--gateway IP] [--detached]
+  scripts/start-lan.sh [--ip LAN_IP] [--parent IFACE] [--subnet CIDR] [--gateway IP] [--network NAME] [--detached] [--recreate-network]
 
 Examples:
   scripts/start-lan.sh --ip 192.168.1.240
   scripts/start-lan.sh --ip 192.168.1.240 --parent eth0 --subnet 192.168.1.0/24 --gateway 192.168.1.1
+  scripts/start-lan.sh --ip 192.168.1.240 --recreate-network
   scripts/start-lan.sh --detached
 
 If --ip is omitted, the script proposes a high address in the detected /24 subnet.
@@ -21,6 +22,17 @@ require_command() {
     echo "Missing required command: $1" >&2
     exit 1
   fi
+}
+
+script_dir() {
+  local source="${BASH_SOURCE[0]}"
+  while [[ -h "$source" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd)"
+    source="$(readlink "$source")"
+    [[ "$source" != /* ]] && source="$dir/$source"
+  done
+  cd -P "$(dirname "$source")" >/dev/null 2>&1 && pwd
 }
 
 cidr_to_netmask() {
@@ -90,7 +102,9 @@ LAN_IP="${HONEYPOT_LAN_IP:-}"
 LAN_PARENT="${HONEYPOT_LAN_PARENT:-}"
 LAN_SUBNET="${HONEYPOT_LAN_SUBNET:-}"
 LAN_GATEWAY="${HONEYPOT_LAN_GATEWAY:-}"
+LAN_NETWORK="${HONEYPOT_LAN_NETWORK:-honeypot_lan_net}"
 DETACHED=0
+RECREATE_NETWORK=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -110,8 +124,16 @@ while [[ $# -gt 0 ]]; do
       LAN_GATEWAY="${2:-}"
       shift 2
       ;;
+    --network)
+      LAN_NETWORK="${2:-}"
+      shift 2
+      ;;
     --detached|-d)
       DETACHED=1
+      shift
+      ;;
+    --recreate-network)
+      RECREATE_NETWORK=1
       shift
       ;;
     --help|-h)
@@ -130,6 +152,9 @@ require_command docker
 require_command ip
 require_command awk
 require_command ping
+
+REPO_ROOT="$(cd "$(script_dir)/.." >/dev/null 2>&1 && pwd)"
+cd "$REPO_ROOT"
 
 DEFAULT_ROUTE="$(ip route show default | head -n 1 || true)"
 if [[ -z "$DEFAULT_ROUTE" ]]; then
@@ -180,16 +205,41 @@ export HONEYPOT_LAN_PARENT="$LAN_PARENT"
 export HONEYPOT_LAN_SUBNET="$LAN_SUBNET"
 export HONEYPOT_LAN_GATEWAY="$LAN_GATEWAY"
 export HONEYPOT_LAN_IP="$LAN_IP"
+export HONEYPOT_LAN_NETWORK="$LAN_NETWORK"
+
+if (( RECREATE_NETWORK )); then
+  if docker network inspect "$HONEYPOT_LAN_NETWORK" >/dev/null 2>&1; then
+    echo "Recreating macvlan network: $HONEYPOT_LAN_NETWORK"
+    docker compose -f docker-compose.lan.yml down --remove-orphans >/dev/null 2>&1 || true
+    docker network rm "$HONEYPOT_LAN_NETWORK" >/dev/null
+  fi
+fi
+
+if ! docker network inspect "$HONEYPOT_LAN_NETWORK" >/dev/null 2>&1; then
+  echo "Creating macvlan network: $HONEYPOT_LAN_NETWORK"
+  docker network create \
+    -d macvlan \
+    --subnet="$HONEYPOT_LAN_SUBNET" \
+    --gateway="$HONEYPOT_LAN_GATEWAY" \
+    -o parent="$HONEYPOT_LAN_PARENT" \
+    "$HONEYPOT_LAN_NETWORK" >/dev/null
+else
+  echo "Using existing Docker network: $HONEYPOT_LAN_NETWORK"
+fi
 
 echo "Starting Honeypot Orchestrator LAN mode"
 echo "  Interface : $HONEYPOT_LAN_PARENT"
 echo "  Subnet    : $HONEYPOT_LAN_SUBNET"
 echo "  Gateway   : $HONEYPOT_LAN_GATEWAY"
+echo "  Network   : $HONEYPOT_LAN_NETWORK"
 echo "  IP        : $HONEYPOT_LAN_IP"
 echo "  Dashboard : http://$HONEYPOT_LAN_IP:8000"
 
 if (( DETACHED )); then
   docker compose -f docker-compose.lan.yml up --build -d
+  echo "Container network details:"
+  docker inspect honeypot-orchestrator-lan \
+    --format '  IP={{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} Gateway={{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}'
 else
   docker compose -f docker-compose.lan.yml up --build
 fi
