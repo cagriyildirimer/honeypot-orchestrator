@@ -134,7 +134,7 @@ PROFILES: dict[str, HoneypotProfile] = {
     "windows_server": HoneypotProfile(
         name="windows_server",
         display_name="Windows Server Profile",
-        services=("http",),
+        services=("http", "dns", "netbios", "ldap", "ldaps", "mssql", "rdp", "smb"),
         http=HTTPProfile(
             template_name="http_windows",
             server_header="Microsoft-IIS/10.0",

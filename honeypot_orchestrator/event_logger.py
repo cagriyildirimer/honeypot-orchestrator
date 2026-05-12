@@ -16,9 +16,9 @@ class JSONLEventLogger:
     async def log(self, event: dict[str, Any]) -> None:
         # Log klasoru yoksa ilk olay yazilirken olusturulur.
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        # Her olaya UTC zaman damgasi eklenir; gelen alanlar bunun yanina eklenir.
+        # Her olaya okunabilir bir UTC zaman damgasi eklenir; gelen alanlar bunun yanina eklenir.
         record = {
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
             **event,
         }
         # JSONL formati: her satir ayri bir JSON kaydidir.

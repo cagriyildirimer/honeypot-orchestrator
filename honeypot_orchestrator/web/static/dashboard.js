@@ -14,6 +14,9 @@ const state = {
 
 function showToast(message, tone = "neutral") {
   const toast = document.querySelector("#toast");
+  if (!toast) {
+    return;
+  }
   toast.hidden = false;
   toast.className = `toast ${tone}`;
   toast.textContent = message;
@@ -21,6 +24,15 @@ function showToast(message, tone = "neutral") {
   showToast.timer = setTimeout(() => {
     toast.hidden = true;
   }, 2600);
+}
+
+function setText(selector, value) {
+  const element = document.querySelector(selector);
+  if (!element) {
+    return false;
+  }
+  element.textContent = value;
+  return true;
 }
 
 function renderProfileSelector(profileStatus) {
@@ -37,8 +49,10 @@ function renderProfileSelector(profileStatus) {
     profileSelect.appendChild(option);
   }
 
-  document.querySelector("#activeProfile").textContent =
-    text(profileStatus && profileStatus.current ? profileStatus.current.display_name : "-");
+  setText(
+    "#activeProfile",
+    text(profileStatus && profileStatus.current ? profileStatus.current.display_name : "-"),
+  );
 }
 
 function populateFilterOptions(services, stats) {
@@ -84,7 +98,7 @@ function renderServices(services) {
       <p>This profile does not currently expose any listeners.</p>
     `;
     container.appendChild(empty);
-    document.querySelector("#serviceSummary").textContent = "0 active";
+    setText("#serviceSummary", "0 active");
     return;
   }
 
@@ -112,8 +126,7 @@ function renderServices(services) {
     container.appendChild(card);
   }
 
-  document.querySelector("#serviceSummary").textContent =
-    `${services.filter((service) => service.running).length} active`;
+  setText("#serviceSummary", `${services.filter((service) => service.running).length} active`);
 }
 
 function renderActivitySummary(stats) {
@@ -172,12 +185,14 @@ function renderDashboard(status, stats, events) {
   populateFilterOptions(status.services, stats);
 
   const running = status.services.filter((service) => service.running).length;
-  document.querySelector("#runningServices").textContent = running;
-  document.querySelector("#totalEvents").textContent = stats.total_recent_events || 0;
-  document.querySelector("#loginAttempts").textContent = stats.by_type.login_attempt || 0;
-  document.querySelector("#dashboardAddress").textContent =
-    `${text(status.web.display_host || status.web.host)}:${text(status.web.port)}`;
-  document.querySelector("#sessionUser").textContent = state.username || "-";
+  setText("#runningServices", String(running));
+  setText("#totalEvents", String(stats.total_recent_events || 0));
+  setText("#loginAttempts", String(stats.by_type.login_attempt || 0));
+  setText(
+    "#dashboardAddress",
+    `${text(status.web.display_host || status.web.host)}:${text(status.web.port)}`,
+  );
+  setText("#sessionUser", state.username || "-");
 }
 
 async function refreshDashboard() {

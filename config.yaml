@@ -30,3 +30,31 @@ services:
     enabled: true
     host: "0.0.0.0"
     port: 2323
+  dns:
+    enabled: true
+    host: "0.0.0.0"
+    port: 53
+  netbios:
+    enabled: true
+    host: "0.0.0.0"
+    port: 139
+  ldap:
+    enabled: true
+    host: "0.0.0.0"
+    port: 389
+  ldaps:
+    enabled: true
+    host: "0.0.0.0"
+    port: 636
+  mssql:
+    enabled: true
+    host: "0.0.0.0"
+    port: 1433
+  rdp:
+    enabled: true
+    host: "0.0.0.0"
+    port: 3389
+  smb:
+    enabled: true
+    host: "0.0.0.0"
+    port: 1445

@@ -6,8 +6,15 @@ from honeypot_orchestrator.config import AppConfig
 from honeypot_orchestrator.event_logger import JSONLEventLogger
 from honeypot_orchestrator.profiles import HoneypotProfile, get_profile, list_profiles, load_profile
 from honeypot_orchestrator.services.base import BaseHoneypotService
+from honeypot_orchestrator.services.dns import DNSHoneypot
 from honeypot_orchestrator.services.ftp import FTPHoneypot
 from honeypot_orchestrator.services.http import HTTPHoneypot
+from honeypot_orchestrator.services.ldap import LDAPHoneypot
+from honeypot_orchestrator.services.ldaps import LDAPSHoneypot
+from honeypot_orchestrator.services.mssql import MSSQLHoneypot
+from honeypot_orchestrator.services.netbios import NetBIOSHoneypot
+from honeypot_orchestrator.services.rdp import RDPHoneypot
+from honeypot_orchestrator.services.smb import SMBHoneypot
 from honeypot_orchestrator.services.ssh import FakeSSHHoneypot
 from honeypot_orchestrator.services.telnet import TelnetHoneypot
 from honeypot_orchestrator.web.server import WebDashboard
@@ -111,6 +118,13 @@ class Orchestrator:
             "ssh": FakeSSHHoneypot,
             "ftp": FTPHoneypot,
             "telnet": TelnetHoneypot,
+            "dns": DNSHoneypot,
+            "netbios": NetBIOSHoneypot,
+            "ldap": LDAPHoneypot,
+            "ldaps": LDAPSHoneypot,
+            "mssql": MSSQLHoneypot,
+            "rdp": RDPHoneypot,
+            "smb": SMBHoneypot,
         }
         services: dict[str, BaseHoneypotService] = {}
         for name, service_config in self.config.services.items():

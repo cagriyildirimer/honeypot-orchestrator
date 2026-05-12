@@ -33,6 +33,13 @@ Available services:
 - Fake SSH login: `127.0.0.1:2222`
 - FTP banner/login: `127.0.0.1:2121`
 - Telnet login: `127.0.0.1:2323`
+- DNS over TCP honeypot: `127.0.0.1:53`
+- NetBIOS session honeypot: `127.0.0.1:139`
+- LDAP bind/search honeypot: `127.0.0.1:389`
+- LDAPS TLS front honeypot: `127.0.0.1:636`
+- MSSQL prelogin honeypot: `127.0.0.1:1433`
+- RDP X.224 honeypot: `127.0.0.1:3389`
+- SMB negotiate/session honeypot: `127.0.0.1:1445`
 
 Events are written to `logs/events.jsonl`.
 
@@ -50,7 +57,7 @@ Plain Docker:
 
 ```bash
 docker build -t honeypot-orchestrator .
-docker run --rm -p 8000:8000 -p 8080:8080 -p 2222:2222 -p 2121:2121 -p 2323:2323 \
+docker run --rm -p 8000:8000 -p 8080:8080 -p 2222:2222 -p 2121:2121 -p 2323:2323 -p 53:53 -p 139:139 -p 389:389 -p 636:636 -p 1433:1433 -p 3389:3389 -p 1445:1445 \
   -e HONEYPOT_HOST=0.0.0.0 \
   -e HONEYPOT_PROFILE=empty \
   -e HONEYPOT_WEB_HOST=0.0.0.0 \
