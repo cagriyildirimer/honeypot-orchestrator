@@ -5,6 +5,14 @@ from datetime import UTC, datetime
 
 from honeypot_orchestrator.services.base import BaseHoneypotService
 
+SMB_HOSTNAME = "WIN-SRV2019"
+SMB_DOMAIN = "CORP"
+SMB_DNS_DOMAIN = "corp.local"
+SMB_FQDN = f"{SMB_HOSTNAME.lower()}.{SMB_DNS_DOMAIN}"
+SMB_NATIVE_OS = "Windows Server 2019 Standard 17763"
+SMB_NATIVE_LANMAN = "Windows Server 2019 6.3"
+SMB_NTLM_TARGET = f"{SMB_DOMAIN}\\{SMB_HOSTNAME}"
+
 
 class SMBHoneypot(BaseHoneypotService):
     async def handle_client(
@@ -19,13 +27,52 @@ class SMBHoneypot(BaseHoneypotService):
         try:
             first_packet = await _read_nbss_frame(reader)
             if first_packet.startswith(b"\xffSMB"):
+                smb1_request = _parse_smb1_header(first_packet)
                 await self.log_event(
                     "smb1_negotiate",
                     src_ip=src_ip,
                     src_port=src_port,
                     summary="SMB1 negotiate request captured.",
                 )
-                await _write_nbss_frame(writer, _build_smb1_not_supported_response())
+                await _write_nbss_frame(
+                    writer,
+                    _build_smb1_negotiate_response(
+                        multiplex_id=smb1_request["multiplex_id"],
+                        process_id=smb1_request["process_id"],
+                        user_id=smb1_request["user_id"],
+                        tree_id=smb1_request["tree_id"],
+                    ),
+                )
+                try:
+                    session_setup_packet = await asyncio.wait_for(_read_nbss_frame(reader), timeout=5.0)
+                except (TimeoutError, asyncio.IncompleteReadError):
+                    return
+
+                if session_setup_packet.startswith(b"\xffSMB"):
+                    session_setup = _parse_smb1_header(session_setup_packet)
+                    identity = _parse_smb1_session_setup_identity(session_setup_packet)
+                    await self.log_event(
+                        "login_attempt",
+                        src_ip=src_ip,
+                        src_port=src_port,
+                        username=identity["username"],
+                        domain=identity["domain"],
+                        workstation=identity["workstation"],
+                        summary=(
+                            f"SMB1 login attempt for {identity['domain']}\\{identity['username']}"
+                            if identity["username"]
+                            else "SMB1 anonymous session setup captured."
+                        ),
+                    )
+                    await _write_nbss_frame(
+                        writer,
+                        _build_smb1_session_setup_response(
+                            multiplex_id=session_setup["multiplex_id"],
+                            process_id=session_setup["process_id"],
+                            tree_id=session_setup["tree_id"],
+                            user_id=0x0800,
+                        ),
+                    )
                 return
 
             if not first_packet.startswith(b"\xfeSMB"):
@@ -159,15 +206,15 @@ def _build_smb2_negotiate_response(*, message_id: int, credit_request: int) -> b
         [
             (65).to_bytes(2, "little"),
             (1).to_bytes(2, "little"),
-            (0x0302).to_bytes(2, "little"),
-            (0).to_bytes(2, "little"),
+            (0x0311).to_bytes(2, "little"),
+            (0x0001).to_bytes(2, "little"),
             bytes.fromhex("7da29f0dd5324af6a9b7227bb3140f9c"),
-            (0x00000044).to_bytes(4, "little"),
+            (0x0000007F).to_bytes(4, "little"),
             (65536).to_bytes(4, "little"),
             (65536).to_bytes(4, "little"),
             (65536).to_bytes(4, "little"),
             now.to_bytes(8, "little"),
-            now.to_bytes(8, "little"),
+            (now - (86400 * 10_000_000 * 30)).to_bytes(8, "little"),
             security_offset.to_bytes(2, "little"),
             len(security_blob).to_bytes(2, "little"),
             (0).to_bytes(4, "little"),
@@ -263,23 +310,169 @@ def _build_smb2_header(
     )
 
 
-def _build_smb1_not_supported_response() -> bytes:
+def _parse_smb1_header(packet: bytes) -> dict[str, int]:
+    if len(packet) < 32 or not packet.startswith(b"\xffSMB"):
+        raise ValueError("Invalid SMB1 header.")
+    return {
+        "command": packet[4],
+        "status": int.from_bytes(packet[5:9], "little"),
+        "flags": packet[9],
+        "flags2": int.from_bytes(packet[10:12], "little"),
+        "tree_id": int.from_bytes(packet[24:26], "little"),
+        "process_id": (int.from_bytes(packet[12:14], "little") << 16) | int.from_bytes(packet[26:28], "little"),
+        "user_id": int.from_bytes(packet[28:30], "little"),
+        "multiplex_id": int.from_bytes(packet[30:32], "little"),
+    }
+
+
+def _build_smb1_header(
+    *,
+    command: int,
+    status: int,
+    flags: int,
+    flags2: int,
+    tree_id: int,
+    process_id: int,
+    user_id: int,
+    multiplex_id: int,
+) -> bytes:
     return b"".join(
         [
             b"\xffSMB",
-            b"\x72",
-            b"\x00\x00\x00\x00",
-            b"\x98",
-            b"\x01\x28",
+            bytes([command]),
+            status.to_bytes(4, "little"),
+            bytes([flags]),
+            flags2.to_bytes(2, "little"),
+            ((process_id >> 16) & 0xFFFF).to_bytes(2, "little"),
+            b"\x00" * 8,
             b"\x00\x00",
-            b"\x00\x00\x00\x00\x00\x00\x00\x00",
-            b"\x00\x00",
-            b"\x00\x00",
-            b"\x00\x00\x00\x00\x00\x00\x00\x00",
-            b"\x00",
-            b"\x00\x00",
+            tree_id.to_bytes(2, "little"),
+            (process_id & 0xFFFF).to_bytes(2, "little"),
+            user_id.to_bytes(2, "little"),
+            multiplex_id.to_bytes(2, "little"),
         ]
     )
+
+
+def _build_smb1_negotiate_response(*, multiplex_id: int, process_id: int, user_id: int, tree_id: int) -> bytes:
+    challenge = bytes.fromhex("6a4f9c1d2e7b4081")
+    server_guid = bytes.fromhex("3bd05f8ea92647b69e8f6d58f8af3aa1")
+    security_mode = 0x03
+    capabilities = 0x8000E3FD
+    now = _filetime(datetime.now(UTC))
+    body = b"".join(
+        [
+            b"\x11",
+            (0).to_bytes(2, "little"),
+            bytes([security_mode]),
+            (50).to_bytes(2, "little"),
+            (1).to_bytes(2, "little"),
+            (16644).to_bytes(4, "little"),
+            (65536).to_bytes(4, "little"),
+            (0x00004D2B).to_bytes(4, "little"),
+            capabilities.to_bytes(4, "little"),
+            now.to_bytes(8, "little"),
+            (180).to_bytes(2, "little", signed=True),
+            bytes([len(challenge)]),
+            (len(challenge) + len(SMB_DOMAIN) + 1).to_bytes(2, "little"),
+            challenge,
+            SMB_DOMAIN.encode("ascii") + b"\x00",
+        ]
+    )
+    header = _build_smb1_header(
+        command=0x72,
+        status=0,
+        flags=0x98,
+        flags2=0xC803,
+        tree_id=tree_id,
+        process_id=process_id,
+        user_id=user_id,
+        multiplex_id=multiplex_id,
+    )
+    return header + body
+
+
+def _build_smb1_session_setup_response(*, multiplex_id: int, process_id: int, tree_id: int, user_id: int) -> bytes:
+    payload = (
+        SMB_NATIVE_OS.encode("ascii")
+        + b"\x00"
+        + SMB_NATIVE_LANMAN.encode("ascii")
+        + b"\x00"
+        + SMB_DOMAIN.encode("ascii")
+        + b"\x00"
+    )
+    body = b"".join(
+        [
+            b"\x03",
+            b"\xff",
+            b"\x00",
+            b"\x00\x00",
+            b"\x01\x00",
+            len(payload).to_bytes(2, "little"),
+            payload,
+        ]
+    )
+    header = _build_smb1_header(
+        command=0x73,
+        status=0,
+        flags=0x98,
+        flags2=0xC803,
+        tree_id=tree_id,
+        process_id=process_id,
+        user_id=user_id,
+        multiplex_id=multiplex_id,
+    )
+    return header + body
+
+
+def _parse_smb1_session_setup_identity(packet: bytes) -> dict[str, str]:
+    identity = {"username": "", "domain": "", "workstation": ""}
+    ntlm_token = _find_ntlmssp_token(packet)
+    if ntlm_token:
+        return _parse_ntlm_authenticate(ntlm_token)
+
+    if len(packet) < 32 + 1 + 26 + 2:
+        return identity
+    header = _parse_smb1_header(packet)
+    body = packet[32:]
+    word_count = body[0]
+    parameter_bytes = word_count * 2
+    if len(body) < 1 + parameter_bytes + 2 or parameter_bytes < 26:
+        return identity
+    parameters = body[1 : 1 + parameter_bytes]
+    oem_password_length = int.from_bytes(parameters[14:16], "little")
+    unicode_password_length = int.from_bytes(parameters[16:18], "little")
+    data_start = 1 + parameter_bytes
+    byte_count = int.from_bytes(body[data_start : data_start + 2], "little")
+    data = body[data_start + 2 : data_start + 2 + byte_count]
+    if len(data) < oem_password_length + unicode_password_length:
+        return identity
+    strings = data[oem_password_length + unicode_password_length :]
+    if header["flags2"] & 0x8000:
+        absolute_offset = 32 + data_start + 2 + oem_password_length + unicode_password_length
+        if absolute_offset % 2:
+            strings = strings[1:]
+        parsed = _split_smb_strings(strings, encoding="utf-16le")
+    else:
+        parsed = _split_smb_strings(strings, encoding="ascii")
+    if parsed:
+        identity["username"] = parsed[0]
+    if len(parsed) > 1:
+        identity["domain"] = parsed[1]
+    if len(parsed) > 2:
+        identity["workstation"] = parsed[2]
+    return identity
+
+
+def _split_smb_strings(data: bytes, *, encoding: str) -> list[str]:
+    try:
+        if encoding == "utf-16le":
+            parts = data.decode("utf-16le", errors="ignore").split("\x00")
+        else:
+            parts = data.decode("ascii", errors="ignore").split("\x00")
+    except UnicodeDecodeError:
+        return []
+    return [part for part in parts if part]
 
 
 def _extract_session_setup_security_blob(packet: bytes) -> bytes:
@@ -340,18 +533,26 @@ def _find_ntlmssp_token(blob: bytes) -> bytes:
 
 
 def _spnego_negotiate_token() -> bytes:
-    ntlm_oid = b"\x2b\x06\x01\x04\x01\x82\x37\x02\x02\x0a"
-    mech_type = b"\x06" + bytes([len(ntlm_oid)]) + ntlm_oid
-    mech_sequence = b"\x30" + bytes([len(mech_type)]) + mech_type
+    mech_types_raw = b"".join(
+        [
+            _asn1_oid("1.2.840.113554.1.2.2"),
+            _asn1_oid("1.2.840.48018.1.2.2"),
+            _asn1_oid("1.3.6.1.4.1.311.2.2.10"),
+        ]
+    )
+    mech_sequence = b"\x30" + _asn1_length(len(mech_types_raw)) + mech_types_raw
     mech_types = b"\xa0" + bytes([len(mech_sequence)]) + mech_sequence
-    inner = b"\x30" + bytes([len(mech_types)]) + mech_types
-    return b"\x60" + bytes([len(inner)]) + inner
+    inner = b"\x30" + _asn1_length(len(mech_types)) + mech_types
+    return b"\x60" + _asn1_length(len(inner)) + inner
 
 
 def _spnego_challenge_token() -> bytes:
     ntlm_challenge = _ntlm_challenge_message()
+    supported_mech = _asn1_oid("1.3.6.1.4.1.311.2.2.10")
+    neg_state = b"\xa0" + _asn1_length(3) + b"\x0a\x01\x01"
+    mech = b"\xa1" + _asn1_length(len(supported_mech)) + supported_mech
     response_token = b"\xa2" + _asn1_length(len(ntlm_challenge)) + ntlm_challenge
-    inner = b"\x30" + _asn1_length(len(response_token)) + response_token
+    inner = b"\x30" + _asn1_length(len(neg_state) + len(mech) + len(response_token)) + neg_state + mech + response_token
     return b"\xa1" + _asn1_length(len(inner)) + inner
 
 
@@ -363,15 +564,17 @@ def _spnego_reject_token() -> bytes:
 
 
 def _ntlm_challenge_message() -> bytes:
-    target_name = "CORP".encode("utf-16le")
+    target_name = SMB_DOMAIN.encode("utf-16le")
+    now = _filetime(datetime.now(UTC))
     target_info = b"".join(
         [
-            (2).to_bytes(2, "little"),
-            (8).to_bytes(2, "little"),
-            "CORP".encode("utf-16le"),
-            (1).to_bytes(2, "little"),
-            (22).to_bytes(2, "little"),
-            "WIN-SRV2019".encode("utf-16le"),
+            _ntlm_av_pair(2, SMB_DOMAIN),
+            _ntlm_av_pair(1, SMB_HOSTNAME),
+            _ntlm_av_pair(4, SMB_DNS_DOMAIN),
+            _ntlm_av_pair(3, SMB_FQDN),
+            _ntlm_av_pair(7, now.to_bytes(8, "little"), raw=True),
+            _ntlm_av_pair(9, b"\x02\x00\x00\x00", raw=True),
+            _ntlm_av_pair(10, b"\x00" * 16, raw=True),
             (0).to_bytes(2, "little"),
             (0).to_bytes(2, "little"),
         ]
@@ -385,13 +588,13 @@ def _ntlm_challenge_message() -> bytes:
             len(target_name).to_bytes(2, "little"),
             len(target_name).to_bytes(2, "little"),
             target_name_offset.to_bytes(4, "little"),
-            (0x8201).to_bytes(4, "little"),
+            (0xE28A8235).to_bytes(4, "little"),
             bytes.fromhex("0123456789abcdef"),
             b"\x00" * 8,
             len(target_info).to_bytes(2, "little"),
             len(target_info).to_bytes(2, "little"),
             target_info_offset.to_bytes(4, "little"),
-            (0x0000000F).to_bytes(4, "little"),
+            b"\x0a\x00\x63\x45\x00\x00\x00\x0f",
             target_name,
             target_info,
         ]
@@ -413,6 +616,35 @@ def _asn1_length(length: int) -> bytes:
         return bytes([length])
     encoded = length.to_bytes((length.bit_length() + 7) // 8, "big")
     return bytes([0x80 | len(encoded)]) + encoded
+
+
+def _asn1_oid(oid: str) -> bytes:
+    parts = [int(part) for part in oid.split(".")]
+    if len(parts) < 2:
+        raise ValueError("Invalid OID.")
+    encoded = bytearray([parts[0] * 40 + parts[1]])
+    for part in parts[2:]:
+        if part == 0:
+            encoded.append(0)
+            continue
+        stack: list[int] = []
+        while part:
+            stack.append(part & 0x7F)
+            part >>= 7
+        for index in range(len(stack) - 1, -1, -1):
+            byte = stack[index]
+            if index:
+                byte |= 0x80
+            encoded.append(byte)
+    return b"\x06" + _asn1_length(len(encoded)) + bytes(encoded)
+
+
+def _ntlm_av_pair(av_id: int, value: str | bytes, *, raw: bool = False) -> bytes:
+    if raw:
+        data = value if isinstance(value, bytes) else value.encode("utf-16le")
+    else:
+        data = value.encode("utf-16le") if isinstance(value, str) else value
+    return av_id.to_bytes(2, "little") + len(data).to_bytes(2, "little") + data
 
 
 def _filetime(value: datetime) -> int:
