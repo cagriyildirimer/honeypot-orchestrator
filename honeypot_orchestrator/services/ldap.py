@@ -102,11 +102,6 @@ class LDAPHoneypot(BaseHoneypotService):
         )
         return False
 
-    async def write_bytes(self, writer: asyncio.StreamWriter, data: bytes) -> None:
-        writer.write(data)
-        await writer.drain()
-
-
 def _parse_ldap_message(packet: bytes) -> tuple[int, int, bytes]:
     tag, _, body, _ = _read_tlv(packet, 0)
     if tag != 0x30:

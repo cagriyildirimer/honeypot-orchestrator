@@ -175,13 +175,11 @@ PROFILES: dict[str, HoneypotProfile] = {
 
 
 def load_profile(name: str) -> HoneypotProfile:
-    normalized = name.strip().lower().replace("-", "_")
-    return PROFILES.get(normalized, PROFILES["empty"])
+    return PROFILES.get(_normalize_profile_name(name), PROFILES["empty"])
 
 
 def get_profile(name: str) -> HoneypotProfile | None:
-    normalized = name.strip().lower().replace("-", "_")
-    return PROFILES.get(normalized)
+    return PROFILES.get(_normalize_profile_name(name))
 
 
 def list_profiles() -> list[dict[str, object]]:
@@ -193,3 +191,7 @@ def list_profiles() -> list[dict[str, object]]:
         }
         for profile in PROFILES.values()
     ]
+
+
+def _normalize_profile_name(name: str) -> str:
+    return name.strip().lower().replace("-", "_")

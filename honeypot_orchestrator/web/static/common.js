@@ -1,10 +1,14 @@
 async function requestJson(url, options = {}) {
+  const headers = {
+    ...(options.headers || {}),
+  };
+  if (options.body && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const response = await fetch(url, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
+    headers,
   });
 
   let payload = {};
@@ -68,6 +72,20 @@ function formatTimestamp(value) {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function formatEventSource(event) {
+  if (!event || !event.src_ip) {
+    return "-";
+  }
+  return `${event.src_ip}:${event.src_port || ""}`;
+}
+
+function summarizeEvent(event) {
+  if (!event) {
+    return "-";
+  }
+  return text(event.summary || event.path || event.command || event.error || event.detail);
 }
 
 async function ensureAuthenticated() {

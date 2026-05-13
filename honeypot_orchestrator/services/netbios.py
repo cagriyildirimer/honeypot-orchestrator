@@ -60,11 +60,6 @@ class NetBIOSHoneypot(BaseHoneypotService):
         finally:
             await self.close_writer(writer)
 
-    async def write_bytes(self, writer: asyncio.StreamWriter, data: bytes) -> None:
-        writer.write(data)
-        await writer.drain()
-
-
 def _parse_session_request_names(payload: bytes) -> tuple[str, str]:
     if len(payload) < 68:
         return "<unknown>", "<unknown>"

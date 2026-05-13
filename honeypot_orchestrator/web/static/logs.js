@@ -116,17 +116,16 @@ function renderEventTable(events, fallbackProfile) {
 
   events.forEach((event, index) => {
     const row = document.createElement("tr");
-    const source = event.src_ip ? `${event.src_ip}:${event.src_port || ""}` : "-";
     row.innerHTML = `
       <td>${text(formatTimestamp(event.timestamp))}</td>
       <td>${text(event.service)}</td>
       <td><span class="table-chip">${text(event.event_type)}</span></td>
-      <td>${text(source)}</td>
+      <td>${text(formatEventSource(event))}</td>
       <td>${text(event.profile || fallbackProfile)}</td>
-      <td>${text(event.summary || event.path || event.command || event.error || event.detail)}</td>
+      <td>${summarizeEvent(event)}</td>
     `;
     row.addEventListener("click", () => {
-      document.querySelectorAll("tbody tr").forEach((node) => node.classList.remove("selected"));
+      body.querySelectorAll("tr").forEach((node) => node.classList.remove("selected"));
       row.classList.add("selected");
       setText("#eventJson", JSON.stringify(event, null, 2));
     });

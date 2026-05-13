@@ -14,7 +14,7 @@ class MSSQLHoneypot(BaseHoneypotService):
         src_ip, src_port = self.peer(writer)
         await self.log_event("connection", src_ip=src_ip, src_port=src_port)
         try:
-            packet_type, payload = await _read_tds_packet(reader)
+            packet_type, _payload = await _read_tds_packet(reader)
             await self.log_event(
                 "mssql_prelogin",
                 src_ip=src_ip,

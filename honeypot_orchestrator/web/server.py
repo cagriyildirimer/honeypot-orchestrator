@@ -15,6 +15,18 @@ if TYPE_CHECKING:
 
 
 WEB_DIR = Path(__file__).parent
+TEMPLATE_ROUTES = {
+    "/login": "login.html",
+    "/dashboard": "dashboard.html",
+    "/logs": "logs.html",
+}
+STATIC_ROUTES = {
+    "/static/styles.css": ("styles.css", "text/css; charset=utf-8"),
+    "/static/common.js": ("common.js", "application/javascript; charset=utf-8"),
+    "/static/login.js": ("login.js", "application/javascript; charset=utf-8"),
+    "/static/dashboard.js": ("dashboard.js", "application/javascript; charset=utf-8"),
+    "/static/logs.js": ("logs.js", "application/javascript; charset=utf-8"),
+}
 
 
 class WebDashboard:
@@ -48,7 +60,17 @@ class WebDashboard:
             request = await self._read_request(reader)
             response = await self._route_request(request)
             await self._send_response(writer, response)
+        except EOFError:
+            return
         except Exception as exc:
+            await self.orchestrator.logger.log(
+                {
+                    "service": "web",
+                    "event_type": "request_error",
+                    "error": type(exc).__name__,
+                    "summary": f"Dashboard request failed with {type(exc).__name__}.",
+                }
+            )
             body = f"Internal server error: {type(exc).__name__}".encode("utf-8")
             await self._send_response(
                 writer,
@@ -60,7 +82,10 @@ class WebDashboard:
             )
         finally:
             writer.close()
-            await writer.wait_closed()
+            try:
+                await writer.wait_closed()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
     async def _route_request(self, request: dict[str, Any]) -> dict[str, Any]:
         method = request["method"]
@@ -71,43 +96,25 @@ class WebDashboard:
         if path == "/":
             return self._redirect("/dashboard" if authenticated else "/login")
 
-        if path == "/login":
-            if authenticated:
-                return self._redirect("/dashboard")
-            body = (WEB_DIR / "templates" / "login.html").read_bytes()
-            return _response(HTTPStatus.OK, "text/html; charset=utf-8", body)
-
-        if path == "/dashboard":
-            if not authenticated:
+        if path in TEMPLATE_ROUTES:
+            if path == "/login":
+                if authenticated:
+                    return self._redirect("/dashboard")
+            elif not authenticated:
                 return self._redirect("/login")
-            body = (WEB_DIR / "templates" / "dashboard.html").read_bytes()
-            return _response(HTTPStatus.OK, "text/html; charset=utf-8", body)
+            return _response(
+                HTTPStatus.OK,
+                "text/html; charset=utf-8",
+                (WEB_DIR / "templates" / TEMPLATE_ROUTES[path]).read_bytes(),
+            )
 
-        if path == "/logs":
-            if not authenticated:
-                return self._redirect("/login")
-            body = (WEB_DIR / "templates" / "logs.html").read_bytes()
-            return _response(HTTPStatus.OK, "text/html; charset=utf-8", body)
-
-        if path == "/static/styles.css":
-            body = (WEB_DIR / "static" / "styles.css").read_bytes()
-            return _response(HTTPStatus.OK, "text/css; charset=utf-8", body)
-
-        if path == "/static/common.js":
-            body = (WEB_DIR / "static" / "common.js").read_bytes()
-            return _response(HTTPStatus.OK, "application/javascript; charset=utf-8", body)
-
-        if path == "/static/login.js":
-            body = (WEB_DIR / "static" / "login.js").read_bytes()
-            return _response(HTTPStatus.OK, "application/javascript; charset=utf-8", body)
-
-        if path == "/static/dashboard.js":
-            body = (WEB_DIR / "static" / "dashboard.js").read_bytes()
-            return _response(HTTPStatus.OK, "application/javascript; charset=utf-8", body)
-
-        if path == "/static/logs.js":
-            body = (WEB_DIR / "static" / "logs.js").read_bytes()
-            return _response(HTTPStatus.OK, "application/javascript; charset=utf-8", body)
+        if path in STATIC_ROUTES:
+            filename, content_type = STATIC_ROUTES[path]
+            return _response(
+                HTTPStatus.OK,
+                content_type,
+                (WEB_DIR / "static" / filename).read_bytes(),
+            )
 
         if path == "/healthz" and method == "GET":
             return self._json_response({"ok": True, "service": "web"})
@@ -252,6 +259,8 @@ class WebDashboard:
 
     async def _read_request(self, reader: asyncio.StreamReader) -> dict[str, Any]:
         request_line = await asyncio.wait_for(reader.readline(), timeout=10)
+        if not request_line:
+            raise EOFError
         method, target, _ = _parse_request_line(request_line.decode("utf-8", "replace"))
         headers: dict[str, str] = {}
         while True:

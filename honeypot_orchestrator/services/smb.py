@@ -11,7 +11,6 @@ SMB_DNS_DOMAIN = "corp.local"
 SMB_FQDN = f"{SMB_HOSTNAME.lower()}.{SMB_DNS_DOMAIN}"
 SMB_NATIVE_OS = "Windows Server 2019 Standard 17763"
 SMB_NATIVE_LANMAN = "Windows Server 2019 6.3"
-SMB_NTLM_TARGET = f"{SMB_DOMAIN}\\{SMB_HOSTNAME}"
 
 
 class SMBHoneypot(BaseHoneypotService):
@@ -356,7 +355,6 @@ def _build_smb1_header(
 
 def _build_smb1_negotiate_response(*, multiplex_id: int, process_id: int, user_id: int, tree_id: int) -> bytes:
     challenge = bytes.fromhex("6a4f9c1d2e7b4081")
-    server_guid = bytes.fromhex("3bd05f8ea92647b69e8f6d58f8af3aa1")
     security_mode = 0x03
     capabilities = 0x8000E3FD
     now = _filetime(datetime.now(UTC))
@@ -541,7 +539,7 @@ def _spnego_negotiate_token() -> bytes:
         ]
     )
     mech_sequence = b"\x30" + _asn1_length(len(mech_types_raw)) + mech_types_raw
-    mech_types = b"\xa0" + bytes([len(mech_sequence)]) + mech_sequence
+    mech_types = b"\xa0" + _asn1_length(len(mech_sequence)) + mech_sequence
     inner = b"\x30" + _asn1_length(len(mech_types)) + mech_types
     return b"\x60" + _asn1_length(len(inner)) + inner
 

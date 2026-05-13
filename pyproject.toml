@@ -1,7 +1,7 @@
 [project]
 name = "honeypot-orchestrator"
 version = "0.1.0"
-description = "Lab-only honeypot orchestrator with fake SSH, HTTP, FTP, and Telnet services."
+description = "Lab-only honeypot orchestrator with web control, profile-driven personas, and multiple decoy services."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

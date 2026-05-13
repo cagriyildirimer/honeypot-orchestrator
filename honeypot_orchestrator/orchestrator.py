@@ -236,18 +236,10 @@ class Orchestrator:
                 continue
 
     def _sync_service_profiles(self, profile: HoneypotProfile) -> None:
-        http_service = self.services.get("http")
-        if isinstance(http_service, HTTPHoneypot):
-            http_service.set_profile(profile)
-        ssh_service = self.services.get("ssh")
-        if isinstance(ssh_service, FakeSSHHoneypot):
-            ssh_service.set_profile(profile)
-        ftp_service = self.services.get("ftp")
-        if isinstance(ftp_service, FTPHoneypot):
-            ftp_service.set_profile(profile)
-        telnet_service = self.services.get("telnet")
-        if isinstance(telnet_service, TelnetHoneypot):
-            telnet_service.set_profile(profile)
+        for service_name in ("http", "ssh", "ftp", "telnet"):
+            service = self.services.get(service_name)
+            if service is not None and hasattr(service, "set_profile"):
+                service.set_profile(profile)
 
     def _create_service(
         self,
@@ -256,41 +248,13 @@ class Orchestrator:
         host: str,
         port: int,
     ) -> BaseHoneypotService:
-        if service_cls is HTTPHoneypot:
-            return service_cls(
-                name=name,
-                host=host,
-                port=port,
-                logger=self.logger,
-                profile=self.profile,
-            )
-        if service_cls is FakeSSHHoneypot:
-            return service_cls(
-                name=name,
-                host=host,
-                port=port,
-                logger=self.logger,
-                profile=self.profile,
-            )
-        if service_cls is FTPHoneypot:
-            return service_cls(
-                name=name,
-                host=host,
-                port=port,
-                logger=self.logger,
-                profile=self.profile,
-            )
-        if service_cls is TelnetHoneypot:
-            return service_cls(
-                name=name,
-                host=host,
-                port=port,
-                logger=self.logger,
-                profile=self.profile,
-            )
-        return service_cls(
-            name=name,
-            host=host,
-            port=port,
-            logger=self.logger,
-        )
+        profile_aware_service_types = (HTTPHoneypot, FakeSSHHoneypot, FTPHoneypot, TelnetHoneypot)
+        kwargs = {
+            "name": name,
+            "host": host,
+            "port": port,
+            "logger": self.logger,
+        }
+        if issubclass(service_cls, profile_aware_service_types):
+            kwargs["profile"] = self.profile
+        return service_cls(**kwargs)

@@ -22,6 +22,8 @@ class BaseHoneypotService(ABC):
         return self._server is not None and self._server.is_serving()
 
     async def start(self) -> None:
+        if self.running:
+            return
         # Her yeni istemci baglantisi alt siniftaki handle_client metoduna gider.
         self._server = await asyncio.start_server(
             self.handle_client,
@@ -61,6 +63,10 @@ class BaseHoneypotService(ABC):
         # Metin cevabi byte'a cevirip istemciye gonderir.
         writer.write(data.encode("utf-8", errors="replace"))
         # drain, tamponun gercekten gonderilmesini bekler.
+        await writer.drain()
+
+    async def write_bytes(self, writer: asyncio.StreamWriter, data: bytes) -> None:
+        writer.write(data)
         await writer.drain()
 
     async def read_line(
