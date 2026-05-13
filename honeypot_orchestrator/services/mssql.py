@@ -76,13 +76,15 @@ def _build_prelogin_response() -> bytes:
     version_offset = table_size
     encryption_offset = version_offset + 6
     instance_offset = encryption_offset + 1
+    # SQL Server 2019 reports major 15, minor 0 with a 2000-series build.
+    sql_server_2019_version = b"\x0f\x00\x07\xd0\x00\x00"
     return b"".join(
         [
             b"\x00" + version_offset.to_bytes(2, "big") + b"\x00\x06",
             b"\x01" + encryption_offset.to_bytes(2, "big") + b"\x00\x01",
             b"\x02" + instance_offset.to_bytes(2, "big") + b"\x00\x01",
             b"\xff",
-            b"\x00\x00\x0f\x00\x07\xd0",
+            sql_server_2019_version,
             b"\x02",
             b"\x00",
         ]
