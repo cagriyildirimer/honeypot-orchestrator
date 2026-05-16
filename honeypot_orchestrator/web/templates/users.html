@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Honeypot Director Users</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("honeypot-director-theme") === "dark" ? "dark" : "light";
+      } catch (error) {
+        document.documentElement.dataset.theme = "light";
+      }
+    </script>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body class="app-page">
+    <div class="app-frame">
+      <aside class="sidebar">
+        <a class="brand" href="/dashboard" aria-label="Honeypot Director dashboard">
+          <span class="brand-mark">HD</span>
+          <span class="brand-text">Honeypot Director</span>
+        </a>
+
+        <nav class="nav-stack" aria-label="Primary navigation">
+          <a class="nav-link" href="/dashboard">Dashboard</a>
+          <a class="nav-link" href="/logs">Logs</a>
+          <div class="nav-group">
+            <a class="nav-link" href="/settings">Settings</a>
+            <a class="nav-link nav-sub-link active" href="/users">↳ Users</a>
+          </div>
+        </nav>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <h1>Users</h1>
+            <p class="page-subtitle">Manage panel users and password updates.</p>
+          </div>
+          <div class="topbar-actions">
+            <div class="user-pill">
+              <span>Signed in as</span>
+              <strong id="sessionUser">-</strong>
+            </div>
+            <button id="logoutButton" type="button" class="button">Log out</button>
+          </div>
+        </header>
+
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <h2>User Accounts</h2>
+              <p>Use the table actions to add users or update passwords.</p>
+            </div>
+          </div>
+
+          <div class="table-shell users-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Password</th>
+                </tr>
+              </thead>
+              <tbody id="usersTable"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div id="toast" class="toast" hidden></div>
+      </main>
+    </div>
+
+    <script src="/static/common.js"></script>
+    <script src="/static/users.js"></script>
+  </body>
+</html>

@@ -4,6 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Honeypot Director Dashboard</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("honeypot-director-theme") === "dark" ? "dark" : "light";
+      } catch (error) {
+        document.documentElement.dataset.theme = "light";
+      }
+    </script>
     <link rel="stylesheet" href="/static/styles.css">
   </head>
   <body class="app-page">
@@ -17,6 +24,10 @@
         <nav class="nav-stack" aria-label="Primary navigation">
           <a class="nav-link active" href="/dashboard">Dashboard</a>
           <a class="nav-link" href="/logs">Logs</a>
+          <div class="nav-group">
+            <a class="nav-link" href="/settings">Settings</a>
+            <a class="nav-link nav-sub-link" href="/users">↳ Users</a>
+          </div>
         </nav>
       </aside>
 

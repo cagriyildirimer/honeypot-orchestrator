@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import secrets
+import time
 from collections import Counter
 from datetime import UTC, datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
+
+from honeypot_orchestrator import __version__
 
 if TYPE_CHECKING:
     from honeypot_orchestrator.orchestrator import Orchestrator
@@ -19,6 +22,8 @@ TEMPLATE_ROUTES = {
     "/login": "login.html",
     "/dashboard": "dashboard.html",
     "/logs": "logs.html",
+    "/settings": "settings.html",
+    "/users": "users.html",
 }
 STATIC_ROUTES = {
     "/static/styles.css": ("styles.css", "text/css; charset=utf-8"),
@@ -26,6 +31,8 @@ STATIC_ROUTES = {
     "/static/login.js": ("login.js", "application/javascript; charset=utf-8"),
     "/static/dashboard.js": ("dashboard.js", "application/javascript; charset=utf-8"),
     "/static/logs.js": ("logs.js", "application/javascript; charset=utf-8"),
+    "/static/settings.js": ("settings.js", "application/javascript; charset=utf-8"),
+    "/static/users.js": ("users.js", "application/javascript; charset=utf-8"),
 }
 
 
@@ -36,8 +43,16 @@ class WebDashboard:
         self.orchestrator = orchestrator
         # Panel de kucuk bir asyncio HTTP sunucusu olarak calisir.
         self._server: asyncio.AbstractServer | None = None
-        # Basit oturumlar bellek ici token seti ile tutulur.
-        self._sessions: set[str] = set()
+        # Basit oturumlar bellek icinde, kullanicilar yerel JSON dosyasinda tutulur.
+        self._sessions: dict[str, str] = {}
+        self._users_path = self.orchestrator.config.logging.path.parent / "web_users.json"
+        self._users = _load_users(
+            self._users_path,
+            {
+                self.orchestrator.config.auth.username: self.orchestrator.config.auth.password,
+            },
+        )
+        self._started_at = time.monotonic()
 
     async def start(self) -> None:
         # Tarayici istekleri handle_client metoduna yonlendirilir.
@@ -130,7 +145,7 @@ class WebDashboard:
             return self._json_response(
                 {
                     "authenticated": authenticated,
-                    "username": self.orchestrator.config.auth.username if authenticated else "",
+                    "username": self._current_username(cookies) if authenticated else "",
                 }
             )
 
@@ -184,6 +199,30 @@ class WebDashboard:
                 }
             )
 
+        if path == "/api/settings" and method == "GET":
+            return self._json_response(self._build_settings_payload(request, cookies))
+
+        if path == "/api/logs/export" and method == "GET":
+            return self._export_logs_response()
+
+        if path == "/api/logs/clear" and method == "POST":
+            return await self._handle_clear_logs()
+
+        if path == "/api/users" and method == "GET":
+            return self._json_response({"users": self._user_payload()})
+
+        if path == "/api/users" and method == "POST":
+            payload = _decode_json_body(request["body"])
+            return await self._handle_create_user(payload)
+
+        if path == "/api/users/delete" and method == "POST":
+            payload = _decode_json_body(request["body"])
+            return await self._handle_delete_user(payload, cookies)
+
+        if path == "/api/users/password" and method == "POST":
+            payload = _decode_json_body(request["body"])
+            return await self._handle_change_user_password(payload)
+
         if path == "/api/profile" and method == "POST":
             payload = _decode_json_body(request["body"])
             profile_name = str(payload.get("profile", "")).strip()
@@ -219,10 +258,7 @@ class WebDashboard:
     async def _handle_login(self, payload: dict[str, Any]) -> dict[str, Any]:
         username = str(payload.get("username", ""))
         password = str(payload.get("password", ""))
-        if (
-            username != self.orchestrator.config.auth.username
-            or password != self.orchestrator.config.auth.password
-        ):
+        if self._users.get(username) != password:
             await self.orchestrator.logger.log(
                 {
                     "service": "web",
@@ -236,7 +272,7 @@ class WebDashboard:
             )
 
         token = secrets.token_urlsafe(24)
-        self._sessions.add(token)
+        self._sessions[token] = username
         await self.orchestrator.logger.log(
             {
                 "service": "web",
@@ -251,11 +287,106 @@ class WebDashboard:
 
     async def _handle_logout(self, cookies: dict[str, str]) -> dict[str, Any]:
         token = cookies.get("session", "")
-        self._sessions.discard(token)
+        self._sessions.pop(token, None)
         return self._json_response(
             {"ok": True},
             cookies=[_build_cookie("session", "", max_age=0)],
         )
+
+    async def _handle_clear_logs(self) -> dict[str, Any]:
+        path = self.orchestrator.config.logging.path
+        await asyncio.to_thread(_clear_file, path)
+        return self._json_response({"ok": True, "log_path": str(path)})
+
+    async def _handle_create_user(self, payload: dict[str, Any]) -> dict[str, Any]:
+        username = str(payload.get("username", "")).strip()
+        password = str(payload.get("password", ""))
+        if not username or not password:
+            return self._json_response(
+                {"error": "Username and password are required."},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+        if username in self._users:
+            return self._json_response(
+                {"error": f"User already exists: {username}."},
+                status=HTTPStatus.CONFLICT,
+            )
+        self._users[username] = password
+        await asyncio.to_thread(_save_users, self._users_path, self._users)
+        await self.orchestrator.logger.log(
+            {
+                "service": "web",
+                "event_type": "user_created",
+                "summary": f"Dashboard user {username} was created.",
+            }
+        )
+        return self._json_response({"ok": True, "users": self._user_payload()})
+
+    async def _handle_delete_user(
+        self,
+        payload: dict[str, Any],
+        cookies: dict[str, str],
+    ) -> dict[str, Any]:
+        username = str(payload.get("username", "")).strip()
+        if not username:
+            return self._json_response(
+                {"error": "Username is required."},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+        if username not in self._users:
+            return self._json_response(
+                {"error": f"Unknown user: {username}."},
+                status=HTTPStatus.NOT_FOUND,
+            )
+        if username == self._current_username(cookies):
+            return self._json_response(
+                {"error": "You cannot delete the signed-in user."},
+                status=HTTPStatus.CONFLICT,
+            )
+        if len(self._users) <= 1:
+            return self._json_response(
+                {"error": "At least one user must remain."},
+                status=HTTPStatus.CONFLICT,
+            )
+        del self._users[username]
+        self._sessions = {
+            token: session_username
+            for token, session_username in self._sessions.items()
+            if session_username != username
+        }
+        await asyncio.to_thread(_save_users, self._users_path, self._users)
+        await self.orchestrator.logger.log(
+            {
+                "service": "web",
+                "event_type": "user_deleted",
+                "summary": f"Dashboard user {username} was deleted.",
+            }
+        )
+        return self._json_response({"ok": True, "users": self._user_payload()})
+
+    async def _handle_change_user_password(self, payload: dict[str, Any]) -> dict[str, Any]:
+        username = str(payload.get("username", "")).strip()
+        password = str(payload.get("password", ""))
+        if not username or not password:
+            return self._json_response(
+                {"error": "Username and new password are required."},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+        if username not in self._users:
+            return self._json_response(
+                {"error": f"Unknown user: {username}."},
+                status=HTTPStatus.NOT_FOUND,
+            )
+        self._users[username] = password
+        await asyncio.to_thread(_save_users, self._users_path, self._users)
+        await self.orchestrator.logger.log(
+            {
+                "service": "web",
+                "event_type": "user_password_changed",
+                "summary": f"Dashboard user {username} password was changed.",
+            }
+        )
+        return self._json_response({"ok": True, "users": self._user_payload()})
 
     async def _read_request(self, reader: asyncio.StreamReader) -> dict[str, Any]:
         request_line = await asyncio.wait_for(reader.readline(), timeout=10)
@@ -315,6 +446,10 @@ class WebDashboard:
         token = cookies.get("session", "")
         return token in self._sessions
 
+    def _current_username(self, cookies: dict[str, str]) -> str:
+        token = cookies.get("session", "")
+        return self._sessions.get(token, "")
+
     def _json_response(
         self,
         payload: dict[str, Any],
@@ -340,6 +475,54 @@ class WebDashboard:
             f"Redirecting to {location}".encode("utf-8"),
             headers={"Location": location},
         )
+
+    def _build_settings_payload(
+        self,
+        request: dict[str, Any],
+        cookies: dict[str, str],
+    ) -> dict[str, Any]:
+        display_host = _request_display_host(request)
+        log_path = self.orchestrator.config.logging.path
+        log_size = log_path.stat().st_size if log_path.exists() else 0
+        uptime_seconds = int(time.monotonic() - self._started_at)
+        return {
+            "panel": {
+                "url": f"http://{display_host}:{self.orchestrator.config.web.port}",
+                "host": self.orchestrator.config.web.host,
+                "display_host": display_host,
+                "port": self.orchestrator.config.web.port,
+            },
+            "session": {
+                "username": self._current_username(cookies),
+            },
+            "logging": {
+                "path": str(log_path),
+                "size_bytes": log_size,
+                "exists": log_path.exists(),
+            },
+            "runtime": {
+                "uptime_seconds": uptime_seconds,
+                "uptime": _format_duration(uptime_seconds),
+                "health": "ok" if self._server is not None else "stopped",
+                "version": __version__,
+            },
+            "users": self._user_payload(),
+        }
+
+    def _export_logs_response(self) -> dict[str, Any]:
+        path = self.orchestrator.config.logging.path
+        body = path.read_bytes() if path.exists() else b""
+        return _response(
+            HTTPStatus.OK,
+            "application/x-ndjson; charset=utf-8",
+            body,
+            headers={
+                "Content-Disposition": 'attachment; filename="honeypot-events.jsonl"',
+            },
+        )
+
+    def _user_payload(self) -> list[dict[str, str]]:
+        return [{"username": username} for username in sorted(self._users)]
 
     def _build_overview_payload(self, request: dict[str, Any]) -> dict[str, Any]:
         display_host = _request_display_host(request)
@@ -412,6 +595,53 @@ def _decode_json_body(body: bytes) -> dict[str, Any]:
     except (UnicodeDecodeError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _clear_file(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")
+
+
+def _load_users(path: Path, default_users: dict[str, str]) -> dict[str, str]:
+    if not path.exists():
+        _save_users(path, default_users)
+        return dict(default_users)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return dict(default_users)
+    if not isinstance(payload, dict):
+        return dict(default_users)
+    users = payload.get("users", {})
+    if not isinstance(users, dict):
+        return dict(default_users)
+    cleaned = {
+        str(username): str(password)
+        for username, password in users.items()
+        if str(username).strip() and str(password)
+    }
+    return cleaned or dict(default_users)
+
+
+def _save_users(path: Path, users: dict[str, str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"users": users}
+    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _format_duration(total_seconds: int) -> str:
+    days, remainder = divmod(total_seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days}d")
+    if hours or parts:
+        parts.append(f"{hours}h")
+    if minutes or parts:
+        parts.append(f"{minutes}m")
+    parts.append(f"{seconds}s")
+    return " ".join(parts)
 
 
 def _parse_request_line(request_line: str) -> tuple[str, str, str]:
