@@ -28,29 +28,7 @@ const TIMELINE_RANGES = {
   },
 };
 
-function renderActivitySummary(stats) {
-  const list = document.querySelector("#activitySummary");
-  if (!list) {
-    return;
-  }
-  list.innerHTML = "";
-  const entries = Object.entries((stats && stats.by_service) || {})
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 5);
-
-  if (!entries.length) {
-    const item = document.createElement("li");
-    item.textContent = "No events yet. Apply a profile to begin collecting traffic.";
-    list.appendChild(item);
-    return;
-  }
-
-  for (const [service, count] of entries) {
-    const item = document.createElement("li");
-    item.innerHTML = `<span>${text(service)}</span><strong>${count}</strong>`;
-    list.appendChild(item);
-  }
-}
+const DONUT_COLORS = ["#14b8a6", "#2563eb", "#f59e0b", "#ef4444", "#8b5cf6", "#10b981", "#64748b"];
 
 function renderEvents(events, fallbackProfile) {
   const body = document.querySelector("#events");
@@ -240,12 +218,138 @@ function bindTimelineTooltip(container, points, width, height) {
   });
 }
 
+function polarToCartesian(center, radius, angleInDegrees) {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
+  return {
+    x: center + radius * Math.cos(angleInRadians),
+    y: center + radius * Math.sin(angleInRadians),
+  };
+}
+
+function describeArc(center, radius, startAngle, endAngle) {
+  const start = polarToCartesian(center, radius, endAngle);
+  const end = polarToCartesian(center, radius, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+  return [
+    "M", start.x.toFixed(2), start.y.toFixed(2),
+    "A", radius, radius, 0, largeArcFlag, 0, end.x.toFixed(2), end.y.toFixed(2),
+  ].join(" ");
+}
+
+function renderServiceDonut(stats) {
+  const container = document.querySelector("#serviceDonut");
+  const legend = document.querySelector("#serviceDonutLegend");
+  if (!container || !legend) {
+    return;
+  }
+  const entries = Object.entries((stats && stats.by_service) || {})
+    .filter(([, count]) => Number(count) > 0)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 7);
+  const total = entries.reduce((sum, [, count]) => sum + Number(count), 0);
+  setText("#donutSummary", `${total} event${total === 1 ? "" : "s"}`);
+  legend.innerHTML = "";
+
+  if (!entries.length) {
+    container.innerHTML = `
+      <svg class="donut-svg" viewBox="0 0 180 180" role="img" aria-label="No service activity">
+        <circle class="donut-empty" cx="90" cy="90" r="58"></circle>
+        <text class="donut-center-label" x="90" y="86" text-anchor="middle">No</text>
+        <text class="donut-center-sub" x="90" y="105" text-anchor="middle">events</text>
+      </svg>
+    `;
+    return;
+  }
+
+  let currentAngle = 0;
+  const arcs = entries.map(([service, count], index) => {
+    const value = Number(count);
+    const angle = (value / total) * 360;
+    const startAngle = currentAngle;
+    const endAngle = currentAngle + angle;
+    currentAngle = endAngle;
+    const color = DONUT_COLORS[index % DONUT_COLORS.length];
+    const percent = Math.round((value / total) * 100);
+    return {
+      service,
+      value,
+      percent,
+      color,
+      fullCircle: angle >= 359.99,
+      path: describeArc(90, 58, startAngle, endAngle),
+    };
+  });
+
+  container.innerHTML = `
+    <svg class="donut-svg" viewBox="0 0 180 180" role="img" aria-label="Service activity distribution">
+      <circle class="donut-track" cx="90" cy="90" r="58"></circle>
+      ${arcs.map((arc, index) => arc.fullCircle ? `
+        <circle
+          class="donut-segment"
+          cx="90"
+          cy="90"
+          r="58"
+          stroke="${arc.color}"
+          data-index="${index}"
+        ></circle>
+      ` : `
+        <path
+          class="donut-segment"
+          d="${arc.path}"
+          stroke="${arc.color}"
+          data-index="${index}"
+        ></path>
+      `).join("")}
+      <text class="donut-center-label" x="90" y="86" text-anchor="middle">${total}</text>
+      <text class="donut-center-sub" x="90" y="105" text-anchor="middle">events</text>
+    </svg>
+    <div id="donutTooltip" class="timeline-tooltip" hidden></div>
+  `;
+
+  for (const arc of arcs) {
+    const item = document.createElement("li");
+    item.innerHTML = `
+      <span><i style="background:${arc.color}"></i>${text(arc.service)}</span>
+      <strong>${arc.value}</strong>
+    `;
+    legend.appendChild(item);
+  }
+
+  bindDonutTooltip(container, arcs);
+}
+
+function bindDonutTooltip(container, arcs) {
+  const tooltip = container.querySelector("#donutTooltip");
+  if (!tooltip) {
+    return;
+  }
+  container.querySelectorAll(".donut-segment").forEach((segment) => {
+    segment.addEventListener("mousemove", (event) => {
+      const arc = arcs[Number(segment.dataset.index) || 0];
+      const rect = container.getBoundingClientRect();
+      tooltip.hidden = false;
+      tooltip.innerHTML = `
+        <strong>${text(arc.service)}</strong>
+        <span>${arc.value} event${arc.value === 1 ? "" : "s"} · ${arc.percent}%</span>
+      `;
+      tooltip.style.left = `${Math.min(Math.max(8, event.clientX - rect.left - 52), rect.width - 120)}px`;
+      tooltip.style.top = `${Math.min(Math.max(8, event.clientY - rect.top - 48), rect.height - 58)}px`;
+    });
+    segment.addEventListener("mouseleave", () => {
+      tooltip.hidden = true;
+    });
+  });
+  container.addEventListener("mouseleave", () => {
+    tooltip.hidden = true;
+  });
+}
+
 function renderDashboard(payload) {
   const stats = payload.stats || {};
   const profile = payload.profile || null;
   const services = payload.services || [];
   state.lastEvents = payload.events || [];
-  renderActivitySummary(stats);
+  renderServiceDonut(stats);
   renderEvents((payload.events || []).slice(0, 10), profile && profile.current ? profile.current.name : "-");
   renderTimeline(state.lastEvents);
 

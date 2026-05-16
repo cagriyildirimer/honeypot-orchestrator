@@ -522,6 +522,99 @@ th,
   font-weight: 700;
 }
 
+.donut-panel {
+  min-width: 0;
+}
+
+.donut-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.donut-chart {
+  position: relative;
+  width: min(240px, 100%);
+  margin: 0 auto;
+}
+
+.donut-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.donut-track,
+.donut-empty {
+  fill: none;
+  stroke: var(--surface-subtle);
+  stroke-width: 18;
+}
+
+.donut-segment {
+  fill: none;
+  stroke-width: 18;
+  stroke-linecap: round;
+  transition: opacity 0.16s ease, stroke-width 0.16s ease;
+  cursor: crosshair;
+}
+
+.donut-segment:hover {
+  opacity: 0.82;
+  stroke-width: 20;
+}
+
+.donut-center-label {
+  fill: var(--text);
+  font-size: 22px;
+  font-weight: 850;
+}
+
+.donut-center-sub {
+  fill: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.donut-legend {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.donut-legend li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.donut-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.donut-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.donut-legend strong {
+  color: var(--text);
+}
+
 .section-heading {
   display: flex;
   justify-content: space-between;
@@ -1074,6 +1167,7 @@ tbody tr.selected {
   .profile-control,
   .metric-grid,
   .metric-grid.compact-metrics,
+  .donut-layout,
   .service-grid,
   .filter-grid,
   .table-inline-form,

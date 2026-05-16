@@ -91,14 +91,18 @@
           <div id="eventTimeline" class="timeline-chart" aria-label="Event timeline"></div>
         </section>
 
-        <section class="panel">
-            <div class="section-heading compact">
-              <div>
-                <h2>Top Services</h2>
-                <p>Most active services in the current log window.</p>
-              </div>
+        <section class="panel donut-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Service Activity</h2>
+              <p>Event distribution by service.</p>
             </div>
-            <ul id="activitySummary" class="summary-list"></ul>
+            <span id="donutSummary" class="status-counter">0 events</span>
+          </div>
+          <div class="donut-layout">
+            <div id="serviceDonut" class="donut-chart" aria-label="Service activity donut"></div>
+            <ul id="serviceDonutLegend" class="donut-legend"></ul>
+          </div>
         </section>
 
         <section class="panel">
