@@ -407,6 +407,84 @@ th,
   min-width: 0;
 }
 
+.timeline-panel {
+  min-width: 0;
+}
+
+.timeline-chart {
+  width: 100%;
+  min-height: 190px;
+  overflow: hidden;
+}
+
+.timeline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.segmented-control {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.segmented-button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.segmented-button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.timeline-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.timeline-axis,
+.timeline-grid-line {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.timeline-grid-line {
+  opacity: 0.72;
+}
+
+.timeline-area {
+  fill: var(--accent-soft);
+  opacity: 0.42;
+}
+
+.timeline-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px rgba(15, 118, 110, 0.12));
+}
+
+.timeline-label {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .section-heading {
   display: flex;
   justify-content: space-between;
@@ -937,6 +1015,7 @@ tbody tr.selected {
   .topbar,
   .toolbar-panel,
   .section-heading,
+  .timeline-actions,
   .service-card-header {
     align-items: stretch;
     flex-direction: column;

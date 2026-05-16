@@ -86,6 +86,24 @@
           </article>
         </section>
 
+        <section class="panel timeline-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Event Timeline</h2>
+              <p id="timelineSubtitle">Event volume across the last 24 hours.</p>
+            </div>
+            <div class="timeline-actions">
+              <div class="segmented-control" aria-label="Timeline range">
+                <button type="button" class="segmented-button active" data-timeline-range="day">Daily</button>
+                <button type="button" class="segmented-button" data-timeline-range="week">Weekly</button>
+                <button type="button" class="segmented-button" data-timeline-range="month">Monthly</button>
+              </div>
+              <span id="timelineSummary" class="status-counter">0 events</span>
+            </div>
+          </div>
+          <div id="eventTimeline" class="timeline-chart" aria-label="Event timeline"></div>
+        </section>
+
         <section class="dashboard-grid">
           <section class="panel services-panel">
             <div class="section-heading">
