@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Honeypot Director Settings</title>
+    <title>Honeypot Director System</title>
     <script>
       try {
         document.documentElement.dataset.theme = localStorage.getItem("honeypot-director-theme") === "dark" ? "dark" : "light";
@@ -25,8 +25,10 @@
           <a class="nav-link" href="/dashboard">Dashboard</a>
           <a class="nav-link" href="/logs">Logs</a>
           <div class="nav-group">
-            <a class="nav-link active" href="/settings">Settings</a>
-            <a class="nav-link nav-sub-link" href="/users" data-admin-only>↳ Users</a>
+            <span class="nav-link nav-category active">Settings</span>
+            <a class="nav-link nav-sub-link" href="/settings/appearance">↳ Appearance</a>
+            <a class="nav-link nav-sub-link active" href="/settings/system">↳ System</a>
+            <a class="nav-link nav-sub-link" href="/settings/users" data-admin-only>↳ Users</a>
           </div>
         </nav>
       </aside>
@@ -34,8 +36,8 @@
       <main class="main-content">
         <header class="topbar">
           <div>
-            <h1>Settings</h1>
-            <p class="page-subtitle">Panel details, logs, runtime health, and appearance.</p>
+            <h1>System</h1>
+            <p class="page-subtitle">Panel details, runtime health, and log actions.</p>
           </div>
           <div class="topbar-actions">
             <div class="user-pill">
@@ -46,17 +48,7 @@
           </div>
         </header>
 
-        <section class="panel">
-          <div class="section-heading">
-            <div>
-              <h2>Appearance</h2>
-              <p>Switch between light and dark mode.</p>
-            </div>
-            <button type="button" class="button secondary" data-theme-toggle>Dark Mode</button>
-          </div>
-        </section>
-
-        <section class="settings-grid" aria-label="Settings overview">
+        <section class="settings-grid" aria-label="System overview">
           <section class="panel">
             <div class="section-heading compact">
               <div>

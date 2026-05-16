@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Honeypot Director Users</title>
+    <title>Honeypot Director Appearance</title>
     <script>
       try {
         document.documentElement.dataset.theme = localStorage.getItem("honeypot-director-theme") === "dark" ? "dark" : "light";
@@ -26,9 +26,9 @@
           <a class="nav-link" href="/logs">Logs</a>
           <div class="nav-group">
             <span class="nav-link nav-category active">Settings</span>
-            <a class="nav-link nav-sub-link" href="/settings/appearance">↳ Appearance</a>
+            <a class="nav-link nav-sub-link active" href="/settings/appearance">↳ Appearance</a>
             <a class="nav-link nav-sub-link" href="/settings/system">↳ System</a>
-            <a class="nav-link nav-sub-link active" href="/settings/users" data-admin-only>↳ Users</a>
+            <a class="nav-link nav-sub-link" href="/settings/users" data-admin-only>↳ Users</a>
           </div>
         </nav>
       </aside>
@@ -36,8 +36,8 @@
       <main class="main-content">
         <header class="topbar">
           <div>
-            <h1>Users</h1>
-            <p class="page-subtitle">Manage panel users and password updates.</p>
+            <h1>Appearance</h1>
+            <p class="page-subtitle">Theme controls for the web panel.</p>
           </div>
           <div class="topbar-actions">
             <div class="user-pill">
@@ -51,23 +51,10 @@
         <section class="panel">
           <div class="section-heading">
             <div>
-              <h2>User Accounts</h2>
-              <p>Use the table actions to add users or update passwords.</p>
+              <h2>Theme</h2>
+              <p>Switch between light and dark mode.</p>
             </div>
-          </div>
-
-          <div class="table-shell users-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>User</th>
-                  <th>Password</th>
-                  <th>Role</th>
-                  <th>Delete User</th>
-                </tr>
-              </thead>
-              <tbody id="usersTable"></tbody>
-            </table>
+            <button type="button" class="button secondary" data-theme-toggle>Dark Mode</button>
           </div>
         </section>
 
@@ -76,6 +63,21 @@
     </div>
 
     <script src="/static/common.js"></script>
-    <script src="/static/users.js"></script>
+    <script>
+      document.querySelector("#logoutButton")?.addEventListener("click", logoutAndRedirect);
+      ensureAuthenticated()
+        .then((session) => {
+          setText("#sessionUser", session.username || "-");
+          const themeButton = document.querySelector("[data-theme-toggle]");
+          if (themeButton) {
+            const isAdmin = session.role === "admin";
+            themeButton.disabled = !isAdmin;
+            themeButton.title = isAdmin ? "" : "Admin access required.";
+          }
+        })
+        .catch(() => {
+          window.location.replace("/login");
+        });
+    </script>
   </body>
 </html>

@@ -166,6 +166,10 @@ pre {
   font-size: 13px;
 }
 
+.nav-category {
+  cursor: default;
+}
+
 .nav-link:hover,
 .nav-link.active {
   background: #1d2936;

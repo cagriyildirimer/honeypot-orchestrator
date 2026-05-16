@@ -25,8 +25,9 @@ TEMPLATE_ROUTES = {
     "/login": "login.html",
     "/dashboard": "dashboard.html",
     "/logs": "logs.html",
-    "/settings": "settings.html",
-    "/users": "users.html",
+    "/settings/appearance": "appearance.html",
+    "/settings/system": "system.html",
+    "/settings/users": "users.html",
 }
 STATIC_ROUTES = {
     "/static/styles.css": ("styles.css", "text/css; charset=utf-8"),
@@ -117,13 +118,16 @@ class WebDashboard:
         if path == "/":
             return self._redirect(self._home_path(cookies) if authenticated else "/login")
 
+        if path == "/settings":
+            return self._redirect("/settings/appearance" if authenticated else "/login")
+
         if path in TEMPLATE_ROUTES:
             if path == "/login":
                 if authenticated:
                     return self._redirect(self._home_path(cookies))
             elif not authenticated:
                 return self._redirect("/login")
-            elif self._current_role(cookies) == ROLE_VIEWER and path == "/users":
+            elif self._current_role(cookies) == ROLE_VIEWER and path == "/settings/users":
                 return self._redirect("/logs")
             return _response(
                 HTTPStatus.OK,
