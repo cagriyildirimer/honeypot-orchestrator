@@ -1,5 +1,6 @@
 const settingsState = {
   username: "",
+  role: "",
   refreshTimer: null,
 };
 
@@ -16,6 +17,8 @@ function formatBytes(bytes) {
 
 function renderSettings(payload) {
   settingsState.username = payload.session ? payload.session.username : settingsState.username;
+  settingsState.role = payload.session ? payload.session.role : settingsState.role;
+  const isAdmin = settingsState.role === "admin";
 
   setText("#sessionUser", settingsState.username || "-");
   setText("#settingsUsername", settingsState.username || "-");
@@ -29,6 +32,31 @@ function renderSettings(payload) {
   }
   setText("#logPath", payload.logging ? payload.logging.path : "-");
   setText("#logSize", payload.logging ? formatBytes(payload.logging.size_bytes) : "-");
+  setAdminOnlyLogControls(isAdmin);
+}
+
+function setAdminOnlyLogControls(isAdmin) {
+  const copyButton = document.querySelector("#copyLogsButton");
+  const clearButton = document.querySelector("#clearLogsButton");
+  const exportLink = document.querySelector("#exportLogsLink");
+  if (copyButton) {
+    copyButton.disabled = !isAdmin;
+    copyButton.title = isAdmin ? "" : "Admin access required.";
+  }
+  if (clearButton) {
+    clearButton.disabled = !isAdmin;
+    clearButton.title = isAdmin ? "" : "Admin access required.";
+  }
+  if (exportLink) {
+    exportLink.classList.toggle("disabled", !isAdmin);
+    exportLink.setAttribute("aria-disabled", isAdmin ? "false" : "true");
+    if (isAdmin) {
+      exportLink.removeAttribute("tabindex");
+    } else {
+      exportLink.setAttribute("tabindex", "-1");
+    }
+    exportLink.title = isAdmin ? "" : "Admin access required.";
+  }
 }
 
 async function refreshSettings() {
@@ -37,6 +65,10 @@ async function refreshSettings() {
 }
 
 async function copyLogs() {
+  if (settingsState.role !== "admin") {
+    showToast("Admin access required.", "error");
+    return;
+  }
   try {
     const response = await fetch("/api/logs/export");
     if (!response.ok) {
@@ -70,6 +102,10 @@ async function copyText(content) {
 }
 
 async function clearLogs() {
+  if (settingsState.role !== "admin") {
+    showToast("Admin access required.", "error");
+    return;
+  }
   const button = document.querySelector("#clearLogsButton");
   if (!button) {
     return;
@@ -105,10 +141,17 @@ async function bootstrapSettings() {
   });
   document.querySelector("#copyLogsButton")?.addEventListener("click", copyLogs);
   document.querySelector("#clearLogsButton")?.addEventListener("click", clearLogs);
+  document.querySelector("#exportLogsLink")?.addEventListener("click", (event) => {
+    if (settingsState.role !== "admin") {
+      event.preventDefault();
+      showToast("Admin access required.", "error");
+    }
+  });
 
   try {
     const session = await ensureAuthenticated();
     settingsState.username = session.username || "";
+    settingsState.role = session.role || "";
     await refreshSettings();
     startSettingsRefresh();
   } catch (error) {

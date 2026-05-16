@@ -254,6 +254,12 @@ button.secondary {
   border-color: var(--border);
 }
 
+.button.disabled,
+.button[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.58;
+}
+
 .button.danger,
 button.danger {
   background: var(--danger);
@@ -624,7 +630,7 @@ table {
 }
 
 .users-table table {
-  min-width: 0;
+  min-width: 780px;
 }
 
 .user-name-cell {
@@ -651,6 +657,10 @@ table {
   grid-template-columns: minmax(180px, 1fr) auto auto;
   gap: 10px;
   align-items: center;
+}
+
+.role-inline-form {
+  grid-template-columns: minmax(150px, 1fr) auto auto;
 }
 
 .inline-form-row,

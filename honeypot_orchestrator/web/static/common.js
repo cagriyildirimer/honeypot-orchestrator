@@ -142,7 +142,15 @@ async function ensureAuthenticated() {
     window.location.replace("/login");
     throw new Error("Authentication required.");
   }
+  applyRoleVisibility(session);
   return session;
+}
+
+function applyRoleVisibility(session) {
+  const isAdmin = session && session.role === "admin";
+  document.querySelectorAll("[data-admin-only]").forEach((element) => {
+    element.hidden = !isAdmin;
+  });
 }
 
 async function logoutAndRedirect() {

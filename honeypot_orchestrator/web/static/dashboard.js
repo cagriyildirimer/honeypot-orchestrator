@@ -1,5 +1,6 @@
 const state = {
   username: "",
+  role: "",
   refreshTimer: null,
   refreshInFlight: false,
 };
@@ -48,6 +49,14 @@ function renderProfileSelector(profileStatus) {
     option.textContent = profile.display_name;
     option.selected = profile.name === activeProfile;
     profileSelect.appendChild(option);
+  }
+
+  const isAdmin = state.role === "admin";
+  profileSelect.disabled = !isAdmin;
+  const applyButton = document.querySelector("#applyProfileButton");
+  if (applyButton) {
+    applyButton.disabled = !isAdmin;
+    applyButton.title = isAdmin ? "" : "Admin access required.";
   }
 
   const displayName = text(profileStatus && profileStatus.current ? profileStatus.current.display_name : "-");
@@ -194,7 +203,7 @@ async function refreshDashboard() {
 async function applyProfile() {
   const button = document.querySelector("#applyProfileButton");
   const profileSelect = document.querySelector("#profileSelect");
-  if (!button || !profileSelect || !profileSelect.value) {
+  if (!button || !profileSelect || !profileSelect.value || state.role !== "admin") {
     return;
   }
 
@@ -237,6 +246,7 @@ async function bootstrapDashboard() {
   try {
     const session = await ensureAuthenticated();
     state.username = session.username || "";
+    state.role = session.role || "";
     await refreshDashboard();
     startAutoRefresh();
   } catch (error) {

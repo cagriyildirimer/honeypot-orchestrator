@@ -18,6 +18,9 @@ if TYPE_CHECKING:
 
 
 WEB_DIR = Path(__file__).parent
+ROLE_ADMIN = "admin"
+ROLE_VIEWER = "viewer"
+USER_ROLES = {ROLE_ADMIN, ROLE_VIEWER}
 TEMPLATE_ROUTES = {
     "/login": "login.html",
     "/dashboard": "dashboard.html",
@@ -49,7 +52,10 @@ class WebDashboard:
         self._users = _load_users(
             self._users_path,
             {
-                self.orchestrator.config.auth.username: self.orchestrator.config.auth.password,
+                self.orchestrator.config.auth.username: {
+                    "password": self.orchestrator.config.auth.password,
+                    "role": ROLE_ADMIN,
+                },
             },
         )
         self._started_at = time.monotonic()
@@ -109,14 +115,16 @@ class WebDashboard:
         authenticated = self._is_authenticated(cookies)
 
         if path == "/":
-            return self._redirect("/dashboard" if authenticated else "/login")
+            return self._redirect(self._home_path(cookies) if authenticated else "/login")
 
         if path in TEMPLATE_ROUTES:
             if path == "/login":
                 if authenticated:
-                    return self._redirect("/dashboard")
+                    return self._redirect(self._home_path(cookies))
             elif not authenticated:
                 return self._redirect("/login")
+            elif self._current_role(cookies) == ROLE_VIEWER and path != "/logs":
+                return self._redirect("/logs")
             return _response(
                 HTTPStatus.OK,
                 "text/html; charset=utf-8",
@@ -146,6 +154,7 @@ class WebDashboard:
                 {
                     "authenticated": authenticated,
                     "username": self._current_username(cookies) if authenticated else "",
+                    "role": self._current_role(cookies) if authenticated else "",
                 }
             )
 
@@ -203,27 +212,47 @@ class WebDashboard:
             return self._json_response(self._build_settings_payload(request, cookies))
 
         if path == "/api/logs/export" and method == "GET":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
             return self._export_logs_response()
 
         if path == "/api/logs/clear" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
             return await self._handle_clear_logs()
 
         if path == "/api/users" and method == "GET":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
             return self._json_response({"users": self._user_payload()})
 
         if path == "/api/users" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
             payload = _decode_json_body(request["body"])
             return await self._handle_create_user(payload)
 
         if path == "/api/users/delete" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
             payload = _decode_json_body(request["body"])
             return await self._handle_delete_user(payload, cookies)
 
         if path == "/api/users/password" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
             payload = _decode_json_body(request["body"])
             return await self._handle_change_user_password(payload)
 
+        if path == "/api/users/role" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
+            payload = _decode_json_body(request["body"])
+            return await self._handle_change_user_role(payload, cookies)
+
         if path == "/api/profile" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
             payload = _decode_json_body(request["body"])
             profile_name = str(payload.get("profile", "")).strip()
             if not profile_name:
@@ -258,7 +287,7 @@ class WebDashboard:
     async def _handle_login(self, payload: dict[str, Any]) -> dict[str, Any]:
         username = str(payload.get("username", ""))
         password = str(payload.get("password", ""))
-        if self._users.get(username) != password:
+        if self._user_password(username) != password:
             await self.orchestrator.logger.log(
                 {
                     "service": "web",
@@ -281,7 +310,7 @@ class WebDashboard:
             }
         )
         return self._json_response(
-            {"ok": True, "username": username},
+            {"ok": True, "username": username, "role": self._user_role(username)},
             cookies=[_build_cookie("session", token)],
         )
 
@@ -301,6 +330,7 @@ class WebDashboard:
     async def _handle_create_user(self, payload: dict[str, Any]) -> dict[str, Any]:
         username = str(payload.get("username", "")).strip()
         password = str(payload.get("password", ""))
+        role = _normalize_role(str(payload.get("role", ROLE_VIEWER)))
         if not username or not password:
             return self._json_response(
                 {"error": "Username and password are required."},
@@ -311,7 +341,7 @@ class WebDashboard:
                 {"error": f"User already exists: {username}."},
                 status=HTTPStatus.CONFLICT,
             )
-        self._users[username] = password
+        self._users[username] = {"password": password, "role": role}
         await asyncio.to_thread(_save_users, self._users_path, self._users)
         await self.orchestrator.logger.log(
             {
@@ -348,6 +378,11 @@ class WebDashboard:
                 {"error": "At least one user must remain."},
                 status=HTTPStatus.CONFLICT,
             )
+        if self._user_role(username) == ROLE_ADMIN and self._admin_count() <= 1:
+            return self._json_response(
+                {"error": "At least one admin user must remain."},
+                status=HTTPStatus.CONFLICT,
+            )
         del self._users[username]
         self._sessions = {
             token: session_username
@@ -377,13 +412,51 @@ class WebDashboard:
                 {"error": f"Unknown user: {username}."},
                 status=HTTPStatus.NOT_FOUND,
             )
-        self._users[username] = password
+        self._users[username]["password"] = password
         await asyncio.to_thread(_save_users, self._users_path, self._users)
         await self.orchestrator.logger.log(
             {
                 "service": "web",
                 "event_type": "user_password_changed",
                 "summary": f"Dashboard user {username} password was changed.",
+            }
+        )
+        return self._json_response({"ok": True, "users": self._user_payload()})
+
+    async def _handle_change_user_role(
+        self,
+        payload: dict[str, Any],
+        cookies: dict[str, str],
+    ) -> dict[str, Any]:
+        username = str(payload.get("username", "")).strip()
+        role = _normalize_role(str(payload.get("role", "")))
+        if not username:
+            return self._json_response(
+                {"error": "Username is required."},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+        if username not in self._users:
+            return self._json_response(
+                {"error": f"Unknown user: {username}."},
+                status=HTTPStatus.NOT_FOUND,
+            )
+        if username == self._current_username(cookies) and role != ROLE_ADMIN:
+            return self._json_response(
+                {"error": "You cannot remove admin access from the signed-in user."},
+                status=HTTPStatus.CONFLICT,
+            )
+        if self._user_role(username) == ROLE_ADMIN and role != ROLE_ADMIN and self._admin_count() <= 1:
+            return self._json_response(
+                {"error": "At least one admin user must remain."},
+                status=HTTPStatus.CONFLICT,
+            )
+        self._users[username]["role"] = role
+        await asyncio.to_thread(_save_users, self._users_path, self._users)
+        await self.orchestrator.logger.log(
+            {
+                "service": "web",
+                "event_type": "user_role_changed",
+                "summary": f"Dashboard user {username} role was changed to {role}.",
             }
         )
         return self._json_response({"ok": True, "users": self._user_payload()})
@@ -450,6 +523,28 @@ class WebDashboard:
         token = cookies.get("session", "")
         return self._sessions.get(token, "")
 
+    def _current_role(self, cookies: dict[str, str]) -> str:
+        return self._user_role(self._current_username(cookies))
+
+    def _user_password(self, username: str) -> str:
+        user = self._users.get(username, {})
+        return str(user.get("password", "")) if isinstance(user, dict) else ""
+
+    def _user_role(self, username: str) -> str:
+        user = self._users.get(username, {})
+        if not isinstance(user, dict):
+            return ROLE_VIEWER
+        return _normalize_role(str(user.get("role", ROLE_VIEWER)))
+
+    def _is_admin(self, cookies: dict[str, str]) -> bool:
+        return self._current_role(cookies) == ROLE_ADMIN
+
+    def _home_path(self, cookies: dict[str, str]) -> str:
+        return "/dashboard" if self._is_admin(cookies) else "/logs"
+
+    def _admin_count(self) -> int:
+        return sum(1 for username in self._users if self._user_role(username) == ROLE_ADMIN)
+
     def _json_response(
         self,
         payload: dict[str, Any],
@@ -476,6 +571,12 @@ class WebDashboard:
             headers={"Location": location},
         )
 
+    def _forbidden_response(self) -> dict[str, Any]:
+        return self._json_response(
+            {"error": "Admin access required."},
+            status=HTTPStatus.FORBIDDEN,
+        )
+
     def _build_settings_payload(
         self,
         request: dict[str, Any],
@@ -494,6 +595,7 @@ class WebDashboard:
             },
             "session": {
                 "username": self._current_username(cookies),
+                "role": self._current_role(cookies),
             },
             "logging": {
                 "path": str(log_path),
@@ -506,7 +608,7 @@ class WebDashboard:
                 "health": "ok" if self._server is not None else "stopped",
                 "version": __version__,
             },
-            "users": self._user_payload(),
+            "users": self._user_payload() if self._is_admin(cookies) else [],
         }
 
     def _export_logs_response(self) -> dict[str, Any]:
@@ -522,7 +624,10 @@ class WebDashboard:
         )
 
     def _user_payload(self) -> list[dict[str, str]]:
-        return [{"username": username} for username in sorted(self._users)]
+        return [
+            {"username": username, "role": self._user_role(username)}
+            for username in sorted(self._users)
+        ]
 
     def _build_overview_payload(self, request: dict[str, Any]) -> dict[str, Any]:
         display_host = _request_display_host(request)
@@ -602,7 +707,7 @@ def _clear_file(path: Path) -> None:
     path.write_text("", encoding="utf-8")
 
 
-def _load_users(path: Path, default_users: dict[str, str]) -> dict[str, str]:
+def _load_users(path: Path, default_users: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
     if not path.exists():
         _save_users(path, default_users)
         return dict(default_users)
@@ -615,18 +720,33 @@ def _load_users(path: Path, default_users: dict[str, str]) -> dict[str, str]:
     users = payload.get("users", {})
     if not isinstance(users, dict):
         return dict(default_users)
-    cleaned = {
-        str(username): str(password)
-        for username, password in users.items()
-        if str(username).strip() and str(password)
-    }
+    cleaned: dict[str, dict[str, str]] = {}
+    for username, value in users.items():
+        normalized_username = str(username).strip()
+        if not normalized_username:
+            continue
+        if isinstance(value, dict):
+            password = str(value.get("password", ""))
+            role = _normalize_role(str(value.get("role", ROLE_VIEWER)))
+        else:
+            password = str(value)
+            role = ROLE_ADMIN if normalized_username in default_users else ROLE_VIEWER
+        if password:
+            cleaned[normalized_username] = {"password": password, "role": role}
+    for username, user in default_users.items():
+        cleaned.setdefault(username, dict(user))
     return cleaned or dict(default_users)
 
 
-def _save_users(path: Path, users: dict[str, str]) -> None:
+def _save_users(path: Path, users: dict[str, dict[str, str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"users": users}
     path.write_text(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _normalize_role(role: str) -> str:
+    normalized = role.strip().lower()
+    return normalized if normalized in USER_ROLES else ROLE_VIEWER
 
 
 def _format_duration(total_seconds: int) -> str:
