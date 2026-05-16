@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Honeypot Director Profiles</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("honeypot-director-theme") === "dark" ? "dark" : "light";
+      } catch (error) {
+        document.documentElement.dataset.theme = "light";
+      }
+    </script>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body class="app-page">
+    <div class="app-frame">
+      <aside class="sidebar">
+        <a class="brand" href="/dashboard" aria-label="Honeypot Director dashboard">
+          <span class="brand-mark">HD</span>
+          <span class="brand-text">Honeypot Director</span>
+        </a>
+
+        <nav class="nav-stack" aria-label="Primary navigation">
+          <a class="nav-link" href="/dashboard">Dashboard</a>
+          <a class="nav-link active" href="/profiles">Profiles</a>
+          <a class="nav-link" href="/logs">Logs</a>
+          <div class="nav-group">
+            <span class="nav-link nav-category">Settings</span>
+            <a class="nav-link nav-sub-link" href="/settings/appearance">↳ Appearance</a>
+            <a class="nav-link nav-sub-link" href="/settings/system">↳ System</a>
+            <a class="nav-link nav-sub-link" href="/settings/users">↳ Users</a>
+          </div>
+        </nav>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <h1>Profiles</h1>
+            <p class="page-subtitle">Select the active profile and inspect its listeners.</p>
+          </div>
+          <div class="topbar-actions">
+            <div class="user-pill">
+              <span>Signed in as</span>
+              <strong id="sessionUser">-</strong>
+            </div>
+            <button id="refreshButton" type="button" class="button secondary">Refresh</button>
+            <button id="logoutButton" type="button" class="button">Log out</button>
+          </div>
+        </header>
+
+        <section class="toolbar-panel" aria-label="Profile controls">
+          <div class="profile-control">
+            <label class="field-block">
+              <span>Active Profile</span>
+              <select id="profileSelect"></select>
+            </label>
+            <button id="applyProfileButton" type="button" class="button">Apply</button>
+          </div>
+          <div class="refresh-note">
+            <span>Last refresh</span>
+            <strong id="lastUpdated">-</strong>
+          </div>
+        </section>
+
+        <section class="metric-grid profile-metrics" aria-label="Profile metrics">
+          <article class="metric-card">
+            <span>Running Services</span>
+            <strong id="runningServices">0</strong>
+            <small id="serviceFootnote">No listeners online.</small>
+          </article>
+          <article class="metric-card">
+            <span>Profile</span>
+            <strong id="activeProfile">-</strong>
+            <small>Currently applied persona.</small>
+          </article>
+        </section>
+
+        <section class="panel services-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Active Services</h2>
+              <p>Listeners exposed by the selected profile.</p>
+            </div>
+            <span id="serviceSummary" class="status-counter">0 active</span>
+          </div>
+          <div id="services" class="service-grid"></div>
+        </section>
+
+        <div id="toast" class="toast" hidden></div>
+      </main>
+    </div>
+
+    <script src="/static/common.js"></script>
+    <script src="/static/profiles.js"></script>
+  </body>
+</html>

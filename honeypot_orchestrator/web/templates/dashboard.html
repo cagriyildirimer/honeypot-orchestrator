@@ -23,6 +23,7 @@
 
         <nav class="nav-stack" aria-label="Primary navigation">
           <a class="nav-link active" href="/dashboard">Dashboard</a>
+          <a class="nav-link" href="/profiles">Profiles</a>
           <a class="nav-link" href="/logs">Logs</a>
           <div class="nav-group">
             <span class="nav-link nav-category">Settings</span>
@@ -37,7 +38,7 @@
         <header class="topbar">
           <div>
             <h1>Dashboard</h1>
-            <p class="page-subtitle">Profile, listener, and recent activity overview.</p>
+            <p class="page-subtitle">Recent activity and event volume overview.</p>
           </div>
           <div class="topbar-actions">
             <div class="user-pill">
@@ -48,20 +49,6 @@
             <button id="logoutButton" type="button" class="button">Log out</button>
           </div>
         </header>
-
-        <section class="toolbar-panel" aria-label="Profile controls">
-          <div class="profile-control">
-            <label class="field-block">
-              <span>Active Profile</span>
-              <select id="profileSelect"></select>
-            </label>
-            <button id="applyProfileButton" type="button" class="button">Apply</button>
-          </div>
-          <div class="refresh-note">
-            <span>Last refresh</span>
-            <strong id="lastUpdated">-</strong>
-          </div>
-        </section>
 
         <section class="metric-grid" aria-label="Dashboard metrics">
           <article class="metric-card">
@@ -104,19 +91,7 @@
           <div id="eventTimeline" class="timeline-chart" aria-label="Event timeline"></div>
         </section>
 
-        <section class="dashboard-grid">
-          <section class="panel services-panel">
-            <div class="section-heading">
-              <div>
-                <h2>Services</h2>
-                <p>Listeners exposed by the selected profile.</p>
-              </div>
-              <span id="serviceSummary" class="status-counter">0 active</span>
-            </div>
-            <div id="services" class="service-grid"></div>
-          </section>
-
-          <aside class="panel">
+        <section class="panel">
             <div class="section-heading compact">
               <div>
                 <h2>Top Services</h2>
@@ -124,7 +99,6 @@
               </div>
             </div>
             <ul id="activitySummary" class="summary-list"></ul>
-          </aside>
         </section>
 
         <section class="panel">

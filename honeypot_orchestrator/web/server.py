@@ -24,6 +24,7 @@ USER_ROLES = {ROLE_ADMIN, ROLE_VIEWER}
 TEMPLATE_ROUTES = {
     "/login": "login.html",
     "/dashboard": "dashboard.html",
+    "/profiles": "profiles.html",
     "/logs": "logs.html",
     "/settings/appearance": "appearance.html",
     "/settings/system": "system.html",
@@ -34,6 +35,7 @@ STATIC_ROUTES = {
     "/static/common.js": ("common.js", "application/javascript; charset=utf-8"),
     "/static/login.js": ("login.js", "application/javascript; charset=utf-8"),
     "/static/dashboard.js": ("dashboard.js", "application/javascript; charset=utf-8"),
+    "/static/profiles.js": ("profiles.js", "application/javascript; charset=utf-8"),
     "/static/logs.js": ("logs.js", "application/javascript; charset=utf-8"),
     "/static/settings.js": ("settings.js", "application/javascript; charset=utf-8"),
     "/static/users.js": ("users.js", "application/javascript; charset=utf-8"),
