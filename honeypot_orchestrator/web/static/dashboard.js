@@ -161,18 +161,30 @@ function renderTimeline(events) {
       }).join("")}
       <path class="timeline-area" d="${areaPath}"></path>
       <path class="timeline-line" d="${linePath}"></path>
+      ${points.map((point, index) => `
+        <rect
+          class="timeline-hit-zone"
+          x="${(point.x - innerWidth / Math.max(1, points.length - 1) / 2).toFixed(1)}"
+          y="${padding.top}"
+          width="${(innerWidth / Math.max(1, points.length - 1)).toFixed(1)}"
+          height="${innerHeight}"
+          data-index="${index}"
+        ></rect>
+      `).join("")}
       ${xLabels.map((point) => `
         <text class="timeline-label" text-anchor="middle" x="${point.x.toFixed(1)}" y="${height - 8}">
           ${formatTimelineLabel(point.bucket.start, state.timelineRange)}
         </text>
       `).join("")}
     </svg>
+    <div id="timelineTooltip" class="timeline-tooltip" hidden></div>
   `;
   setText("#timelineSummary", `${total} event${total === 1 ? "" : "s"}`);
   setText("#timelineSubtitle", range.subtitle);
   document.querySelectorAll("[data-timeline-range]").forEach((button) => {
     button.classList.toggle("active", button.dataset.timelineRange === state.timelineRange);
   });
+  bindTimelineTooltip(container, points, width, height);
 }
 
 function smoothPath(points) {
@@ -194,6 +206,38 @@ function smoothPath(points) {
     commands.push(`C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${next.x.toFixed(1)} ${next.y.toFixed(1)}`);
   }
   return commands.join(" ");
+}
+
+function bindTimelineTooltip(container, points, width, height) {
+  const tooltip = container.querySelector("#timelineTooltip");
+  const svg = container.querySelector(".timeline-svg");
+  if (!tooltip || !svg) {
+    return;
+  }
+  container.querySelectorAll(".timeline-hit-zone").forEach((zone) => {
+    zone.addEventListener("mousemove", (event) => {
+      const point = points[Number(zone.dataset.index) || 0];
+      const rect = svg.getBoundingClientRect();
+      const scaleX = rect.width / width;
+      const scaleY = rect.height / height;
+      tooltip.hidden = false;
+      tooltip.innerHTML = `
+        <strong>${point.bucket.count} event${point.bucket.count === 1 ? "" : "s"}</strong>
+        <span>${formatTimelineLabel(point.bucket.start, state.timelineRange)}</span>
+      `;
+      const left = point.x * scaleX;
+      const top = point.y * scaleY;
+      tooltip.style.left = `${Math.min(Math.max(12, left - 54), rect.width - 116)}px`;
+      tooltip.style.top = `${Math.max(10, top - 46)}px`;
+      event.stopPropagation();
+    });
+    zone.addEventListener("mouseleave", () => {
+      tooltip.hidden = true;
+    });
+  });
+  container.addEventListener("mouseleave", () => {
+    tooltip.hidden = true;
+  });
 }
 
 function renderDashboard(payload) {
