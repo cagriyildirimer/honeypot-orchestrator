@@ -25,7 +25,7 @@ async function submitLogin(event) {
       method: "POST",
       body: JSON.stringify({ username, password }),
     });
-    window.location.assign(session.role === "admin" ? "/dashboard" : "/logs");
+    window.location.assign("/dashboard");
   } catch (error) {
     showLoginError(error.message);
   } finally {
@@ -43,7 +43,7 @@ async function bootstrapLogin() {
   try {
     const session = await requestJson("/api/session");
     if (session.authenticated) {
-      window.location.replace(session.role === "admin" ? "/dashboard" : "/logs");
+      window.location.replace("/dashboard");
     }
   } catch (error) {
     showLoginError("");

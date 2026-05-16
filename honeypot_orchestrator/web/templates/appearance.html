@@ -28,7 +28,7 @@
             <span class="nav-link nav-category active">Settings</span>
             <a class="nav-link nav-sub-link active" href="/settings/appearance">↳ Appearance</a>
             <a class="nav-link nav-sub-link" href="/settings/system">↳ System</a>
-            <a class="nav-link nav-sub-link" href="/settings/users" data-admin-only>↳ Users</a>
+            <a class="nav-link nav-sub-link" href="/settings/users">↳ Users</a>
           </div>
         </nav>
       </aside>
@@ -68,12 +68,6 @@
       ensureAuthenticated()
         .then((session) => {
           setText("#sessionUser", session.username || "-");
-          const themeButton = document.querySelector("[data-theme-toggle]");
-          if (themeButton) {
-            const isAdmin = session.role === "admin";
-            themeButton.disabled = !isAdmin;
-            themeButton.title = isAdmin ? "" : "Admin access required.";
-          }
         })
         .catch(() => {
           window.location.replace("/login");

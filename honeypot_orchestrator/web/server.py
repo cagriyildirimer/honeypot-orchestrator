@@ -127,8 +127,6 @@ class WebDashboard:
                     return self._redirect(self._home_path(cookies))
             elif not authenticated:
                 return self._redirect("/login")
-            elif self._current_role(cookies) == ROLE_VIEWER and path == "/settings/users":
-                return self._redirect("/logs")
             return _response(
                 HTTPStatus.OK,
                 "text/html; charset=utf-8",
@@ -544,7 +542,7 @@ class WebDashboard:
         return self._current_role(cookies) == ROLE_ADMIN
 
     def _home_path(self, cookies: dict[str, str]) -> str:
-        return "/dashboard" if self._is_admin(cookies) else "/logs"
+        return "/dashboard"
 
     def _admin_count(self) -> int:
         return sum(1 for username in self._users if self._user_role(username) == ROLE_ADMIN)
@@ -612,7 +610,7 @@ class WebDashboard:
                 "health": "ok" if self._server is not None else "stopped",
                 "version": __version__,
             },
-            "users": self._user_payload() if self._is_admin(cookies) else [],
+            "users": self._user_payload(),
         }
 
     def _export_logs_response(self) -> dict[str, Any]:

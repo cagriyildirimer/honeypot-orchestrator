@@ -47,16 +47,7 @@ function renderUsers() {
   }
   table.innerHTML = "";
 
-  if (usersState.role !== "admin") {
-    const row = document.createElement("tr");
-    const cell = createCell("Admin access required.");
-    cell.colSpan = 4;
-    cell.className = "empty-row";
-    row.appendChild(cell);
-    table.appendChild(row);
-    return;
-  }
-
+  const isAdmin = usersState.role === "admin";
   for (const user of usersState.users) {
     if (usersState.mode === "password" && usersState.activeUser === user.username) {
       renderPasswordRow(table, user);
@@ -85,7 +76,12 @@ function renderUsers() {
     changePasswordButton.type = "button";
     changePasswordButton.className = "button secondary";
     changePasswordButton.textContent = "Change Password";
+    changePasswordButton.disabled = !isAdmin;
+    changePasswordButton.title = isAdmin ? "" : "Admin access required.";
     changePasswordButton.addEventListener("click", () => {
+      if (!isAdmin) {
+        return;
+      }
       usersState.mode = "password";
       usersState.activeUser = user.username;
       renderUsers();
@@ -97,7 +93,12 @@ function renderUsers() {
     roleButton.type = "button";
     roleButton.className = "button secondary";
     roleButton.textContent = ROLE_LABELS[user.role] || ROLE_LABELS.viewer;
+    roleButton.disabled = !isAdmin;
+    roleButton.title = isAdmin ? "" : "Admin access required.";
     roleButton.addEventListener("click", () => {
+      if (!isAdmin) {
+        return;
+      }
       usersState.mode = "role";
       usersState.activeUser = user.username;
       renderUsers();
@@ -109,8 +110,12 @@ function renderUsers() {
     deleteButton.type = "button";
     deleteButton.className = "button danger";
     deleteButton.textContent = "Delete";
-    deleteButton.disabled = user.username === usersState.username;
-    deleteButton.title = deleteButton.disabled ? "You cannot delete the signed-in user." : "";
+    deleteButton.disabled = !isAdmin || user.username === usersState.username;
+    deleteButton.title = !isAdmin
+      ? "Admin access required."
+      : deleteButton.disabled
+        ? "You cannot delete the signed-in user."
+        : "";
     deleteButton.addEventListener("click", () => deleteUser(user.username));
     deleteCell.appendChild(deleteButton);
 
@@ -118,8 +123,12 @@ function renderUsers() {
     table.appendChild(row);
   }
 
-  if (usersState.mode === "create") {
+  if (isAdmin && usersState.mode === "create") {
     renderCreateRow(table);
+    return;
+  }
+
+  if (!isAdmin) {
     return;
   }
 
@@ -246,7 +255,8 @@ async function refreshUsers() {
   setText("#sessionUser", usersState.username || "-");
 
   if (usersState.role !== "admin") {
-    usersState.users = [];
+    const payload = await requestJson("/api/settings");
+    usersState.users = payload.users || [];
     renderUsers();
     return;
   }
