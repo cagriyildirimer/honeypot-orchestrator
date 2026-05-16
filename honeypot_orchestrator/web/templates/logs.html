@@ -68,97 +68,79 @@
           </article>
         </section>
 
-        <section class="logs-grid">
-          <section class="panel">
-            <div class="section-heading">
-              <div>
-                <h2>Filters</h2>
-                <p>Server-side filters plus quick text search.</p>
-              </div>
+        <section class="panel">
+          <div class="section-heading">
+            <div>
+              <h2>Filters</h2>
+              <p>Server-side filters plus quick text search.</p>
             </div>
-            <form id="filtersForm" class="filter-grid">
-              <label class="field-block">
-                <span>Service</span>
-                <select id="serviceFilter">
-                  <option value="">All services</option>
-                </select>
-              </label>
-              <label class="field-block">
-                <span>Event Type</span>
-                <select id="eventTypeFilter">
-                  <option value="">All event types</option>
-                </select>
-              </label>
-              <label class="field-block">
-                <span>Limit</span>
-                <input id="limitInput" type="number" min="10" max="200" step="10" value="100">
-              </label>
-              <label class="field-block search-block">
-                <span>Search</span>
-                <input id="searchInput" type="search" placeholder="username, service, source, summary">
-              </label>
-              <div class="filter-actions">
-                <button type="submit" class="button">Apply</button>
-                <button id="clearFiltersButton" type="button" class="button secondary">Clear</button>
-              </div>
-            </form>
-          </section>
-
-          <aside class="summary-column">
-            <section class="panel">
-              <div class="section-heading compact">
-                <div>
-                  <h2>Top Event Types</h2>
-                </div>
-              </div>
-              <ul id="eventTypeSummary" class="summary-list"></ul>
-            </section>
-
-            <section class="panel">
-              <div class="section-heading compact">
-                <div>
-                  <h2>Top Services</h2>
-                </div>
-              </div>
-              <ul id="serviceSummary" class="summary-list"></ul>
-            </section>
-          </aside>
+          </div>
+          <form id="filtersForm" class="filter-grid">
+            <label class="field-block">
+              <span>Service</span>
+              <select id="serviceFilter">
+                <option value="">All services</option>
+              </select>
+            </label>
+            <label class="field-block">
+              <span>Event Type</span>
+              <select id="eventTypeFilter">
+                <option value="">All event types</option>
+              </select>
+            </label>
+            <label class="field-block">
+              <span>Limit</span>
+              <input id="limitInput" type="number" min="10" max="200" step="10" value="100">
+            </label>
+            <label class="field-block search-block">
+              <span>Search</span>
+              <input id="searchInput" type="search" placeholder="username, service, source, summary">
+            </label>
+            <div class="filter-actions">
+              <button type="submit" class="button">Apply</button>
+              <button id="clearFiltersButton" type="button" class="button secondary">Clear</button>
+            </div>
+          </form>
         </section>
 
-        <section class="logs-grid">
-          <section class="panel log-table-panel">
-            <div class="section-heading">
-              <div>
-                <h2>Events</h2>
-                <p>Click a row to inspect the raw record.</p>
-              </div>
+        <section class="panel log-table-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Events</h2>
+              <p>Click a row to inspect the raw record.</p>
             </div>
-            <div class="table-shell">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Service</th>
-                    <th>Type</th>
-                    <th>Source</th>
-                    <th>Profile</th>
-                    <th>Summary</th>
-                  </tr>
-                </thead>
-                <tbody id="events"></tbody>
-              </table>
-            </div>
-          </section>
+          </div>
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Service</th>
+                  <th>Type</th>
+                  <th>Source</th>
+                  <th>Profile</th>
+                  <th>Summary</th>
+                </tr>
+              </thead>
+              <tbody id="events"></tbody>
+            </table>
+          </div>
+        </section>
 
-          <aside class="panel raw-panel">
+        <div id="eventModal" class="modal-backdrop" hidden>
+          <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="eventModalTitle">
             <div class="section-heading compact">
               <div>
-                <h2>Raw JSON</h2>
+                <h2 id="eventModalTitle">Raw JSON</h2>
+              </div>
+              <div class="button-row">
+                <button id="copyEventJsonButton" type="button" class="button secondary">Copy</button>
+                <button id="closeEventModalButton" type="button" class="button secondary">Close</button>
               </div>
             </div>
             <pre id="eventJson" class="json-viewer">Select a row to inspect the full record.</pre>
-          </aside>
-        </section>
+          </section>
+        </div>
 
         <div id="toast" class="toast" hidden></div>
       </main>

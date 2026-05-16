@@ -40,54 +40,6 @@ function populateFilterOptions(services, stats) {
   }
 }
 
-function summarizeEventTypes(stats) {
-  const list = document.querySelector("#eventTypeSummary");
-  if (!list) {
-    return;
-  }
-  list.innerHTML = "";
-  const entries = Object.entries((stats && stats.by_type) || {})
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 6);
-
-  if (!entries.length) {
-    const item = document.createElement("li");
-    item.textContent = "No event types visible yet.";
-    list.appendChild(item);
-    return;
-  }
-
-  for (const [eventType, count] of entries) {
-    const item = document.createElement("li");
-    item.innerHTML = `<span>${text(eventType)}</span><strong>${count}</strong>`;
-    list.appendChild(item);
-  }
-}
-
-function summarizeServices(stats) {
-  const list = document.querySelector("#serviceSummary");
-  if (!list) {
-    return;
-  }
-  list.innerHTML = "";
-  const entries = Object.entries((stats && stats.by_service) || {})
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, 6);
-
-  if (!entries.length) {
-    const item = document.createElement("li");
-    item.textContent = "No services visible yet.";
-    list.appendChild(item);
-    return;
-  }
-
-  for (const [service, count] of entries) {
-    const item = document.createElement("li");
-    item.innerHTML = `<span>${text(service)}</span><strong>${count}</strong>`;
-    list.appendChild(item);
-  }
-}
-
 function filterEvents(events) {
   const search = state.filters.search.trim().toLowerCase();
   if (!search) {
@@ -127,14 +79,53 @@ function renderEventTable(events, fallbackProfile) {
     row.addEventListener("click", () => {
       body.querySelectorAll("tr").forEach((node) => node.classList.remove("selected"));
       row.classList.add("selected");
-      setText("#eventJson", JSON.stringify(event, null, 2));
+      openEventModal(event);
     });
-    if (index === 0) {
-      row.classList.add("selected");
-      setText("#eventJson", JSON.stringify(event, null, 2));
-    }
     body.appendChild(row);
   });
+}
+
+function openEventModal(event) {
+  setText("#eventJson", JSON.stringify(event, null, 2));
+  const modal = document.querySelector("#eventModal");
+  if (!modal) {
+    return;
+  }
+  modal.hidden = false;
+  document.querySelector("#closeEventModalButton")?.focus();
+}
+
+function closeEventModal() {
+  const modal = document.querySelector("#eventModal");
+  if (!modal) {
+    return;
+  }
+  modal.hidden = true;
+}
+
+async function copyEventJson() {
+  const content = document.querySelector("#eventJson")?.textContent || "";
+  if (!content || content === "Select a row to inspect the full record.") {
+    return;
+  }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(content);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = content;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+    showToast("Raw JSON copied.", "success");
+  } catch (error) {
+    showToast(error.message, "error");
+  }
 }
 
 function renderLogs(payload) {
@@ -146,8 +137,6 @@ function renderLogs(payload) {
   setText("#totalEvents", String((payload.stats && payload.stats.total_recent_events) || 0));
   setText("#showingSummary", `${events.length} events`);
   populateFilterOptions(payload.services || [], payload.stats || {});
-  summarizeEventTypes(payload.stats || {});
-  summarizeServices(payload.stats || {});
   renderEventTable(events, payload.profile && payload.profile.current ? payload.profile.current.name : "-");
 }
 
@@ -232,6 +221,18 @@ async function bootstrapLogs() {
   document.querySelector("#refreshButton")?.addEventListener("click", refreshLogs);
   document.querySelector("#filtersForm")?.addEventListener("submit", applyFilters);
   document.querySelector("#clearFiltersButton")?.addEventListener("click", clearFilters);
+  document.querySelector("#copyEventJsonButton")?.addEventListener("click", copyEventJson);
+  document.querySelector("#closeEventModalButton")?.addEventListener("click", closeEventModal);
+  document.querySelector("#eventModal")?.addEventListener("click", (event) => {
+    if (event.target.id === "eventModal") {
+      closeEventModal();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeEventModal();
+    }
+  });
   document.querySelector("#searchInput")?.addEventListener("input", (event) => {
     state.filters.search = event.target.value || "";
     const filteredEvents = filterEvents(state.rawEvents);
