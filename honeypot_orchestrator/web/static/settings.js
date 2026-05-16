@@ -36,9 +36,14 @@ function renderSettings(payload) {
 }
 
 function setAdminOnlyLogControls(isAdmin) {
+  const themeButton = document.querySelector("[data-theme-toggle]");
   const copyButton = document.querySelector("#copyLogsButton");
   const clearButton = document.querySelector("#clearLogsButton");
   const exportLink = document.querySelector("#exportLogsLink");
+  if (themeButton) {
+    themeButton.disabled = !isAdmin;
+    themeButton.title = isAdmin ? "" : "Admin access required.";
+  }
   if (copyButton) {
     copyButton.disabled = !isAdmin;
     copyButton.title = isAdmin ? "" : "Admin access required.";

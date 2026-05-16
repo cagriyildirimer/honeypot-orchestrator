@@ -247,6 +247,17 @@ button:disabled {
   opacity: 0.68;
 }
 
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.button:disabled,
+button:disabled {
+  cursor: not-allowed;
+}
+
 .button.secondary,
 button.secondary {
   background: var(--surface);

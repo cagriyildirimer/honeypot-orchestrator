@@ -123,7 +123,7 @@ class WebDashboard:
                     return self._redirect(self._home_path(cookies))
             elif not authenticated:
                 return self._redirect("/login")
-            elif self._current_role(cookies) == ROLE_VIEWER and path != "/logs":
+            elif self._current_role(cookies) == ROLE_VIEWER and path == "/users":
                 return self._redirect("/logs")
             return _response(
                 HTTPStatus.OK,
