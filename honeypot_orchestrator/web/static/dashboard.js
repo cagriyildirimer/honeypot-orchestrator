@@ -29,6 +29,20 @@ const TIMELINE_RANGES = {
 };
 
 const DONUT_COLORS = ["#14b8a6", "#2563eb", "#f59e0b", "#ef4444", "#8b5cf6", "#10b981", "#64748b"];
+const RISK_EVENT_WEIGHTS = {
+  login_failed: 8,
+  login_attempt: 12,
+  auth_failed: 12,
+  credential_attempt: 14,
+  connection_opened: 5,
+  request_error: 6,
+  service_stopped: 3,
+  service_started: 2,
+  profile_changed: 1,
+  started: 1,
+  stopping: 1,
+  login_success: 0,
+};
 
 function renderEvents(events, fallbackProfile) {
   const body = document.querySelector("#events");
@@ -344,12 +358,228 @@ function bindDonutTooltip(container, arcs) {
   });
 }
 
+function summarizeRangeLabel(start, end) {
+  return `${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function classifyRisk(score) {
+  if (score >= 85) {
+    return { label: "Critical", headline: "Live hostile pressure", tone: "critical" };
+  }
+  if (score >= 65) {
+    return { label: "High", headline: "Aggressive probing wave", tone: "high" };
+  }
+  if (score >= 42) {
+    return { label: "Elevated", headline: "Sustained suspicious activity", tone: "elevated" };
+  }
+  if (score >= 20) {
+    return { label: "Guarded", headline: "Watchlist activity rising", tone: "guarded" };
+  }
+  return { label: "Low", headline: "Quiet perimeter", tone: "low" };
+}
+
+function getRiskWeight(event) {
+  const eventType = String(event && event.event_type ? event.event_type : "").toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(RISK_EVENT_WEIGHTS, eventType)) {
+    return RISK_EVENT_WEIGHTS[eventType];
+  }
+  return eventType.includes("fail") || eventType.includes("error") ? 8 : 4;
+}
+
+function buildRiskModel(events) {
+  const now = Date.now();
+  const windowMs = 24 * 60 * 60 * 1000;
+  const start = now - windowMs;
+  const bucketCount = 6;
+  const bucketSizeMs = windowMs / bucketCount;
+  const buckets = Array.from({ length: bucketCount }, (_, index) => ({
+    start: new Date(start + index * bucketSizeMs),
+    end: new Date(start + (index + 1) * bucketSizeMs),
+    total: 0,
+    counts: {},
+  }));
+  const serviceTotals = {};
+  const typeTotals = {};
+  let weightedTotal = 0;
+
+  for (const event of events || []) {
+    const date = parseEventTime(event.timestamp);
+    if (!date) {
+      continue;
+    }
+    const time = date.getTime();
+    if (time < start || time > now) {
+      continue;
+    }
+    const service = String(event.service || "unknown").toLowerCase();
+    const eventType = String(event.event_type || "unknown").toLowerCase();
+    const weight = getRiskWeight(event);
+    const recencyBoost = 1 + ((time - start) / windowMs) * 0.35;
+    const weightedValue = weight * recencyBoost;
+    const bucketIndex = Math.min(buckets.length - 1, Math.floor((time - start) / bucketSizeMs));
+    const bucket = buckets[bucketIndex];
+    bucket.total += weightedValue;
+    bucket.counts[service] = (bucket.counts[service] || 0) + weightedValue;
+    serviceTotals[service] = (serviceTotals[service] || 0) + weightedValue;
+    typeTotals[eventType] = (typeTotals[eventType] || 0) + weight;
+    weightedTotal += weightedValue;
+  }
+
+  const sortedServices = Object.entries(serviceTotals).sort((left, right) => right[1] - left[1]);
+  const topServices = sortedServices.slice(0, 3).map(([service]) => service);
+  const strongestBucket = buckets.reduce(
+    (best, bucket) => (bucket.total > best.total ? bucket : best),
+    buckets[0] || { total: 0, start: new Date(now), end: new Date(now), counts: {} }
+  );
+  const burstScore = strongestBucket.total;
+  const diversityScore = Math.min(18, Object.keys(typeTotals).length * 3);
+  const concentrationScore = Math.min(20, burstScore * 1.7);
+  const baseScore = Math.min(100, weightedTotal * 1.12 + diversityScore + concentrationScore);
+  const score = Math.round(baseScore);
+  const band = classifyRisk(score);
+  const hottestService = sortedServices[0] || ["-", 0];
+
+  return {
+    score,
+    band,
+    weightedTotal,
+    burstScore,
+    hottestService: {
+      name: hottestService[0],
+      value: hottestService[1],
+    },
+    activeTypeCount: Object.keys(typeTotals).length,
+    strongestBucket,
+    topServices,
+    buckets,
+    summary:
+      score >= 65
+        ? `Traffic clustered around ${text(hottestService[0])} during the busiest window.`
+        : score >= 20
+          ? `Recent pressure is centered on ${text(hottestService[0])}.`
+          : "No meaningful burst pattern in the recent event window.",
+  };
+}
+
+function renderRiskGauge(model) {
+  const container = document.querySelector("#riskPulseGauge");
+  if (!container) {
+    return;
+  }
+  const score = Math.max(0, Math.min(100, Number(model && model.score) || 0));
+  const radius = 76;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - score / 100);
+  container.innerHTML = `
+    <defs>
+      <linearGradient id="riskGaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="var(--risk-gauge-start)"></stop>
+        <stop offset="100%" stop-color="var(--risk-gauge-end)"></stop>
+      </linearGradient>
+    </defs>
+    <circle class="risk-gauge-track" cx="110" cy="110" r="${radius}"></circle>
+    <circle
+      class="risk-gauge-value"
+      cx="110"
+      cy="110"
+      r="${radius}"
+      stroke-dasharray="${circumference.toFixed(2)}"
+      stroke-dashoffset="${dashOffset.toFixed(2)}"
+    ></circle>
+    <circle class="risk-gauge-core" cx="110" cy="110" r="58"></circle>
+    <text class="risk-gauge-score" x="110" y="104" text-anchor="middle">${score}</text>
+    <text class="risk-gauge-label" x="110" y="126" text-anchor="middle">${text(model.band.label)}</text>
+  `;
+}
+
+function renderActivityHeat(model) {
+  const container = document.querySelector("#activityHeat");
+  if (!container) {
+    return;
+  }
+  const services = model.topServices.length ? model.topServices : ["web", "orchestrator"];
+  const peak = Math.max(
+    1,
+    ...model.buckets.flatMap((bucket) => services.map((service) => Number(bucket.counts[service] || 0)))
+  );
+  container.innerHTML = "";
+  container.style.setProperty("--heat-columns", String(model.buckets.length));
+
+  const corner = document.createElement("div");
+  corner.className = "heat-corner";
+  corner.textContent = "Service";
+  container.appendChild(corner);
+
+  model.buckets.forEach((bucket) => {
+    const label = document.createElement("div");
+    label.className = "heat-time-label";
+    label.textContent = bucket.start.toLocaleTimeString([], { hour: "2-digit" });
+    container.appendChild(label);
+  });
+
+  services.forEach((service) => {
+    const rowLabel = document.createElement("div");
+    rowLabel.className = "heat-service-label";
+    rowLabel.textContent = text(service);
+    container.appendChild(rowLabel);
+
+    model.buckets.forEach((bucket) => {
+      const value = Number(bucket.counts[service] || 0);
+      const intensity = Math.min(1, value / peak);
+      const cell = document.createElement("div");
+      cell.className = "heat-cell";
+      cell.style.setProperty("--heat-intensity", intensity.toFixed(3));
+      cell.setAttribute(
+        "aria-label",
+        `${service} ${summarizeRangeLabel(bucket.start, bucket.end)} ${value.toFixed(1)} weighted events`
+      );
+      cell.title = `${text(service)} | ${summarizeRangeLabel(bucket.start, bucket.end)} | ${value.toFixed(1)} weighted`;
+      if (value <= 0.05) {
+        cell.dataset.level = "quiet";
+      } else if (intensity >= 0.78) {
+        cell.dataset.level = "hot";
+      } else if (intensity >= 0.4) {
+        cell.dataset.level = "warm";
+      } else {
+        cell.dataset.level = "cool";
+      }
+      container.appendChild(cell);
+    });
+  });
+
+  setText("#activityHeatSummary", `${Math.round(model.weightedTotal)} signals`);
+}
+
+function renderRiskPanel(events) {
+  const model = buildRiskModel(events);
+  const panel = document.querySelector(".risk-panel");
+  if (panel) {
+    panel.dataset.riskTone = model.band.tone;
+  }
+  renderRiskGauge(model);
+  renderActivityHeat(model);
+  setText("#riskBand", model.band.label);
+  setText("#riskHeadline", model.band.headline);
+  setText("#riskNarrative", model.summary);
+  setText(
+    "#riskBurstWindow",
+    model.burstScore > 0 ? summarizeRangeLabel(model.strongestBucket.start, model.strongestBucket.end) : "None"
+  );
+  setText("#riskBurstValue", `${Math.round(model.burstScore)} weighted events`);
+  setText("#riskHotService", text(model.hottestService.name));
+  setText("#riskHotServiceValue", `${Math.round(model.hottestService.value)} weighted events`);
+  setText("#riskTypeCount", String(model.activeTypeCount));
+  setText("#riskTypeLabel", model.activeTypeCount ? "Distinct event types seen" : "No suspicious event mix");
+  setText("#activityHeatSubtitle", "Last 24 hours in four-hour slices.");
+}
+
 function renderDashboard(payload) {
   const stats = payload.stats || {};
   const profile = payload.profile || null;
   const services = payload.services || [];
   state.lastEvents = payload.events || [];
   renderServiceDonut(stats);
+  renderRiskPanel(state.lastEvents);
   renderEvents((payload.events || []).slice(0, 10), profile && profile.current ? profile.current.name : "-");
   renderTimeline(state.lastEvents);
 

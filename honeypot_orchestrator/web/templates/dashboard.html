@@ -91,6 +91,52 @@
           <div id="eventTimeline" class="timeline-chart" aria-label="Event timeline"></div>
         </section>
 
+        <section class="panel risk-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Risk Pulse / Activity Heat</h2>
+              <p>Simple risk score and recent hot spots.</p>
+            </div>
+            <span id="riskBand" class="status-counter">Low</span>
+          </div>
+          <div class="risk-layout">
+            <div class="risk-score-card">
+              <svg id="riskPulseGauge" class="risk-gauge" viewBox="0 0 220 220" aria-label="Risk pulse gauge"></svg>
+              <div class="risk-copy">
+                <strong id="riskHeadline">Quiet perimeter</strong>
+                <p id="riskNarrative">No meaningful burst pattern in the recent event window.</p>
+              </div>
+            </div>
+            <div class="risk-main">
+              <div class="risk-summary-row" aria-label="Risk highlights">
+                <div class="risk-summary-item">
+                  <span>Peak Window</span>
+                  <strong id="riskBurstWindow">None</strong>
+                  <small id="riskBurstValue">0 weighted events</small>
+                </div>
+                <div class="risk-summary-item">
+                  <span>Top Service</span>
+                  <strong id="riskHotService">-</strong>
+                  <small id="riskHotServiceValue">0 events in focus</small>
+                </div>
+                <div class="risk-summary-item">
+                  <span>Event Mix</span>
+                  <strong id="riskTypeCount">0</strong>
+                  <small id="riskTypeLabel">No suspicious event mix</small>
+                </div>
+              </div>
+              <div class="activity-heat-card">
+                <div class="activity-heat-heading">
+                  <h3>Activity Heat</h3>
+                  <span id="activityHeatSummary" class="status-counter">0 signals</span>
+                </div>
+                <p id="activityHeatSubtitle" class="activity-heat-note">Last 24 hours in four-hour slices.</p>
+                <div id="activityHeat" class="activity-heat-grid" aria-label="Activity heat grid"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="panel donut-panel">
           <div class="section-heading">
             <div>

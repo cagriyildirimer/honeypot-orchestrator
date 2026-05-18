@@ -25,6 +25,14 @@
   --table-head-bg: #f0f3f6;
   --row-accent-bg: #f6faf9;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --risk-shell: var(--surface);
+  --risk-inner: var(--surface-subtle);
+  --risk-copy-surface: var(--surface-subtle);
+  --risk-gauge-start: #0f766e;
+  --risk-gauge-end: #2563eb;
+  --risk-grid-line: rgba(120, 136, 154, 0.08);
+  --risk-heat-base: rgba(37, 99, 235, 0.08);
+  --risk-heat-glow: rgba(37, 99, 235, 0.08);
   font-family: "Aptos", "Segoe UI", "Trebuchet MS", sans-serif;
 }
 
@@ -55,6 +63,14 @@
   --table-head-bg: #1b232b;
   --row-accent-bg: #123935;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --risk-shell: var(--surface);
+  --risk-inner: var(--surface-subtle);
+  --risk-copy-surface: var(--surface-subtle);
+  --risk-gauge-start: #2dd4bf;
+  --risk-gauge-end: #8bb6ff;
+  --risk-grid-line: rgba(255, 255, 255, 0.05);
+  --risk-heat-base: rgba(139, 182, 255, 0.08);
+  --risk-heat-glow: rgba(139, 182, 255, 0.08);
 }
 
 * {
@@ -524,6 +540,259 @@ th,
 
 .donut-panel {
   min-width: 0;
+}
+
+.risk-panel {
+  position: relative;
+  overflow: hidden;
+  background: var(--risk-shell);
+}
+
+.risk-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--risk-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--risk-grid-line) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.22), transparent 86%);
+  pointer-events: none;
+}
+
+.risk-panel[data-risk-tone="critical"] {
+  --risk-gauge-start: #f59e0b;
+  --risk-gauge-end: #ef4444;
+  --risk-heat-base: rgba(239, 68, 68, 0.16);
+}
+
+.risk-panel[data-risk-tone="high"] {
+  --risk-gauge-start: #d97706;
+  --risk-gauge-end: #f97316;
+  --risk-heat-base: rgba(249, 115, 22, 0.14);
+}
+
+.risk-panel[data-risk-tone="elevated"] {
+  --risk-gauge-start: #0f766e;
+  --risk-gauge-end: #f59e0b;
+  --risk-heat-base: rgba(245, 158, 11, 0.14);
+}
+
+.risk-panel[data-risk-tone="guarded"] {
+  --risk-gauge-start: #84cc16;
+  --risk-gauge-end: #14b8a6;
+  --risk-heat-base: rgba(132, 204, 22, 0.14);
+}
+
+.risk-panel[data-risk-tone="low"] {
+  --risk-gauge-start: #10b981;
+  --risk-gauge-end: #14b8a6;
+  --risk-heat-base: rgba(20, 184, 166, 0.12);
+}
+
+.risk-layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.activity-heat-card,
+.risk-score-card,
+.risk-copy {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--risk-inner);
+  box-shadow: none;
+}
+
+.risk-score-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 16px;
+}
+
+.risk-gauge {
+  display: block;
+  width: min(160px, 100%);
+  height: auto;
+  margin: 0 auto;
+}
+
+.risk-gauge-track,
+.risk-gauge-value {
+  fill: none;
+  stroke-width: 18;
+}
+
+.risk-gauge-track {
+  stroke: var(--border);
+}
+
+.risk-gauge-value {
+  stroke: url(#riskGaugeGradient);
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 110px 110px;
+  filter: none;
+}
+
+.risk-gauge-core {
+  fill: var(--risk-copy-surface);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.risk-gauge-score {
+  fill: var(--text);
+  font-size: 34px;
+  font-weight: 900;
+}
+
+.risk-gauge-label {
+  fill: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.risk-copy {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.risk-summary-item span {
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.risk-copy strong {
+  display: block;
+  margin-top: 0;
+  font-size: 22px;
+  line-height: 1.18;
+  font-weight: 900;
+}
+
+.risk-copy p {
+  margin-top: 8px;
+  color: var(--muted-strong);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.risk-main {
+  display: grid;
+  gap: 12px;
+}
+
+.risk-summary-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.risk-summary-item {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-subtle);
+}
+
+.risk-summary-item strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 900;
+}
+
+.risk-summary-item small {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.activity-heat-card {
+  padding: 14px;
+}
+
+.activity-heat-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.activity-heat-heading h3 {
+  font-size: 17px;
+  line-height: 1.3;
+  font-weight: 900;
+}
+
+.activity-heat-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.activity-heat-grid {
+  display: grid;
+  grid-template-columns: 92px repeat(var(--heat-columns, 12), minmax(0, 1fr));
+  gap: 6px;
+  align-items: center;
+}
+
+.heat-corner,
+.heat-time-label,
+.heat-service-label {
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.heat-time-label {
+  text-align: center;
+}
+
+.heat-service-label {
+  padding-right: 8px;
+  text-transform: none;
+}
+
+.heat-cell {
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--risk-heat-base) calc(36% + (var(--heat-intensity, 0) * 64%)), var(--surface-subtle));
+  box-shadow: none;
+  opacity: calc(0.72 + var(--heat-intensity, 0) * 0.28);
+}
+
+.heat-cell[data-level="cool"] {
+  background: color-mix(in srgb, #94a3b8 calc(18% + (var(--heat-intensity, 0) * 18%)), var(--surface-subtle));
+}
+
+.heat-cell[data-level="warm"] {
+  background: color-mix(in srgb, #f59e0b calc(18% + (var(--heat-intensity, 0) * 26%)), var(--surface-subtle));
+}
+
+.heat-cell[data-level="hot"] {
+  background: color-mix(in srgb, #ef4444 calc(20% + (var(--heat-intensity, 0) * 34%)), var(--surface-subtle));
 }
 
 .donut-layout {
@@ -1196,6 +1465,8 @@ tbody tr.selected {
   .profile-control,
   .metric-grid,
   .metric-grid.compact-metrics,
+  .risk-layout,
+  .risk-summary-row,
   .donut-layout,
   .service-grid,
   .filter-grid,
@@ -1216,5 +1487,16 @@ tbody tr.selected {
 
   .nav-stack {
     display: grid;
+  }
+
+  .activity-heat-grid {
+    grid-template-columns: 76px repeat(var(--heat-columns, 12), minmax(24px, 1fr));
+    gap: 6px;
+  }
+
+  .heat-time-label,
+  .heat-service-label,
+  .heat-corner {
+    font-size: 10px;
   }
 }
