@@ -43,6 +43,20 @@ const RISK_EVENT_WEIGHTS = {
   stopping: 1,
   login_success: 0,
 };
+const RISK_IGNORED_EVENT_TYPES = new Set([
+  "service_started",
+  "service_stopped",
+  "started",
+  "stopping",
+  "profile_changed",
+  "client_disconnected",
+  "login_success",
+  "request_error",
+  "user_created",
+  "user_deleted",
+  "user_password_changed",
+  "user_role_changed",
+]);
 
 function renderEvents(events, fallbackProfile) {
   const body = document.querySelector("#events");
@@ -386,6 +400,21 @@ function getRiskWeight(event) {
   return eventType.includes("fail") || eventType.includes("error") ? 8 : 4;
 }
 
+function isRiskRelevantEvent(event) {
+  if (!event) {
+    return false;
+  }
+  const eventType = String(event.event_type || "").toLowerCase();
+  if (RISK_IGNORED_EVENT_TYPES.has(eventType)) {
+    return false;
+  }
+  const service = String(event.service || "").toLowerCase();
+  if (service === "web" || service === "orchestrator") {
+    return false;
+  }
+  return Boolean(event.src_ip);
+}
+
 function buildRiskModel(events) {
   const now = Date.now();
   const windowMs = 24 * 60 * 60 * 1000;
@@ -403,6 +432,9 @@ function buildRiskModel(events) {
   let weightedTotal = 0;
 
   for (const event of events || []) {
+    if (!isRiskRelevantEvent(event)) {
+      continue;
+    }
     const date = parseEventTime(event.timestamp);
     if (!date) {
       continue;
