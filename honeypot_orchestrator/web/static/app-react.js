@@ -1270,43 +1270,51 @@
       setForm({ username: "", password: "", role: "viewer" });
     }
 
-    function beginPassword(username) {
-      setMode("password");
-      setActiveUser(username);
-      setForm({ username, password: "", role: "viewer" });
-    }
-
-    function beginRole(user) {
-      setMode("role");
+    function beginEdit(user) {
+      setMode("edit");
       setActiveUser(user.username);
       setForm({ username: user.username, password: "", role: user.role || "viewer" });
     }
 
-    async function submitForm(event) {
+    async function createUser(event) {
       event.preventDefault();
       try {
-        if (mode === "create") {
-          await window.requestJson("/api/users", {
-            method: "POST",
-            body: JSON.stringify({ username: form.username.trim(), password: form.password, role: form.role }),
-          });
-          window.showToast(`User ${form.username.trim()} created.`, "success");
-        } else if (mode === "password") {
-          await window.requestJson("/api/users/password", {
-            method: "POST",
-            body: JSON.stringify({ username: activeUser, password: form.password }),
-          });
-          window.showToast(`Password updated for ${activeUser}.`, "success");
-        } else if (mode === "role") {
-          await window.requestJson("/api/users/role", {
-            method: "POST",
-            body: JSON.stringify({ username: activeUser, role: form.role }),
-          });
-          window.showToast(`Role updated for ${activeUser}.`, "success");
-        }
+        await window.requestJson("/api/users", {
+          method: "POST",
+          body: JSON.stringify({ username: form.username.trim(), password: form.password, role: form.role }),
+        });
+        window.showToast(`User ${form.username.trim()} created.`, "success");
         setMode("idle");
         setActiveUser("");
         await loadUsers();
+      } catch (error) {
+        window.showToast(error.message, "error");
+      }
+    }
+
+    async function saveRole(event) {
+      event.preventDefault();
+      try {
+        await window.requestJson("/api/users/role", {
+          method: "POST",
+          body: JSON.stringify({ username: activeUser, role: form.role }),
+        });
+        window.showToast(`Role updated for ${activeUser}.`, "success");
+        await loadUsers();
+      } catch (error) {
+        window.showToast(error.message, "error");
+      }
+    }
+
+    async function changePassword(event) {
+      event.preventDefault();
+      try {
+        await window.requestJson("/api/users/password", {
+          method: "POST",
+          body: JSON.stringify({ username: activeUser, password: form.password }),
+        });
+        setForm({ ...form, password: "" });
+        window.showToast(`Password updated for ${activeUser}.`, "success");
       } catch (error) {
         window.showToast(error.message, "error");
       }
@@ -1318,6 +1326,10 @@
           method: "POST",
           body: JSON.stringify({ username }),
         });
+        if (username === activeUser) {
+          setMode("idle");
+          setActiveUser("");
+        }
         await loadUsers();
         window.showToast(`User ${username} deleted.`, "success");
       } catch (error) {
@@ -1348,8 +1360,7 @@
         h(
           "div",
           { className: "section-heading" },
-          h("div", null, h("h2", null, "Accounts"), h("p", null, "Create, remove, and update dashboard users.")),
-          isAdmin ? h("button", { type: "button", className: "button secondary", onClick: beginCreate }, "Create User") : null
+          h("div", null, h("h2", null, "Accounts"), h("p", null, "Create, remove, and update dashboard users."))
         ),
         h(
           "div",
@@ -1360,7 +1371,7 @@
             h(
               "thead",
               null,
-              h("tr", null, h("th", null, "User"), h("th", null, "Role"), h("th", null, "Password"), h("th", null, "Actions"))
+              h("tr", null, h("th", null, "User"), h("th", null, "Role"), h("th", { className: "table-actions-head" }, "Actions"))
             ),
             h(
               "tbody",
@@ -1379,40 +1390,46 @@
                       user.username === props.session.username ? h("span", { className: "current-user-marker", "aria-label": "Current user" }) : null
                     )
                   ),
-                  h("td", null, ROLE_LABELS[user.role] || ROLE_LABELS.viewer),
-                  h("td", null, h("button", { type: "button", className: "button secondary", disabled: !isAdmin, onClick: () => beginPassword(user.username) }, "Change Password")),
+                  h("td", null, h("span", { className: "table-strong" }, ROLE_LABELS[user.role] || ROLE_LABELS.viewer)),
                   h(
                     "td",
-                    null,
-                    h(
-                      "div",
-                      { className: "button-row button-row-inline" },
-                      h("button", { type: "button", className: "button secondary", disabled: !isAdmin, onClick: () => beginRole(user) }, "Change Role"),
-                      h("button", { type: "button", className: "button danger", disabled: !isAdmin || user.username === props.session.username, onClick: () => removeUser(user.username) }, "Delete")
-                    )
+                    { className: "table-actions-cell" },
+                    h("button", { type: "button", className: "button secondary", disabled: !isAdmin, onClick: () => beginEdit(user) }, "Edit")
                   )
                 )
-              )
+              ),
             )
           )
-        )
+        ),
+        isAdmin
+          ? h(
+              "div",
+              { className: "button-row users-add-row" },
+              h("button", { type: "button", className: "button secondary icon-button", "aria-label": "Create user", onClick: beginCreate }, "+")
+            )
+          : null
       ),
       isAdmin && mode !== "idle"
         ? h(
             "section",
             { className: "panel" },
-            h("div", { className: "section-heading" }, h("div", null, h("h2", null, mode === "create" ? "Create User" : activeUser), h("p", null, mode === "password" ? "Set a new password." : mode === "role" ? "Update the selected role." : "Create a new dashboard user."))),
             h(
-              "form",
-              { className: "settings-form", onSubmit: submitForm },
-              mode === "create"
-                ? h("label", { className: "field-block" }, h("span", null, "Username"), h("input", { value: form.username, onChange: (event) => setForm({ ...form, username: event.target.value }), required: true }))
-                : null,
-              mode === "create" || mode === "password"
-                ? h("label", { className: "field-block" }, h("span", null, "Password"), h("input", { type: "password", value: form.password, onChange: (event) => setForm({ ...form, password: event.target.value }), required: true }))
-                : null,
-              mode === "create" || mode === "role"
-                ? h(
+              "div",
+              { className: "section-heading" },
+              h(
+                "div",
+                null,
+                h("h2", null, mode === "create" ? "Create User" : `Edit ${activeUser}`),
+                h("p", null, mode === "create" ? "Create a new dashboard user." : "Change role, reset password, or delete this account.")
+              )
+            ),
+            mode === "create"
+              ? h(
+                  "form",
+                  { className: "settings-form", onSubmit: createUser },
+                  h("label", { className: "field-block" }, h("span", null, "Username"), h("input", { value: form.username, onChange: (event) => setForm({ ...form, username: event.target.value }), required: true })),
+                  h("label", { className: "field-block" }, h("span", null, "Password"), h("input", { type: "password", value: form.password, onChange: (event) => setForm({ ...form, password: event.target.value }), required: true })),
+                  h(
                     "label",
                     { className: "field-block" },
                     h("span", null, "Role"),
@@ -1422,10 +1439,61 @@
                       h("option", { value: "admin" }, ROLE_LABELS.admin),
                       h("option", { value: "viewer" }, ROLE_LABELS.viewer)
                     )
+                  ),
+                  h("div", { className: "button-row" }, h("button", { type: "submit", className: "button" }, "Create User"), h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Cancel"))
+                )
+              : h(
+                  "div",
+                  { className: "settings-grid" },
+                  h(
+                    "section",
+                    { className: "panel settings-card" },
+                    h("h3", null, "Role"),
+                    h(
+                      "form",
+                      { className: "settings-form", onSubmit: saveRole },
+                      h(
+                        "label",
+                        { className: "field-block" },
+                        h("span", null, "Access Level"),
+                        h(
+                          "select",
+                          { value: form.role, onChange: (event) => setForm({ ...form, role: event.target.value }) },
+                          h("option", { value: "admin" }, ROLE_LABELS.admin),
+                          h("option", { value: "viewer" }, ROLE_LABELS.viewer)
+                        )
+                      ),
+                      h("div", { className: "button-row" }, h("button", { type: "submit", className: "button" }, "Save Role"))
+                    )
+                  ),
+                  h(
+                    "section",
+                    { className: "panel settings-card" },
+                    h("h3", null, "Password"),
+                    h(
+                      "form",
+                      { className: "settings-form", onSubmit: changePassword },
+                      h("label", { className: "field-block" }, h("span", null, "New Password"), h("input", { type: "password", value: form.password, onChange: (event) => setForm({ ...form, password: event.target.value }), required: true })),
+                      h("div", { className: "button-row" }, h("button", { type: "submit", className: "button" }, "Change Password"))
+                    )
+                  ),
+                  h(
+                    "section",
+                    { className: "panel settings-card" },
+                    h("h3", null, "Danger Zone"),
+                    h("p", { className: "support-text" }, activeUser === props.session.username ? "The signed-in user cannot be deleted." : "Delete this account permanently."),
+                    h(
+                      "div",
+                      { className: "button-row" },
+                      h("button", { type: "button", className: "button danger", disabled: activeUser === props.session.username, onClick: () => removeUser(activeUser) }, "Delete User")
+                    )
+                  ),
+                  h(
+                    "div",
+                    { className: "button-row users-panel-close" },
+                    h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Close")
                   )
-                : null,
-              h("div", { className: "button-row" }, h("button", { type: "submit", className: "button" }, "Save"), h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Cancel"))
-            )
+                )
           )
         : null
     );

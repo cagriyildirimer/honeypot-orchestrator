@@ -1121,6 +1121,14 @@ th,
   justify-content: flex-start;
 }
 
+.users-add-row {
+  margin-top: 14px;
+}
+
+.users-panel-close {
+  margin-top: 4px;
+}
+
 .button-row .button {
   display: inline-flex;
   align-items: center;
@@ -1255,6 +1263,17 @@ td {
 td {
   font-size: 13px;
   line-height: 1.45;
+}
+
+.table-strong {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.table-actions-head,
+.table-actions-cell {
+  text-align: right;
 }
 
 tbody tr {
