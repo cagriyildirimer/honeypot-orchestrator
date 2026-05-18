@@ -23,22 +23,20 @@ ROLE_VIEWER = "viewer"
 USER_ROLES = {ROLE_ADMIN, ROLE_VIEWER}
 TEMPLATE_ROUTES = {
     "/login": "login.html",
-    "/dashboard": "dashboard.html",
-    "/profiles": "profiles.html",
-    "/logs": "logs.html",
-    "/settings/appearance": "appearance.html",
-    "/settings/system": "system.html",
-    "/settings/users": "users.html",
+    "/dashboard": "app.html",
+    "/profiles": "app.html",
+    "/logs": "app.html",
+    "/settings/appearance": "app.html",
+    "/settings/system": "app.html",
+    "/settings/users": "app.html",
 }
 STATIC_ROUTES = {
     "/static/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/static/common.js": ("common.js", "application/javascript; charset=utf-8"),
     "/static/login.js": ("login.js", "application/javascript; charset=utf-8"),
-    "/static/dashboard.js": ("dashboard.js", "application/javascript; charset=utf-8"),
-    "/static/profiles.js": ("profiles.js", "application/javascript; charset=utf-8"),
-    "/static/logs.js": ("logs.js", "application/javascript; charset=utf-8"),
-    "/static/settings.js": ("settings.js", "application/javascript; charset=utf-8"),
-    "/static/users.js": ("users.js", "application/javascript; charset=utf-8"),
+    "/static/app-react.js": ("app-react.js", "application/javascript; charset=utf-8"),
+    "/static/vendor/react.production.min.js": ("vendor/react.production.min.js", "application/javascript; charset=utf-8"),
+    "/static/vendor/react-dom.production.min.js": ("vendor/react-dom.production.min.js", "application/javascript; charset=utf-8"),
 }
 
 

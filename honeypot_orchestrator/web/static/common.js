@@ -162,3 +162,15 @@ async function logoutAndRedirect() {
     window.location.assign("/login");
   }
 }
+
+window.requestJson = requestJson;
+window.currentTheme = currentTheme;
+window.applyTheme = applyTheme;
+window.text = text;
+window.setText = setText;
+window.showToast = showToast;
+window.formatTimestamp = formatTimestamp;
+window.formatEventSource = formatEventSource;
+window.summarizeEvent = summarizeEvent;
+window.ensureAuthenticated = ensureAuthenticated;
+window.logoutAndRedirect = logoutAndRedirect;
