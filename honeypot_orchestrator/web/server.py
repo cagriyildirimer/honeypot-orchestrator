@@ -634,10 +634,10 @@ class WebDashboard:
     def _build_overview_payload(self, request: dict[str, Any]) -> dict[str, Any]:
         display_host = _request_display_host(request)
         query = request["query"]
-        limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=1000)
+        limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=2000)
         service_filter = query.get("service", [""])[0].strip().lower()
         event_filter = query.get("event_type", [""])[0].strip().lower()
-        records = read_recent_events(self.orchestrator.config.logging.path, 1000)
+        records = read_recent_events(self.orchestrator.config.logging.path, max(1000, limit))
         filtered = [
             event
             for event in records
