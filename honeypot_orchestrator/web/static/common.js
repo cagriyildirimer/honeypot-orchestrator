@@ -26,6 +26,21 @@ async function requestJson(url, options = {}) {
 }
 
 const THEME_STORAGE_KEY = "honeypot-director-theme";
+const THEME_OPTIONS = [
+  { key: "vision", label: "Vision Blue" },
+  { key: "nebula", label: "Nebula Violet" },
+  { key: "aurora", label: "Aurora Cyan" },
+  { key: "emerald", label: "Emerald Ops" },
+  { key: "sunset", label: "Sunset Alert" },
+  { key: "slate", label: "Slate Mono" },
+];
+
+function normalizeTheme(theme) {
+  if (theme === "dark" || theme === "light") {
+    return "vision";
+  }
+  return THEME_OPTIONS.some((option) => option.key === theme) ? theme : "vision";
+}
 
 function storedTheme() {
   try {
@@ -45,28 +60,27 @@ function saveTheme(theme) {
 }
 
 function currentTheme() {
-  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  return normalizeTheme(document.documentElement.dataset.theme || "vision");
 }
 
 function applyTheme(theme) {
-  const normalized = theme === "dark" ? "dark" : "light";
+  const normalized = normalizeTheme(theme);
   document.documentElement.dataset.theme = normalized;
   saveTheme(normalized);
   document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
-    button.textContent = normalized === "dark" ? "Light Mode" : "Dark Mode";
-    button.setAttribute(
-      "aria-label",
-      normalized === "dark" ? "Switch to light mode" : "Switch to dark mode"
-    );
+    button.textContent = THEME_OPTIONS.find((option) => option.key === normalized).label;
+    button.setAttribute("aria-label", "Change appearance theme");
   });
 }
 
 function initializeThemeControls() {
   const savedTheme = storedTheme();
-  applyTheme(savedTheme === "dark" ? "dark" : "light");
+  applyTheme(savedTheme);
   document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
     button.addEventListener("click", () => {
-      applyTheme(currentTheme() === "dark" ? "light" : "dark");
+      const currentIndex = THEME_OPTIONS.findIndex((option) => option.key === currentTheme());
+      const next = THEME_OPTIONS[(currentIndex + 1) % THEME_OPTIONS.length];
+      applyTheme(next.key);
     });
   });
 }
@@ -164,6 +178,7 @@ async function logoutAndRedirect() {
 }
 
 window.requestJson = requestJson;
+window.THEME_OPTIONS = THEME_OPTIONS;
 window.currentTheme = currentTheme;
 window.applyTheme = applyTheme;
 window.text = text;

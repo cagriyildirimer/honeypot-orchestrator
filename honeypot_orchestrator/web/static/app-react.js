@@ -66,6 +66,14 @@
     { key: "week", label: "Weekly", shortLabel: "7d", bucketCount: 7, windowMs: 7 * 24 * 60 * 60 * 1000, labelMode: "weekday" },
     { key: "month", label: "Monthly", shortLabel: "30d", bucketCount: 30, windowMs: 30 * 24 * 60 * 60 * 1000, labelMode: "date" },
   ];
+  const APPEARANCE_THEMES = [
+    { key: "vision", label: "Vision Blue", note: "Deep blue glass with cyan highlights.", colors: ["#0075ff", "#21d4fd"] },
+    { key: "nebula", label: "Nebula Violet", note: "Violet and magenta for high-contrast monitoring.", colors: ["#8b5cf6", "#ec4899"] },
+    { key: "aurora", label: "Aurora Cyan", note: "Cold cyan and mint for clean operations views.", colors: ["#00d4ff", "#38f8c4"] },
+    { key: "emerald", label: "Emerald Ops", note: "Green operational palette with soft lime accents.", colors: ["#01b574", "#9ae66e"] },
+    { key: "sunset", label: "Sunset Alert", note: "Warm orange/yellow for alert-heavy dashboards.", colors: ["#f97316", "#fbcf33"] },
+    { key: "slate", label: "Slate Mono", note: "Neutral steel palette for quiet long-running sessions.", colors: ["#64748b", "#e2e8f0"] },
+  ];
 
   function pathToPage(pathname) {
     if (pathname === "/dashboard" || pathname === "/") {
@@ -832,8 +840,8 @@
           h(
             "linearGradient",
             { id: "timelineAreaGradient", x1: "0", y1: "0", x2: "0", y2: "1" },
-            h("stop", { offset: "0%", stopColor: "rgba(33, 212, 253, 0.34)" }),
-            h("stop", { offset: "100%", stopColor: "rgba(0, 117, 255, 0)" })
+            h("stop", { offset: "0%", stopColor: "var(--timeline-area-start)" }),
+            h("stop", { offset: "100%", stopColor: "var(--timeline-area-end)" })
           )
         ),
         gridLines,
@@ -1257,8 +1265,7 @@
   function AppearancePage(props) {
     const [theme, setTheme] = useState(window.currentTheme());
 
-    function toggleTheme() {
-      const nextTheme = theme === "dark" ? "light" : "dark";
+    function selectTheme(nextTheme) {
       window.applyTheme(nextTheme);
       setTheme(nextTheme);
     }
@@ -1283,8 +1290,30 @@
         h(
           "div",
           { className: "section-heading" },
-          h("div", null, h("h2", null, "Theme"), h("p", null, "Switch between light and dark mode.")),
-          h("button", { type: "button", className: "button secondary", onClick: toggleTheme }, theme === "dark" ? "Light Mode" : "Dark Mode")
+          h("div", null, h("h2", null, "Theme"), h("p", null, "Choose a coordinated color system for the web panel.")),
+          h("span", { className: "status-counter" }, (APPEARANCE_THEMES.find((item) => item.key === theme) || APPEARANCE_THEMES[0]).label)
+        ),
+        h(
+          "div",
+          { className: "theme-grid" },
+          APPEARANCE_THEMES.map((item) =>
+            h(
+              "button",
+              {
+                key: item.key,
+                type: "button",
+                className: `theme-card${item.key === theme ? " active" : ""}`,
+                onClick: () => selectTheme(item.key),
+              },
+              h(
+                "span",
+                { className: "theme-swatch-row", "aria-hidden": "true" },
+                item.colors.map((color) => h("i", { key: color, style: { background: color } }))
+              ),
+              h("strong", null, item.label),
+              h("small", null, item.note)
+            )
+          )
         )
       )
     );

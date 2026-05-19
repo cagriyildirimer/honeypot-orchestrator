@@ -12,6 +12,8 @@
   --accent: #0075ff;
   --accent-focus: #21d4fd;
   --accent-soft: rgba(0, 117, 255, 0.16);
+  --accent-glow: rgba(0, 117, 255, 0.24);
+  --secondary-glow: rgba(67, 24, 255, 0.18);
   --blue: #21d4fd;
   --blue-soft: rgba(33, 212, 253, 0.14);
   --warning: #ffb547;
@@ -28,6 +30,9 @@
   --row-accent-bg: rgba(0, 117, 255, 0.08);
   --glass-gradient: linear-gradient(126.97deg, rgba(6, 11, 40, 0.82) 28.26%, rgba(10, 14, 35, 0.76) 91.2%);
   --glass-gradient-soft: linear-gradient(127.09deg, rgba(24, 29, 60, 0.82) 19.41%, rgba(10, 14, 35, 0.58) 76.65%);
+  --page-gradient: linear-gradient(159.02deg, #0f123b 14.25%, #090d2e 56.45%, #020515 86.14%);
+  --brand-gradient: linear-gradient(97.89deg, var(--accent) 0%, var(--accent-focus) 100%);
+  --chart-gradient: radial-gradient(circle at 18% 12%, var(--accent-glow), transparent 34%), linear-gradient(126.97deg, rgba(6, 11, 40, 0.92) 28.26%, rgba(10, 14, 35, 0.84) 91.2%);
   --shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
   --risk-shell: var(--glass-gradient);
   --risk-inner: rgba(15, 21, 53, 0.7);
@@ -37,6 +42,8 @@
   --risk-grid-line: rgba(255, 255, 255, 0.045);
   --risk-heat-base: rgba(0, 117, 255, 0.12);
   --risk-heat-glow: rgba(33, 212, 253, 0.2);
+  --timeline-area-start: rgba(33, 212, 253, 0.34);
+  --timeline-area-end: rgba(0, 117, 255, 0);
   font-family: "Aptos", "Segoe UI", "Trebuchet MS", sans-serif;
 }
 
@@ -81,6 +88,66 @@
   --risk-heat-glow: rgba(33, 212, 253, 0.2);
 }
 
+:root[data-theme="nebula"] {
+  --accent: #8b5cf6;
+  --accent-focus: #ec4899;
+  --accent-soft: rgba(139, 92, 246, 0.16);
+  --accent-glow: rgba(139, 92, 246, 0.26);
+  --secondary-glow: rgba(236, 72, 153, 0.18);
+  --page-gradient: linear-gradient(159.02deg, #17113b 14.25%, #100a2e 56.45%, #050313 86.14%);
+  --brand-gradient: linear-gradient(97.89deg, #8b5cf6 0%, #ec4899 100%);
+  --timeline-area-start: rgba(236, 72, 153, 0.32);
+  --timeline-area-end: rgba(139, 92, 246, 0);
+}
+
+:root[data-theme="aurora"] {
+  --accent: #00d4ff;
+  --accent-focus: #38f8c4;
+  --accent-soft: rgba(0, 212, 255, 0.16);
+  --accent-glow: rgba(0, 212, 255, 0.24);
+  --secondary-glow: rgba(56, 248, 196, 0.16);
+  --page-gradient: linear-gradient(159.02deg, #08243f 14.25%, #061b2f 56.45%, #020812 86.14%);
+  --brand-gradient: linear-gradient(97.89deg, #00d4ff 0%, #38f8c4 100%);
+  --timeline-area-start: rgba(56, 248, 196, 0.32);
+  --timeline-area-end: rgba(0, 212, 255, 0);
+}
+
+:root[data-theme="emerald"] {
+  --accent: #01b574;
+  --accent-focus: #9ae66e;
+  --accent-soft: rgba(1, 181, 116, 0.16);
+  --accent-glow: rgba(1, 181, 116, 0.22);
+  --secondary-glow: rgba(154, 230, 110, 0.14);
+  --page-gradient: linear-gradient(159.02deg, #0b2b28 14.25%, #071f23 56.45%, #020b11 86.14%);
+  --brand-gradient: linear-gradient(97.89deg, #01b574 0%, #9ae66e 100%);
+  --timeline-area-start: rgba(154, 230, 110, 0.3);
+  --timeline-area-end: rgba(1, 181, 116, 0);
+}
+
+:root[data-theme="sunset"] {
+  --accent: #f97316;
+  --accent-focus: #fbcf33;
+  --accent-soft: rgba(249, 115, 22, 0.16);
+  --accent-glow: rgba(249, 115, 22, 0.24);
+  --secondary-glow: rgba(251, 207, 51, 0.16);
+  --page-gradient: linear-gradient(159.02deg, #35151f 14.25%, #231126 56.45%, #0c0612 86.14%);
+  --brand-gradient: linear-gradient(97.89deg, #f97316 0%, #fbcf33 100%);
+  --timeline-area-start: rgba(251, 207, 51, 0.3);
+  --timeline-area-end: rgba(249, 115, 22, 0);
+}
+
+:root[data-theme="slate"] {
+  --accent: #94a3b8;
+  --accent-focus: #e2e8f0;
+  --accent-soft: rgba(148, 163, 184, 0.16);
+  --accent-glow: rgba(148, 163, 184, 0.18);
+  --secondary-glow: rgba(226, 232, 240, 0.1);
+  --page-gradient: linear-gradient(159.02deg, #111827 14.25%, #0f172a 56.45%, #020617 86.14%);
+  --brand-gradient: linear-gradient(97.89deg, #64748b 0%, #e2e8f0 100%);
+  --timeline-area-start: rgba(226, 232, 240, 0.24);
+  --timeline-area-end: rgba(100, 116, 139, 0);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -94,9 +161,9 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    radial-gradient(circle at 12% 10%, rgba(0, 117, 255, 0.24), transparent 28%),
-    radial-gradient(circle at 78% 0%, rgba(67, 24, 255, 0.18), transparent 26%),
-    linear-gradient(159.02deg, #0f123b 14.25%, #090d2e 56.45%, #020515 86.14%);
+    radial-gradient(circle at 12% 10%, var(--accent-glow), transparent 28%),
+    radial-gradient(circle at 78% 0%, var(--secondary-glow), transparent 26%),
+    var(--page-gradient);
   background-attachment: fixed;
   color: var(--text);
 }
@@ -160,9 +227,9 @@ pre {
   width: 34px;
   height: 34px;
   border-radius: 12px;
-  background: linear-gradient(97.89deg, #0075ff 0%, #21d4fd 100%);
+  background: var(--brand-gradient);
   color: #ffffff;
-  box-shadow: 0 8px 18px rgba(0, 117, 255, 0.36);
+  box-shadow: 0 8px 18px var(--accent-glow);
   font-weight: 900;
   font-size: 13px;
 }
@@ -290,9 +357,9 @@ pre {
 button {
   min-height: 38px;
   padding: 0 14px;
-  border: 1px solid rgba(0, 117, 255, 0.44);
+  border: 1px solid color-mix(in srgb, var(--accent) 44%, transparent);
   border-radius: 12px;
-  background: linear-gradient(97.89deg, #0075ff 0%, #21d4fd 100%);
+  background: var(--brand-gradient);
   color: #ffffff;
   cursor: pointer;
   font-weight: 800;
@@ -356,7 +423,7 @@ select {
 input:focus,
 select:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(0, 117, 255, 0.16);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .field-block {
@@ -437,7 +504,7 @@ th,
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 92% 10%, rgba(33, 212, 253, 0.2), transparent 34%);
+  background: radial-gradient(circle at 92% 10%, var(--accent-glow), transparent 34%);
   pointer-events: none;
 }
 
@@ -595,16 +662,16 @@ th,
 
 .timeline-line {
   fill: none;
-  stroke: #21d4fd;
+  stroke: var(--accent-focus);
   stroke-width: 1.45;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(0 4px 10px rgba(33, 212, 253, 0.34));
+  filter: drop-shadow(0 4px 10px var(--accent-glow));
 }
 
 .timeline-point {
   fill: #ffffff;
-  stroke: #21d4fd;
+  stroke: var(--accent-focus);
   stroke-width: 1.6;
   transition: r 140ms ease, stroke-width 140ms ease;
 }
@@ -854,8 +921,7 @@ th,
   padding: 20px;
   border: 1px solid rgba(226, 232, 240, 0.16);
   background:
-    radial-gradient(circle at 18% 12%, rgba(0, 117, 255, 0.2), transparent 34%),
-    linear-gradient(126.97deg, rgba(6, 11, 40, 0.92) 28.26%, rgba(10, 14, 35, 0.84) 91.2%);
+    var(--chart-gradient);
   color: #ffffff;
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
 }
@@ -910,7 +976,7 @@ th,
 
 .timeline-pill.active {
   background: #ffffff;
-  color: #0075ff;
+  color: var(--accent);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
 }
 
@@ -941,6 +1007,62 @@ th,
   font-size: 17px;
   line-height: 1.3;
   font-weight: 900;
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.theme-card {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  min-height: 150px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(15, 21, 53, 0.58);
+  color: var(--text);
+  text-align: left;
+  box-shadow: none;
+}
+
+.theme-card:hover,
+.theme-card.active {
+  border-color: color-mix(in srgb, var(--accent-focus) 56%, var(--border));
+  background: linear-gradient(126.97deg, rgba(24, 29, 60, 0.78) 28.26%, rgba(10, 14, 35, 0.68) 91.2%);
+  filter: none;
+}
+
+.theme-card.active {
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 16px 34px rgba(0, 0, 0, 0.2);
+}
+
+.theme-swatch-row {
+  display: flex;
+  gap: 8px;
+}
+
+.theme-swatch-row i {
+  width: 34px;
+  height: 34px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.theme-card strong {
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 900;
+}
+
+.theme-card small {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .activity-heat-note {
@@ -1114,8 +1236,8 @@ th,
 .status-counter {
   padding: 6px 9px;
   border-radius: 10px;
-  background: rgba(0, 117, 255, 0.16);
-  color: #21d4fd;
+  background: var(--accent-soft);
+  color: var(--accent-focus);
   font-size: 13px;
   font-weight: 800;
   white-space: nowrap;
@@ -1698,12 +1820,13 @@ tbody tr.selected {
     display: grid;
   }
 
-  .profile-control,
-  .metric-grid,
-  .metric-grid.compact-metrics,
-  .risk-layout,
-  .risk-summary-row,
-  .donut-layout,
+	  .profile-control,
+	  .metric-grid,
+	  .metric-grid.compact-metrics,
+	  .risk-layout,
+	  .risk-summary-row,
+	  .theme-grid,
+	  .donut-layout,
   .service-grid,
   .filter-grid,
   .table-inline-form,
