@@ -5,18 +5,8 @@ import asyncio
 from honeypot_orchestrator.config import AppConfig
 from honeypot_orchestrator.event_logger import JSONLEventLogger
 from honeypot_orchestrator.profiles import HoneypotProfile, get_profile, list_profiles, load_profile
+from honeypot_orchestrator.services import PROFILE_AWARE_SERVICE_TYPES, SERVICE_REGISTRY
 from honeypot_orchestrator.services.base import BaseHoneypotService
-from honeypot_orchestrator.services.dns import DNSHoneypot
-from honeypot_orchestrator.services.ftp import FTPHoneypot
-from honeypot_orchestrator.services.http import HTTPHoneypot
-from honeypot_orchestrator.services.ldap import LDAPHoneypot
-from honeypot_orchestrator.services.ldaps import LDAPSHoneypot
-from honeypot_orchestrator.services.mssql import MSSQLHoneypot
-from honeypot_orchestrator.services.netbios import NetBIOSHoneypot
-from honeypot_orchestrator.services.rdp import RDPHoneypot
-from honeypot_orchestrator.services.smb import SMBHoneypot
-from honeypot_orchestrator.services.ssh import FakeSSHHoneypot
-from honeypot_orchestrator.services.telnet import TelnetHoneypot
 from honeypot_orchestrator.web.server import WebDashboard
 
 
@@ -112,26 +102,12 @@ class Orchestrator:
         print("Profile listeners are applied automatically.")
 
     def _build_services(self) -> dict[str, BaseHoneypotService]:
-        # Config'teki servis adini ilgili Python sinifina esleyen kucuk kayit tablosu.
-        registry = {
-            "http": HTTPHoneypot,
-            "ssh": FakeSSHHoneypot,
-            "ftp": FTPHoneypot,
-            "telnet": TelnetHoneypot,
-            "dns": DNSHoneypot,
-            "netbios": NetBIOSHoneypot,
-            "ldap": LDAPHoneypot,
-            "ldaps": LDAPSHoneypot,
-            "mssql": MSSQLHoneypot,
-            "rdp": RDPHoneypot,
-            "smb": SMBHoneypot,
-        }
         services: dict[str, BaseHoneypotService] = {}
         for name, service_config in self.config.services.items():
             # enabled: false olan servisler dinlemeye acilmaz.
             if not service_config.enabled:
                 continue
-            service_cls = registry.get(name)
+            service_cls = SERVICE_REGISTRY.get(name)
             # Taninmayan servis adlari hata vermeden atlanir.
             if service_cls is None:
                 continue
@@ -248,13 +224,12 @@ class Orchestrator:
         host: str,
         port: int,
     ) -> BaseHoneypotService:
-        profile_aware_service_types = (HTTPHoneypot, FakeSSHHoneypot, FTPHoneypot, TelnetHoneypot)
         kwargs = {
             "name": name,
             "host": host,
             "port": port,
             "logger": self.logger,
         }
-        if issubclass(service_cls, profile_aware_service_types):
+        if issubclass(service_cls, PROFILE_AWARE_SERVICE_TYPES):
             kwargs["profile"] = self.profile
         return service_cls(**kwargs)

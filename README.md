@@ -1,41 +1,33 @@
 # Honeypot Orchestrator
 
-Lab ortamları için tasarlanmış, profil tabanlı bir honeypot orkestratörü. Uygulama tek bir proses içinde birden fazla sahte servisi yönetir, olayları JSONL olarak toplar ve hafif bir web paneli üzerinden aktif profili değiştirmenize izin verir.
+Profil tabanlı, lab odaklı bir honeypot orkestratörü. Uygulama tek Python prosesi içinde sahte servis listener'larını yönetir, olayları JSONL olarak toplar ve dahili web panelinden aktif profili değiştirmenizi sağlar.
+
+Bu proje gerçek servis, exploit veya saldırı aracı değildir. Amaç kontrollü bir savunma/lab ortamında tarama, parmak izi alma ve kimlik denemesi gibi davranışları gözlemlemektir.
 
 ## Mimari
 
-Proje üç ana katmandan oluşur:
+Proje küçük ve bağımlılıksız tutulmuştur:
 
-- `honeypot_orchestrator/orchestrator.py`
-  Tüm servislerin yaşam döngüsünü yönetir. Uygulama açılışında `empty` profilini uygular, seçilen profile göre listener'ları başlatır veya durdurur.
-- `honeypot_orchestrator/services/`
-  HTTP, SSH, FTP, Telnet, DNS, NetBIOS, LDAP, LDAPS, MSSQL, RDP ve SMB gibi decoy servisler burada yer alır.
-- `honeypot_orchestrator/web/server.py`
-  Dahili dashboard, login, logs ve JSON API katmanını sağlar.
+- `honeypot_orchestrator/config.py`: `config.yaml` dosyasını ve `HONEYPOT_*` environment override'larını yükler.
+- `honeypot_orchestrator/profiles.py`: Hazır host profillerini tanımlar.
+- `honeypot_orchestrator/services/`: Decoy servis implementasyonları ve `SERVICE_REGISTRY`.
+- `honeypot_orchestrator/orchestrator.py`: Profil uygulama, servis başlatma/durdurma ve rollback mantığını yönetir.
+- `honeypot_orchestrator/web/server.py`: Minimal asyncio HTTP sunucusu, dashboard, auth ve JSON API katmanı.
+- `honeypot_orchestrator/web/static/app-react.js`: Harici build adımı gerektirmeyen React tabanlı tek sayfa panel.
 
-Temel davranış:
-
-- Konfig dosyası `config.yaml` ile yüklenir.
-- Ortak log dosyası `logs/events.jsonl` veya container içinde `/app/logs/events.jsonl` olarak kullanılır.
-- Uygulama başlangıçta yalnızca web panelini açabilir.
-- Gerçek honeypot listener'ları, seçilen profil uygulandığında devreye girer.
+Başlangıçta `empty` profil uygulanır; bu profil honeypot listener açmaz. Listener'lar dashboard üzerinden `linux_server` veya `windows_server` profili seçildiğinde başlar.
 
 ## Profiller
 
-Hazır profiller:
+- `empty`: Sadece web paneli çalışır, honeypot listener açılmaz.
+- `linux_server`: HTTP, SSH, FTP ve Telnet yüzeyi sunar.
+- `windows_server`: HTTP, DNS, NetBIOS, LDAP, LDAPS, MSSQL, RDP ve SMB yüzeyi sunar.
 
-- `empty`
-  Başlangıç profili. Listener açmaz.
-- `linux_server`
-  HTTP, SSH, FTP ve Telnet benzeri Linux yüzeyi sunar.
-- `windows_server`
-  HTTP, DNS, NetBIOS, LDAP, LDAPS, MSSQL, RDP ve SMB benzeri Windows Server yüzeyi sunar.
-
-Profil değişimi UI üzerinden yapılır; servisler tek tek panelden manuel açılıp kapanmaz.
+Profil değişimi atomik yapılmaya çalışılır. Bir servis başlatılamazsa orchestrator önceki profil durumuna geri dönmeye çalışır.
 
 ## Dashboard
 
-Varsayılan dashboard adresi:
+Varsayılan adres:
 
 ```text
 http://127.0.0.1:8000
@@ -43,129 +35,98 @@ http://127.0.0.1:8000
 
 Varsayılan giriş bilgileri:
 
-- Username: `admin`
-- Password: `admin123`
+```text
+Username: admin
+Password: admin123
+```
 
-Dashboard tarafında:
-
-- aktif profil görülür
-- profil değişikliği uygulanır
-- servislerin dinleyip dinlemediği izlenir
-- son olaylar ve log özeti görülür
+Panelden aktif profil, servis durumları, olay akışı, log özeti, tema, log dışa aktarma/temizleme ve kullanıcı yönetimi görülebilir. Admin olmayan kullanıcılar olayları izleyebilir; profil, log temizleme ve kullanıcı yönetimi admin yetkisi ister.
 
 ## Lokal Çalıştırma
 
-Python ile doğrudan çalıştırmak için:
+```bash
+py -m honeypot_orchestrator.cli --config config.yaml
+```
+
+Linux/macOS veya PATH içinde `python` doğru kuruluysa:
 
 ```bash
 python -m honeypot_orchestrator.cli --config config.yaml
 ```
 
-Bu akışta:
+Varsayılan lab portları:
 
-- web paneli `8000`
-- lab portları varsayılan olarak `8080`, `2222`, `2121`, `2323`, `1053`, `139`, `389`, `636`, `1433`, `3389`, `1445`
-
-üzerinden kullanılır.
+- web paneli: `8000`
+- HTTP: `8080`
+- SSH: `2222`
+- FTP: `2121`
+- Telnet: `2323`
+- DNS over TCP: `1053`
+- NetBIOS: `139`
+- LDAP: `389`
+- LDAPS: `636`
+- MSSQL: `1433`
+- RDP: `3389`
+- SMB: `1445`
 
 ## Docker
 
-Normal Docker Compose çalıştırma:
+Host port publish modunda çalıştırma:
 
 ```bash
 docker compose up -d --build
 ```
 
-Eski `docker-compose` binary kullanıyorsanız eşdeğer komut:
+Durdurma:
 
 ```bash
-docker-compose up -d --build
+docker compose down
 ```
 
-Bu mod host port publish mantığıyla çalışır ve geliştirme veya temel lab kullanımına uygundur.
+Container içinde log yolu varsayılan olarak `/app/logs/events.jsonl` olur ve `honeypot_logs` volume'una yazılır.
 
 ## Ubuntu LAN Modu
 
-Daha gerçekçi kullanım akışı Ubuntu üzerinde macvlan tabanlı LAN modu ile çalışmaktır. Bu modda container kendi LAN IP adresine sahip olur ve servisler standart portlarda görünebilir.
+LAN modu macvlan kullanır. Container kendi LAN IP adresini alır ve servisleri standart portlarda gösterebilir.
 
-### 1. Yardımcı script ile LAN ortamını hazırla
-
-İlk adım:
+Hazırlama ve başlatma:
 
 ```bash
-scripts/start-lan.sh
+scripts/start-lan.sh --ip 192.168.1.240 --detached
 ```
 
-IP'yi açıkça vermek isterseniz:
-
-```bash
-scripts/start-lan.sh --ip 192.168.12.240
-```
-
-Bu script:
-
-- varsayılan ağ arayüzünü bulur
-- subnet ve gateway bilgisini çıkarır
-- macvlan Docker network'ünü oluşturur veya yeniden kullanır
-- host-published stack açıksa onu indirir
-- LAN için gerekli environment değişkenlerini hazırlar
-
-### 2. LAN stack'i ayağa kaldır
-
-İkinci adım:
-
-```bash
-docker-compose -f docker-compose.lan.yml up -d --build
-```
-
-`docker compose` kullanıyorsan eşdeğeri:
+Manuel compose:
 
 ```bash
 docker compose -f docker-compose.lan.yml up -d --build
 ```
 
-Bu dosya:
-
-- servisleri standart portlara bind edecek environment override'larını verir
-- container'ı harici macvlan network'e bağlar
-- dashboard'ı `8000`
-- SMB'yi `445`
-- MSSQL'i `1433`
-- RDP'yi `3389`
-
-gibi gerçek portlarda sunar.
-
-### 3. Dashboard'a container IP üzerinden bağlan
-
-LAN modunda dashboard host IP değil, container IP üzerinden açılır:
-
-```text
-http://192.168.12.240:8000
-```
-
 Notlar:
 
-- `HONEYPOT_LAN_IP` ağ içinde boş ve rezerve bir adres olmalı.
-- macvlan kullanımında Ubuntu host çoğu zaman container IP'ye doğrudan erişemez.
-- Dashboard'ı aynı LAN üzerindeki farklı bir makineden test etmek daha doğrudur.
+- `HONEYPOT_LAN_IP` LAN içinde boş ve tercihen DHCP'de rezerve edilmiş bir adres olmalı.
+- macvlan modunda Ubuntu host çoğu zaman container IP'ye doğrudan erişemez; aynı LAN'daki başka bir cihazdan test etmek daha doğrudur.
+- LAN modunda HTTP `80`, SSH `22`, FTP `21`, Telnet `23`, DNS `53`, SMB `445` gibi standart portlara alınır.
 
-## Konfig
+## Konfigürasyon
 
-Temel ayarlar `config.yaml` içindedir.
+Ana dosya `config.yaml`.
 
 Önemli alanlar:
 
 - `profile`
 - `web.host`
 - `web.port`
+- `auth.username`
+- `auth.password`
+- `logging.path`
 - `services.<name>.enabled`
 - `services.<name>.host`
 - `services.<name>.port`
-- `logging.path`
 
-Birçok değer environment variable ile override edilebilir. Örnekler:
+Sık kullanılan environment override'ları:
 
 - `HONEYPOT_PROFILE`
+- `HONEYPOT_HOST`
 - `HONEYPOT_WEB_HOST`
 - `HONEYPOT_WEB_PORT`
 - `HONEYPOT_AUTH_USERNAME`
@@ -177,14 +138,14 @@ Birçok değer environment variable ile override edilebilir. Örnekler:
 
 ## Loglama
 
-Tüm olaylar JSONL formatında yazılır.
+Olaylar JSONL formatında yazılır.
 
 Varsayılan yollar:
 
-- lokal çalışmada `logs/events.jsonl`
-- container içinde `/app/logs/events.jsonl`
+- Lokal: `logs/events.jsonl`
+- Container: `/app/logs/events.jsonl`
 
-Kayıtlarda sık görülen alanlar:
+Tipik alanlar:
 
 - `timestamp`
 - `service`
@@ -193,7 +154,7 @@ Kayıtlarda sık görülen alanlar:
 - `src_port`
 - `summary`
 
-Bazı protokoller ek alanlar da yazar:
+Protokole göre ek alanlar:
 
 - `username`
 - `password`
@@ -201,67 +162,39 @@ Bazı protokoller ek alanlar da yazar:
 - `workstation`
 - `user_agent`
 - `query_name`
+- `query_type`
 
-## Servisler
+## Doğrulama
 
-Mevcut servisler:
-
-- HTTP
-- SSH
-- FTP
-- Telnet
-- DNS over TCP
-- NetBIOS Session Service
-- LDAP
-- LDAPS
-- MSSQL
-- RDP
-- SMB
-
-Bu servisler gerçek servis implementasyonu sunmaz; amaçları tarama, parmak izi ve kimlik denemesi gibi davranışları gözlemlemektir.
-
-## Sık Kullanılan Komutlar
-
-Lokal compose:
+Python bytecode derleme:
 
 ```bash
-docker compose up -d --build
+py -m compileall honeypot_orchestrator
 ```
 
-Lokal compose durdurma:
+Unit testler:
 
 ```bash
-docker compose down
+py -m unittest discover
 ```
 
-Ubuntu LAN modu hazırlama:
+Docker build:
 
 ```bash
-scripts/start-lan.sh --ip 192.168.1.240
-```
-
-Ubuntu LAN stack başlatma:
-
-```bash
-docker-compose -f docker-compose.lan.yml up -d --build
-```
-
-LAN stack durdurma:
-
-```bash
-docker-compose -f docker-compose.lan.yml down
+docker compose build
 ```
 
 ## Güvenlik Sınırı
 
-Bu proje savunma amaçlı lab ortamları içindir.
+Bu proje yalnızca savunma amaçlı lab kullanımı içindir.
 
-Şunları amaçlamaz:
+Amaçlamadığı şeyler:
 
 - gerçek exploit çalıştırma
 - malware davranışı
 - kalıcı erişim
 - otomatik saldırı zinciri
-- yetki yükselme veya yatay hareket
+- yetki yükseltme
+- yatay hareket
 
-Amaç, saldırgan benzeri trafik ve kimlik denemelerini kontrollü şekilde gözlemlemektir.
+Varsayılan parolaları gerçek ağda kullanmayın. LAN modunda servisleri görünür hale getirmeden önce hedef ağın size ait ve kontrollü olduğundan emin olun.
