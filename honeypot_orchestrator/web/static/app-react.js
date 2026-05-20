@@ -25,7 +25,14 @@
     ssh: 22,
     telnet: 23,
   };
-  const DONUT_COLORS = ["#0075ff", "#21d4fd", "#4318ff", "#01b574", "#ffb547", "#e31a1a", "#a0aec0"];
+  const DONUT_COLORS = [
+    "#0075ff",
+    "#21d4fd",
+    "#4318ff",
+    "#01b574",
+    "#ffb547",
+    "#e31a1a",
+  ];
   const RISK_EVENT_WEIGHTS = {
     login_failed: 8,
     login_attempt: 12,
@@ -151,6 +158,70 @@
 
   function summarizeRangeLabel(start, end) {
     return `${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  }
+
+  function buildSuspiciousOverview(events, referenceDate) {
+    const now = referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+      ? referenceDate.getTime()
+      : Date.now();
+    const windowMs = 24 * 60 * 60 * 1000;
+    const start = now - windowMs;
+    const hourTotals = {};
+    const serviceTotals = {};
+    const ipTotals = {};
+    let totalCount = 0;
+
+    for (const event of events || []) {
+      if (!event || !event.src_ip) {
+        continue;
+      }
+      const date = parseEventTime(event.timestamp);
+      if (!date) {
+        continue;
+      }
+      const time = date.getTime();
+      if (time < start || time > now) {
+        continue;
+      }
+      totalCount += 1;
+
+      const hourStart = new Date(time);
+      hourStart.setMinutes(0, 0, 0);
+      const hourKey = hourStart.toISOString();
+      hourTotals[hourKey] = (hourTotals[hourKey] || 0) + 1;
+
+      const service = String(event.service || "unknown").toLowerCase();
+      serviceTotals[service] = (serviceTotals[service] || 0) + 1;
+
+      const ip = String(event.src_ip || "-");
+      ipTotals[ip] = (ipTotals[ip] || 0) + 1;
+    }
+
+    const topHour = Object.entries(hourTotals).sort((left, right) => right[1] - left[1])[0] || null;
+    const topService = Object.entries(serviceTotals).sort((left, right) => right[1] - left[1])[0] || null;
+    const topIp = Object.entries(ipTotals).sort((left, right) => right[1] - left[1])[0] || null;
+
+    return {
+      totalCount,
+      topHour: topHour
+        ? {
+            start: new Date(topHour[0]),
+            count: Number(topHour[1]) || 0,
+          }
+        : null,
+      topService: topService
+        ? {
+            name: topService[0],
+            count: Number(topService[1]) || 0,
+          }
+        : null,
+      topIp: topIp
+        ? {
+            ip: topIp[0],
+            count: Number(topIp[1]) || 0,
+          }
+        : null,
+    };
   }
 
   function buildRiskModel(events) {
@@ -563,9 +634,11 @@
     const events = payload && payload.events ? payload.events : [];
     const profile = payload && payload.profile && payload.profile.current ? payload.profile.current : null;
     const runningServices = services.filter((service) => service.running).length;
-    const loginAttempts = Number((stats.by_type && stats.by_type.login_attempt) || 0);
+    const suspiciousEvents = events.filter((event) => event && event.src_ip).length;
+    const totalEvents = Number(stats.total_recent_events || events.length || 0);
     const risk = buildRiskModel(events);
     const timelineReference = parseEventTime(payload && payload.generated_at);
+    const suspiciousOverview = buildSuspiciousOverview(events, timelineReference);
     const timelineRange = timelineRangeConfig(timelineRangeKey);
     const timeline = buildTimelineBuckets(events, timelineReference, timelineRangeKey);
     const timelineTotal = timeline.reduce((total, bucket) => total + bucket.count, 0);
@@ -615,10 +688,10 @@
       h(
         "section",
         { className: "metric-grid", "aria-label": "Dashboard metrics" },
+        h(MetricCard, { label: "Suspicious Events", value: String(suspiciousEvents), note: "Events with a source IP address." }),
+        h(MetricCard, { label: "Total Events", value: String(totalEvents), note: "All recent events in the overview." }),
         h(MetricCard, { label: "Running Services", value: String(runningServices), note: `${runningServices} of ${services.length} listeners online.` }),
-        h(MetricCard, { label: "Recent Events", value: String(stats.total_recent_events || 0), note: "Loaded recent log records." }),
-        h(MetricCard, { label: "Login Attempts", value: String(loginAttempts), note: "Credential-oriented events." }),
-        h(MetricCard, { label: "Profile", value: profile ? window.text(profile.display_name) : "-", note: "Currently applied persona." })
+        h(MetricCard, { label: "Active Profile", value: profile ? window.text(profile.display_name) : "-", note: "Currently applied persona." })
       ),
       h(
         "section",
@@ -645,23 +718,39 @@
               h(
                 "div",
                 { className: "risk-summary-item" },
-                h("span", null, "Peak Window"),
-                h("strong", null, risk.burstScore > 0 ? summarizeRangeLabel(risk.strongestBucket.start, risk.strongestBucket.end) : "None"),
-                h("small", null, `${Math.round(risk.burstScore)} weighted events`)
+                h("span", null, "Peak Hour"),
+                h(
+                  "strong",
+                  null,
+                  suspiciousOverview.topHour
+                    ? summarizeRangeLabel(
+                        suspiciousOverview.topHour.start,
+                        new Date(suspiciousOverview.topHour.start.getTime() + (60 * 60 * 1000))
+                      )
+                    : "None"
+                ),
+                h("small", null, suspiciousOverview.topHour ? `${suspiciousOverview.topHour.count} suspicious events` : "No suspicious traffic in the last 24 hours")
+              ),
+              h(
+                "div",
+                { className: "risk-summary-item" },
+                h("span", null, "Suspicios Events"),
+                h("strong", null, String(suspiciousOverview.totalCount || 0)),
+                h("small", null, "Total suspicious events in the last 24 hours")
               ),
               h(
                 "div",
                 { className: "risk-summary-item" },
                 h("span", null, "Top Service"),
-                h("strong", null, window.text(risk.hottestService.name)),
-                h("small", null, `${Math.round(risk.hottestService.value)} weighted events`)
+                h("strong", null, suspiciousOverview.topService ? window.text(suspiciousOverview.topService.name) : "-"),
+                h("small", null, suspiciousOverview.topService ? `${suspiciousOverview.topService.count} suspicious events` : "No source-IP activity yet")
               ),
               h(
                 "div",
                 { className: "risk-summary-item" },
-                h("span", null, "Event Mix"),
-                h("strong", null, String(risk.activeTypeCount)),
-                h("small", null, risk.activeTypeCount ? "Distinct event types seen" : "No suspicious event mix")
+                h("span", null, "Most Suspicious IP"),
+                h("strong", null, suspiciousOverview.topIp ? suspiciousOverview.topIp.ip : "-"),
+                h("small", null, suspiciousOverview.topIp ? `${suspiciousOverview.topIp.count} requests in the last 24 hours` : "No source IP activity in the last 24 hours")
               )
             ),
             h(
@@ -1210,10 +1299,14 @@
     }
 
     const profile = payload.profile && payload.profile.current ? payload.profile.current.name : "-";
-    const visibleEvents = filterLogEvents(payload.events || [], filters);
+    const events = payload.events || [];
+    const visibleEvents = filterLogEvents(events, filters);
     const services = payload.services || [];
     const stats = payload.stats || {};
     const eventTypes = Object.keys(stats.by_type || {}).sort();
+    const suspiciousEvents = events.filter((event) => event && event.src_ip).length;
+    const totalEvents = Number(stats.total_recent_events || events.length || 0);
+    const suspiciousOverview = buildSuspiciousOverview(events, parseEventTime(payload.generated_at));
 
     return h(
       React.Fragment,
@@ -1233,9 +1326,9 @@
       h(
         "section",
         { className: "metric-grid compact-metrics", "aria-label": "Log metrics" },
-        h(MetricCard, { label: "Total Recent Events", value: String(stats.total_recent_events || 0), note: "Last 1000 log records." }),
-        h(MetricCard, { label: "Showing", value: `${visibleEvents.length} events`, note: "After current filters." }),
-        h(MetricCard, { label: "Generated", value: window.text(window.formatTimestamp(payload.generated_at)), note: "Dashboard server time." })
+        h(MetricCard, { label: "Suspicious Events", value: String(suspiciousEvents), note: "Events with a source IP address." }),
+        h(MetricCard, { label: "Total Events", value: String(totalEvents), note: "All recent events in the log overview." }),
+        h(MetricCard, { label: "Most Suspicious IP", value: suspiciousOverview.topIp ? suspiciousOverview.topIp.ip : "-", note: suspiciousOverview.topIp ? `${suspiciousOverview.topIp.count} requests in the last 24 hours` : "No source IP activity in the last 24 hours" })
       ),
       h(
         "section",

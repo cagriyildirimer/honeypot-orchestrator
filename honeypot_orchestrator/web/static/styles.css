@@ -30,6 +30,9 @@
   --row-accent-bg: rgba(0, 117, 255, 0.08);
   --glass-gradient: linear-gradient(126.97deg, rgba(6, 11, 40, 0.82) 28.26%, rgba(10, 14, 35, 0.76) 91.2%);
   --glass-gradient-soft: linear-gradient(127.09deg, rgba(24, 29, 60, 0.82) 19.41%, rgba(10, 14, 35, 0.58) 76.65%);
+  --card-gradient: radial-gradient(circle at 88% 12%, var(--accent-glow), transparent 32%), linear-gradient(132deg, rgba(19, 28, 68, 0.82) 8%, rgba(10, 15, 38, 0.9) 92%);
+  --card-gradient-soft: radial-gradient(circle at 84% 10%, rgba(255, 255, 255, 0.06), transparent 28%), linear-gradient(135deg, rgba(19, 26, 60, 0.72) 0%, rgba(11, 16, 40, 0.88) 100%);
+  --card-gradient-success: radial-gradient(circle at 88% 12%, rgba(154, 230, 110, 0.16), transparent 34%), linear-gradient(135deg, rgba(9, 54, 46, 0.82) 0%, rgba(7, 28, 31, 0.92) 100%);
   --page-gradient: linear-gradient(159.02deg, #0f123b 14.25%, #090d2e 56.45%, #020515 86.14%);
   --brand-gradient: linear-gradient(97.89deg, var(--accent) 0%, var(--accent-focus) 100%);
   --chart-gradient: radial-gradient(circle at 18% 12%, var(--accent-glow), transparent 34%), linear-gradient(126.97deg, rgba(6, 11, 40, 0.92) 28.26%, rgba(10, 14, 35, 0.84) 91.2%);
@@ -44,6 +47,12 @@
   --risk-heat-glow: rgba(33, 212, 253, 0.2);
   --timeline-area-start: rgba(33, 212, 253, 0.34);
   --timeline-area-end: rgba(0, 117, 255, 0);
+  --series-1: #21d4fd;
+  --series-2: #5bbcff;
+  --series-3: #0075ff;
+  --series-4: #4f8dff;
+  --series-5: #86c8ff;
+  --series-6: #c8e6ff;
   font-family: "Aptos", "Segoe UI", "Trebuchet MS", sans-serif;
 }
 
@@ -98,6 +107,12 @@
   --brand-gradient: linear-gradient(97.89deg, #8b5cf6 0%, #ec4899 100%);
   --timeline-area-start: rgba(236, 72, 153, 0.32);
   --timeline-area-end: rgba(139, 92, 246, 0);
+  --series-1: #ec4899;
+  --series-2: #d660c7;
+  --series-3: #8b5cf6;
+  --series-4: #a67cff;
+  --series-5: #c4a6ff;
+  --series-6: #e7d7ff;
 }
 
 :root[data-theme="aurora"] {
@@ -110,6 +125,12 @@
   --brand-gradient: linear-gradient(97.89deg, #00d4ff 0%, #38f8c4 100%);
   --timeline-area-start: rgba(56, 248, 196, 0.32);
   --timeline-area-end: rgba(0, 212, 255, 0);
+  --series-1: #38f8c4;
+  --series-2: #4ce9d8;
+  --series-3: #00d4ff;
+  --series-4: #5ddcff;
+  --series-5: #99ebff;
+  --series-6: #d2f8ff;
 }
 
 :root[data-theme="emerald"] {
@@ -122,6 +143,12 @@
   --brand-gradient: linear-gradient(97.89deg, #01b574 0%, #9ae66e 100%);
   --timeline-area-start: rgba(154, 230, 110, 0.3);
   --timeline-area-end: rgba(1, 181, 116, 0);
+  --series-1: #9ae66e;
+  --series-2: #6fdc87;
+  --series-3: #01b574;
+  --series-4: #4fc894;
+  --series-5: #94e2bf;
+  --series-6: #d0f6e7;
 }
 
 :root[data-theme="sunset"] {
@@ -134,6 +161,12 @@
   --brand-gradient: linear-gradient(97.89deg, #f97316 0%, #fbcf33 100%);
   --timeline-area-start: rgba(251, 207, 51, 0.3);
   --timeline-area-end: rgba(249, 115, 22, 0);
+  --series-1: #fbcf33;
+  --series-2: #f9b94e;
+  --series-3: #f97316;
+  --series-4: #fb8f3f;
+  --series-5: #fdb97b;
+  --series-6: #ffe1b7;
 }
 
 :root[data-theme="slate"] {
@@ -146,6 +179,12 @@
   --brand-gradient: linear-gradient(97.89deg, #64748b 0%, #e2e8f0 100%);
   --timeline-area-start: rgba(226, 232, 240, 0.24);
   --timeline-area-end: rgba(100, 116, 139, 0);
+  --series-1: #e2e8f0;
+  --series-2: #cbd5e1;
+  --series-3: #94a3b8;
+  --series-4: #7f92ab;
+  --series-5: #b7c4d4;
+  --series-6: #dce4ef;
 }
 
 * {
@@ -343,7 +382,7 @@ pre {
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: rgba(15, 21, 53, 0.72);
+  background: var(--card-gradient-soft);
   color: var(--muted);
   font-size: 13px;
   white-space: nowrap;
@@ -797,7 +836,7 @@ th,
 .risk-copy {
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--risk-inner);
+  background: var(--card-gradient-soft);
   box-shadow: none;
 }
 
@@ -900,7 +939,7 @@ th,
 
 .risk-summary-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -908,7 +947,7 @@ th,
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: rgba(15, 21, 53, 0.58);
+  background: var(--card-gradient-soft);
 }
 
 .risk-summary-item strong {
@@ -950,9 +989,10 @@ th,
   align-content: start;
   padding: 16px;
   height: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(226, 232, 240, 0.16);
   border-radius: 12px;
-  background: rgba(15, 21, 53, 0.72);
+  background: var(--chart-gradient);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
 }
 
 .timeline-card-heading {
@@ -1052,7 +1092,7 @@ th,
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: rgba(15, 21, 53, 0.58);
+  background: var(--card-gradient-soft);
   color: var(--text);
   text-align: left;
   box-shadow: none;
@@ -1263,7 +1303,7 @@ th,
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface-subtle);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--muted);
   font-size: 13px;
 }
@@ -1337,12 +1377,12 @@ th,
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: rgba(15, 21, 53, 0.58);
+  background: var(--card-gradient-soft);
 }
 
 .service-card.live {
   border-color: var(--success-border);
-  background: var(--live-surface);
+  background: var(--card-gradient-success);
 }
 
 .service-card-header {
@@ -1436,7 +1476,7 @@ th,
   padding: 9px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface-subtle);
+  background: var(--card-gradient-soft);
   color: var(--muted);
   font-size: 13px;
 }
@@ -1517,7 +1557,7 @@ th,
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface-subtle);
+  background: var(--card-gradient-soft);
 }
 
 .settings-card h3 {
@@ -1535,7 +1575,7 @@ th,
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: rgba(6, 11, 40, 0.48);
+  background: var(--card-gradient-soft);
 }
 
 table {
@@ -1751,7 +1791,7 @@ tbody tr.selected {
 .feature-card {
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface);
+  background: var(--card-gradient);
   box-shadow: var(--shadow);
 }
 
