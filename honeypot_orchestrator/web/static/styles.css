@@ -557,7 +557,7 @@ th,
 .timeline-chart {
   position: relative;
   width: 100%;
-  min-height: 230px;
+  min-height: 190px;
   overflow: hidden;
 }
 
@@ -713,6 +713,10 @@ th,
   pointer-events: none;
   transform: translate(-50%, -100%);
   z-index: 2;
+}
+
+.timeline-tooltip.below {
+  transform: translate(-50%, 0);
 }
 
 .timeline-tooltip strong {
@@ -883,6 +887,17 @@ th,
   gap: 12px;
 }
 
+.overview-split {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 0.85fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.overview-split > * {
+  min-width: 0;
+}
+
 .risk-summary-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -918,12 +933,26 @@ th,
 }
 
 .timeline-card {
-  padding: 20px;
+  display: grid;
+  align-content: start;
+  padding: 16px 16px 14px;
+  height: 100%;
   border: 1px solid rgba(226, 232, 240, 0.16);
   background:
     var(--chart-gradient);
   color: #ffffff;
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+}
+
+.service-activity-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  align-content: start;
+  padding: 16px;
+  height: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(15, 21, 53, 0.72);
 }
 
 .timeline-card-heading {
@@ -937,7 +966,7 @@ th,
 .timeline-card-heading h3 {
   margin-top: 4px;
   color: #ffffff;
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1.2;
   font-weight: 800;
 }
@@ -987,7 +1016,7 @@ th,
 .timeline-empty {
   display: grid;
   place-items: center;
-  min-height: 230px;
+  min-height: 190px;
   border: 1px dashed rgba(255, 255, 255, 0.22);
   border-radius: 8px;
   color: rgba(255, 255, 255, 0.68);
@@ -1126,10 +1155,21 @@ th,
   align-items: center;
 }
 
+.donut-layout.compact {
+  grid-template-columns: minmax(150px, 190px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  height: 100%;
+}
+
 .donut-chart {
   position: relative;
   width: min(240px, 100%);
   margin: 0 auto;
+}
+
+.donut-layout.compact .donut-chart {
+  width: min(180px, 100%);
 }
 
 .donut-svg {
@@ -1151,11 +1191,43 @@ th,
   stroke-linecap: round;
   transition: opacity 0.16s ease, stroke-width 0.16s ease;
   cursor: crosshair;
+  outline: none;
 }
 
-.donut-segment:hover {
+.donut-segment:hover,
+.donut-segment.active,
+.donut-segment:focus-visible {
   opacity: 0.82;
   stroke-width: 20;
+}
+
+.donut-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  display: grid;
+  gap: 2px;
+  min-width: 110px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(15, 21, 53, 0.92);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.donut-tooltip strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.donut-tooltip span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .donut-center-label {
@@ -1178,6 +1250,11 @@ th,
   list-style: none;
 }
 
+.donut-legend.compact {
+  gap: 6px;
+  align-content: start;
+}
+
 .donut-legend li {
   display: flex;
   align-items: center;
@@ -1189,6 +1266,11 @@ th,
   background: var(--surface-subtle);
   color: var(--muted);
   font-size: 13px;
+}
+
+.donut-legend.compact li {
+  padding: 7px 9px;
+  font-size: 12px;
 }
 
 .donut-legend span {
@@ -1824,6 +1906,7 @@ tbody tr.selected {
 	  .metric-grid,
 	  .metric-grid.compact-metrics,
 	  .risk-layout,
+	  .overview-split,
 	  .risk-summary-row,
 	  .theme-grid,
 	  .donut-layout,

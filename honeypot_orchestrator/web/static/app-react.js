@@ -239,7 +239,28 @@
     if (range.labelMode === "date") {
       return bucket.start.toLocaleDateString([], { month: "short", day: "numeric" });
     }
-    return bucket.start.toLocaleTimeString([], { hour: "2-digit" });
+    return bucket.start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function alignTimelineWindowStart(referenceDate, range) {
+    const base = referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+      ? new Date(referenceDate.getTime())
+      : new Date();
+    const bucketMs = range.windowMs / range.bucketCount;
+
+    if (range.key === "day") {
+      const bucketHours = Math.max(1, Math.round(bucketMs / (60 * 60 * 1000)));
+      const aligned = new Date(base.getTime());
+      aligned.setMinutes(0, 0, 0);
+      aligned.setHours(aligned.getHours() - (aligned.getHours() % bucketHours));
+      aligned.setHours(aligned.getHours() - ((range.bucketCount - 1) * bucketHours));
+      return aligned.getTime();
+    }
+
+    const aligned = new Date(base.getTime());
+    aligned.setHours(0, 0, 0, 0);
+    aligned.setDate(aligned.getDate() - (range.bucketCount - 1));
+    return aligned.getTime();
   }
 
   function buildTimelineBuckets(events, referenceDate, rangeKey) {
@@ -250,7 +271,7 @@
     const now = referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
       ? referenceDate.getTime()
       : Date.now();
-    const start = now - windowMs;
+    const start = alignTimelineWindowStart(referenceDate, range);
     const buckets = Array.from({ length: bucketCount }, (_, index) => ({
       count: 0,
       start: new Date(start + index * bucketMs),
@@ -308,8 +329,8 @@
 
   function buildTimelinePoints(timeline, peak) {
     const width = 640;
-    const height = 230;
-    const padding = { top: 24, right: 22, bottom: 42, left: 42 };
+    const height = 190;
+    const padding = { top: 20, right: 22, bottom: 34, left: 42 };
     const plotWidth = width - padding.left - padding.right;
     const plotHeight = height - padding.top - padding.bottom;
     const divisor = Math.max(1, timeline.length - 1);
@@ -325,7 +346,7 @@
     if (!points.length) {
       return "";
     }
-    const baseline = 188;
+    const baseline = 156;
     return `${smoothLinePath(points)} L ${points[points.length - 1].x} ${baseline} L ${points[0].x} ${baseline} Z`;
   }
 
@@ -645,37 +666,80 @@
             ),
             h(
               "div",
-              { className: "timeline-card" },
+              { className: "overview-split" },
               h(
                 "div",
-                { className: "timeline-card-heading" },
+                { className: "timeline-card" },
                 h(
                   "div",
-                  null,
-                  h("span", { className: "timeline-kicker" }, "Overview"),
-                  h("h3", null, "Event Timeline")
+                  { className: "timeline-card-heading" },
+                  h(
+                    "div",
+                    null,
+                    h("span", { className: "timeline-kicker" }, "Overview"),
+                    h("h3", null, "Event Timeline")
+                  ),
+                  h(
+                    "div",
+                    { className: "timeline-pills", "aria-label": "Timeline range" },
+                    TIMELINE_RANGES.map((range) =>
+                      h(
+                        "button",
+                        {
+                          key: range.key,
+                          type: "button",
+                          className: `timeline-pill${range.key === timelineRangeKey ? " active" : ""}`,
+                          onClick: () => setTimelineRangeKey(range.key),
+                        },
+                        range.label
+                      )
+                    ),
+                    h("span", { className: "timeline-pill metric" }, `${timelineTotal} events`)
+                  )
+                ),
+                timelineTotal
+                  ? h(TimelineLineChart, { timeline, peak: timelinePeak, range: timelineRange })
+                  : h("div", { className: "timeline-empty" }, `No events in the selected ${timelineRange.label.toLowerCase()} range.`)
+              ),
+              h(
+                "div",
+                { className: "service-activity-card" },
+                h(
+                  "div",
+                  { className: "section-heading compact" },
+                  h(
+                    "div",
+                    null,
+                    h("h2", null, "Service Activity"),
+                    h("p", null, "Event distribution by service.")
+                  ),
+                  h("span", { className: "status-counter" }, `${events.length} events`)
                 ),
                 h(
                   "div",
-                  { className: "timeline-pills", "aria-label": "Timeline range" },
-                  TIMELINE_RANGES.map((range) =>
-                    h(
-                      "button",
-                      {
-                        key: range.key,
-                        type: "button",
-                        className: `timeline-pill${range.key === timelineRangeKey ? " active" : ""}`,
-                        onClick: () => setTimelineRangeKey(range.key),
-                      },
-                      range.label
-                    )
-                  ),
-                  h("span", { className: "timeline-pill metric" }, `${timelineTotal} events`)
+                  { className: "donut-layout compact" },
+                  h(ServiceActivityDonut, { entries: serviceEntries }),
+                  h(
+                    "ul",
+                    { className: "donut-legend compact" },
+                    serviceEntries.length
+                      ? serviceEntries.map(([service, count], index) =>
+                          h(
+                            "li",
+                            { key: service },
+                            h("span", null,
+                              h("i", {
+                                style: { background: DONUT_COLORS[index % DONUT_COLORS.length] },
+                              }),
+                              service
+                            ),
+                            h("strong", null, String(count))
+                          )
+                        )
+                      : h("li", null, h("span", null, "No service activity yet."), h("strong", null, "0"))
+                  )
                 )
-              ),
-              timelineTotal
-                ? h(TimelineLineChart, { timeline, peak: timelinePeak, range: timelineRange })
-                : h("div", { className: "timeline-empty" }, `No events in the selected ${timelineRange.label.toLowerCase()} range.`)
+              )
             )
           )
         )
@@ -695,41 +759,6 @@
           h("span", { className: "status-counter" }, `${Math.round(risk.weightedTotal)} signals`)
         ),
         h(ActivityHeatGrid, { model: risk })
-      ),
-      h(
-        "section",
-        { className: "panel donut-panel" },
-        h(
-          "div",
-          { className: "section-heading" },
-          h(
-            "div",
-            null,
-            h("h2", null, "Service Activity"),
-            h("p", null, "Event distribution by service.")
-          ),
-          h("span", { className: "status-counter" }, `${events.length} events`)
-        ),
-        h(
-          "ul",
-          { className: "summary-list" },
-          serviceEntries.length
-            ? serviceEntries.map(([service, count], index) =>
-                h(
-                  "li",
-                  { key: service },
-                  h("span", null,
-                    h("i", {
-                      className: "summary-dot",
-                      style: { background: DONUT_COLORS[index % DONUT_COLORS.length] },
-                    }),
-                    service
-                  ),
-                  h("strong", null, String(count))
-                )
-              )
-            : h("li", null, h("span", null, "No service activity yet."), h("strong", null, "0"))
-        )
       ),
       h(
         "section",
@@ -793,6 +822,61 @@
     return h("div", { className: "activity-heat-grid", style: { "--heat-columns": String(model.buckets.length) } }, children);
   }
 
+  function ServiceActivityDonut(props) {
+    const entries = Array.isArray(props.entries) ? props.entries : [];
+    const [activeIndex, setActiveIndex] = useState(null);
+    const total = entries.reduce((sum, [, count]) => sum + (Number(count) || 0), 0);
+    const radius = 74;
+    const circumference = 2 * Math.PI * radius;
+    let offset = 0;
+    const activeEntry = activeIndex === null ? null : entries[activeIndex] || null;
+    const activeCount = activeEntry ? Number(activeEntry[1]) || 0 : 0;
+    const activePercent = total > 0 && activeEntry ? Math.round((activeCount / total) * 100) : 0;
+
+    return h(
+      "div",
+      { className: "donut-chart", onMouseLeave: () => setActiveIndex(null) },
+      h(
+        "svg",
+        { className: "donut-svg", viewBox: "0 0 220 220", role: "img", "aria-label": "Service activity donut chart" },
+        h("circle", { className: "donut-track", cx: "110", cy: "110", r: String(radius) }),
+        total
+          ? entries.map(([service, count], index) => {
+              const value = Number(count) || 0;
+              const segmentLength = (value / total) * circumference;
+              const dashOffset = -offset;
+              offset += segmentLength;
+              return h("circle", {
+                key: service,
+                className: `donut-segment${index === activeIndex ? " active" : ""}`,
+                cx: "110",
+                cy: "110",
+                r: String(radius),
+                stroke: DONUT_COLORS[index % DONUT_COLORS.length],
+                strokeDasharray: `${segmentLength} ${Math.max(0, circumference - segmentLength)}`,
+                strokeDashoffset: String(dashOffset),
+                transform: "rotate(-90 110 110)",
+                onMouseEnter: () => setActiveIndex(index),
+                onFocus: () => setActiveIndex(index),
+                onBlur: () => setActiveIndex(null),
+                tabIndex: "0",
+              });
+            })
+          : h("circle", { className: "donut-empty", cx: "110", cy: "110", r: String(radius) }),
+        h("text", { className: "donut-center-label", x: "110", y: "104", textAnchor: "middle" }, String(activeEntry ? activeCount : total)),
+        h("text", { className: "donut-center-sub", x: "110", y: "128", textAnchor: "middle" }, activeEntry ? `${activePercent}% ${activeEntry[0]}` : "events")
+      ),
+      activeEntry
+        ? h(
+            "div",
+            { className: "donut-tooltip" },
+            h("strong", null, activeEntry[0]),
+            h("span", null, `${activeCount} events • ${activePercent}%`)
+          )
+        : null
+    );
+  }
+
   function TimelineLineChart(props) {
     const timeline = props.timeline || [];
     const range = props.range || TIMELINE_RANGES[0];
@@ -803,8 +887,9 @@
     const areaPath = buildTimelineAreaPath(points);
     const activeIndex = hoverIndex === null ? null : Math.max(0, Math.min(points.length - 1, hoverIndex));
     const activePoint = activeIndex === null ? null : points[activeIndex];
+    const tooltipBelow = Boolean(activePoint && activePoint.y < 52);
     const gridLines = [0, 0.25, 0.5, 0.75, 1].map((ratio, index) => {
-      const y = Math.round(24 + ratio * 164);
+      const y = Math.round(20 + ratio * 136);
       const label = Math.round(peak * (1 - ratio));
       return [
         h("line", {
@@ -833,7 +918,7 @@
       { className: "timeline-chart", onMouseLeave: () => setHoverIndex(null) },
       h(
         "svg",
-        { className: "timeline-svg", viewBox: "0 0 640 230", role: "img", "aria-label": "Event timeline line chart" },
+        { className: "timeline-svg", viewBox: "0 0 640 190", role: "img", "aria-label": "Event timeline line chart" },
         h(
           "defs",
           null,
@@ -851,9 +936,9 @@
           ? h("line", {
               className: "timeline-hover-line",
               x1: String(activePoint.x),
-              y1: "24",
+              y1: "20",
               x2: String(activePoint.x),
-              y2: "188",
+              y2: "156",
             })
           : null,
         points.map((point, index) =>
@@ -874,7 +959,7 @@
                   key: `label-${index}`,
                   className: "timeline-label",
                   x: String(point.x),
-                  y: "216",
+                  y: "180",
                   textAnchor: "middle",
                 },
                 formatTimelineBucketLabel(point.bucket, range)
@@ -888,9 +973,9 @@
               key: `hit-${index}`,
               className: "timeline-hit-zone",
               x: String(hitBox.x),
-              y: "24",
+              y: "20",
               width: String(hitBox.width),
-              height: "164",
+              height: "136",
               onMouseEnter: () => setHoverIndex(index),
               onMouseMove: () => setHoverIndex(index),
               onFocus: () => setHoverIndex(index),
@@ -904,10 +989,10 @@
         ? h(
             "div",
             {
-              className: "timeline-tooltip",
+              className: `timeline-tooltip${tooltipBelow ? " below" : ""}`,
               style: {
                 left: `${Math.max(8, Math.min(82, (activePoint.x / 640) * 100))}%`,
-                top: `${Math.max(18, activePoint.y - 8)}px`,
+                top: `${tooltipBelow ? Math.min(150, activePoint.y + 14) : Math.max(18, activePoint.y - 8)}px`,
               },
             },
             h("strong", null, `${activePoint.bucket.count} events`),
