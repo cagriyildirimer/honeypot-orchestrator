@@ -345,11 +345,13 @@
     const start = alignTimelineWindowStart(referenceDate, range);
     const buckets = Array.from({ length: bucketCount }, (_, index) => ({
       count: 0,
+      suspiciousCount: 0,
+      totalCount: 0,
       start: new Date(start + index * bucketMs),
       end: new Date(start + (index + 1) * bucketMs),
     }));
     for (const event of events || []) {
-      if (!event || !event.src_ip) {
+      if (!event) {
         continue;
       }
       const date = parseEventTime(event.timestamp);
@@ -361,7 +363,11 @@
         continue;
       }
       const index = Math.min(bucketCount - 1, Math.floor((time - start) / bucketMs));
-      buckets[index].count += 1;
+      buckets[index].totalCount += 1;
+      if (event.src_ip) {
+        buckets[index].suspiciousCount += 1;
+      }
+      buckets[index].count = buckets[index].suspiciousCount;
     }
     return buckets;
   }
@@ -398,7 +404,7 @@
     return path.join(" ");
   }
 
-  function buildTimelinePoints(timeline, peak) {
+  function buildTimelinePoints(timeline, peak, valueKey = "count") {
     const width = 640;
     const height = 190;
     const padding = { top: 20, right: 22, bottom: 34, left: 42 };
@@ -409,7 +415,7 @@
     return timeline.map((bucket, index) => ({
       bucket,
       x: Math.round(padding.left + (index / divisor) * plotWidth),
-      y: Math.round(padding.top + plotHeight - (bucket.count / maxValue) * plotHeight),
+      y: Math.round(padding.top + plotHeight - ((Number(bucket[valueKey]) || 0) / maxValue) * plotHeight),
     }));
   }
 
@@ -641,8 +647,12 @@
     const suspiciousOverview = buildSuspiciousOverview(events, timelineReference);
     const timelineRange = timelineRangeConfig(timelineRangeKey);
     const timeline = buildTimelineBuckets(events, timelineReference, timelineRangeKey);
-    const timelineTotal = timeline.reduce((total, bucket) => total + bucket.count, 0);
-    const timelinePeak = Math.max(0, ...timeline.map((bucket) => bucket.count));
+    const timelineTotal = timeline.reduce((total, bucket) => total + bucket.suspiciousCount, 0);
+    const timelineAnyEvents = timeline.some((bucket) => bucket.totalCount > 0);
+    const timelinePeak = Math.max(
+      0,
+      ...timeline.map((bucket) => Math.max(bucket.suspiciousCount, bucket.totalCount))
+    );
     const serviceEntries = Object.entries(stats.by_service || {})
       .filter((entry) => Number(entry[1]) > 0)
       .sort((left, right) => Number(right[1]) - Number(left[1]))
@@ -781,12 +791,12 @@
                           onClick: () => setTimelineRangeKey(range.key),
                         },
                         range.label
-                      )
-                    ),
-                    h("span", { className: "timeline-pill metric" }, `${timelineTotal} events`)
+                    )
+                  ),
+                    h("span", { className: "timeline-pill metric" }, `${timelineTotal} suspicious`)
                   )
                 ),
-                timelineTotal
+                timelineAnyEvents
                   ? h(TimelineLineChart, { timeline, peak: timelinePeak, range: timelineRange })
                   : h("div", { className: "timeline-empty" }, `No events in the selected ${timelineRange.label.toLowerCase()} range.`)
               ),
@@ -971,12 +981,15 @@
     const range = props.range || TIMELINE_RANGES[0];
     const [hoverIndex, setHoverIndex] = useState(null);
     const peak = Math.max(1, props.peak || 0);
-    const points = buildTimelinePoints(timeline, peak);
-    const path = smoothLinePath(points);
-    const areaPath = buildTimelineAreaPath(points);
-    const activeIndex = hoverIndex === null ? null : Math.max(0, Math.min(points.length - 1, hoverIndex));
-    const activePoint = activeIndex === null ? null : points[activeIndex];
-    const tooltipBelow = Boolean(activePoint && activePoint.y < 52);
+    const suspiciousPoints = buildTimelinePoints(timeline, peak, "suspiciousCount");
+    const totalPoints = buildTimelinePoints(timeline, peak, "totalCount");
+    const suspiciousPath = smoothLinePath(suspiciousPoints);
+    const totalPath = smoothLinePath(totalPoints);
+    const areaPath = buildTimelineAreaPath(suspiciousPoints);
+    const activeIndex = hoverIndex === null ? null : Math.max(0, Math.min(suspiciousPoints.length - 1, hoverIndex));
+    const activePoint = activeIndex === null ? null : suspiciousPoints[activeIndex];
+    const activeTotalPoint = activeIndex === null ? null : totalPoints[activeIndex];
+    const tooltipBelow = Boolean(activePoint && Math.min(activePoint.y, activeTotalPoint ? activeTotalPoint.y : activePoint.y) < 52);
     const gridLines = [0, 0.25, 0.5, 0.75, 1].map((ratio, index) => {
       const y = Math.round(20 + ratio * 136);
       const label = Math.round(peak * (1 - ratio));
@@ -1020,7 +1033,8 @@
         ),
         gridLines,
         h("path", { className: "timeline-area", d: areaPath }),
-        h("path", { className: "timeline-line", d: path }),
+        h("path", { className: "timeline-total-line", d: totalPath }),
+        h("path", { className: "timeline-line", d: suspiciousPath }),
         activePoint
           ? h("line", {
               className: "timeline-hover-line",
@@ -1030,16 +1044,25 @@
               y2: "156",
             })
           : null,
-        points.map((point, index) =>
+        totalPoints.map((point, index) =>
+          h("circle", {
+            key: `total-point-${index}`,
+            className: `timeline-point total${index === activeIndex ? " active" : ""}`,
+            cx: String(point.x),
+            cy: String(point.y),
+            r: index === activeIndex ? "3.8" : point.bucket.totalCount ? "2.1" : "0",
+          })
+        ),
+        suspiciousPoints.map((point, index) =>
           h("circle", {
             key: `point-${index}`,
             className: `timeline-point${index === activeIndex ? " active" : ""}`,
             cx: String(point.x),
             cy: String(point.y),
-            r: index === activeIndex ? "4.2" : point.bucket.count ? "2.4" : "0",
+            r: index === activeIndex ? "4.2" : point.bucket.suspiciousCount ? "2.4" : "0",
           })
         ),
-        points.map((point, index) => {
+        suspiciousPoints.map((point, index) => {
           const labelStep = range.key === "month" ? 5 : range.key === "week" ? 1 : 2;
           return index % labelStep === 0
             ? h(
@@ -1055,9 +1078,9 @@
               )
             : null;
         }),
-        points.map((point, index) =>
+        suspiciousPoints.map((point, index) =>
           {
-            const hitBox = timelineHitBox(points, index);
+            const hitBox = timelineHitBox(suspiciousPoints, index);
             return h("rect", {
               key: `hit-${index}`,
               className: "timeline-hit-zone",
@@ -1084,8 +1107,8 @@
                 top: `${tooltipBelow ? Math.min(150, activePoint.y + 14) : Math.max(18, activePoint.y - 8)}px`,
               },
             },
-            h("strong", null, `${activePoint.bucket.count} events`),
-            h("span", null, `${formatTimelineBucketLabel(activePoint.bucket, range)} ${range.label.toLowerCase()}`)
+            h("strong", null, formatTimelineBucketLabel(activePoint.bucket, range)),
+            h("span", null, `Events: ${activePoint.bucket.totalCount} | Suspicious Events: ${activePoint.bucket.suspiciousCount}`)
           )
         : null
     );

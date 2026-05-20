@@ -47,6 +47,8 @@
   --risk-heat-glow: rgba(33, 212, 253, 0.2);
   --timeline-area-start: rgba(33, 212, 253, 0.34);
   --timeline-area-end: rgba(0, 117, 255, 0);
+  --timeline-total-line: rgba(255, 255, 255, 0.72);
+  --timeline-total-point: rgba(255, 255, 255, 0.88);
   --series-1: #21d4fd;
   --series-2: #5bbcff;
   --series-3: #0075ff;
@@ -107,6 +109,8 @@
   --brand-gradient: linear-gradient(97.89deg, #8b5cf6 0%, #ec4899 100%);
   --timeline-area-start: rgba(236, 72, 153, 0.32);
   --timeline-area-end: rgba(139, 92, 246, 0);
+  --timeline-total-line: rgba(248, 210, 255, 0.74);
+  --timeline-total-point: rgba(248, 210, 255, 0.88);
   --series-1: #ec4899;
   --series-2: #d660c7;
   --series-3: #8b5cf6;
@@ -125,6 +129,8 @@
   --brand-gradient: linear-gradient(97.89deg, #00d4ff 0%, #38f8c4 100%);
   --timeline-area-start: rgba(56, 248, 196, 0.32);
   --timeline-area-end: rgba(0, 212, 255, 0);
+  --timeline-total-line: rgba(220, 255, 249, 0.74);
+  --timeline-total-point: rgba(220, 255, 249, 0.88);
   --series-1: #38f8c4;
   --series-2: #4ce9d8;
   --series-3: #00d4ff;
@@ -143,6 +149,8 @@
   --brand-gradient: linear-gradient(97.89deg, #01b574 0%, #9ae66e 100%);
   --timeline-area-start: rgba(154, 230, 110, 0.3);
   --timeline-area-end: rgba(1, 181, 116, 0);
+  --timeline-total-line: rgba(229, 255, 216, 0.74);
+  --timeline-total-point: rgba(229, 255, 216, 0.88);
   --series-1: #9ae66e;
   --series-2: #6fdc87;
   --series-3: #01b574;
@@ -161,6 +169,8 @@
   --brand-gradient: linear-gradient(97.89deg, #f97316 0%, #fbcf33 100%);
   --timeline-area-start: rgba(251, 207, 51, 0.3);
   --timeline-area-end: rgba(249, 115, 22, 0);
+  --timeline-total-line: rgba(255, 234, 196, 0.76);
+  --timeline-total-point: rgba(255, 234, 196, 0.9);
   --series-1: #fbcf33;
   --series-2: #f9b94e;
   --series-3: #f97316;
@@ -179,6 +189,8 @@
   --brand-gradient: linear-gradient(97.89deg, #64748b 0%, #e2e8f0 100%);
   --timeline-area-start: rgba(226, 232, 240, 0.24);
   --timeline-area-end: rgba(100, 116, 139, 0);
+  --timeline-total-line: rgba(248, 250, 252, 0.72);
+  --timeline-total-point: rgba(248, 250, 252, 0.88);
   --series-1: #e2e8f0;
   --series-2: #cbd5e1;
   --series-3: #94a3b8;
@@ -708,11 +720,26 @@ th,
   filter: drop-shadow(0 4px 10px var(--accent-glow));
 }
 
+.timeline-total-line {
+  fill: none;
+  stroke: var(--timeline-total-line);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.95;
+}
+
 .timeline-point {
   fill: #ffffff;
   stroke: var(--accent-focus);
   stroke-width: 1.6;
   transition: r 140ms ease, stroke-width 140ms ease;
+}
+
+.timeline-point.total {
+  fill: var(--timeline-total-point);
+  stroke: var(--timeline-total-line);
+  stroke-width: 1.4;
 }
 
 .timeline-point.active {
