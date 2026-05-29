@@ -4,16 +4,16 @@
 
   const NAV_ITEMS = [
     { key: "dashboard", label: "Dashboard", path: "/dashboard" },
-    { key: "live", label: "Live Activity", path: "/live" },
-    { key: "whitelist", label: "Whitelist", path: "/whitelist" },
-    { key: "blacklist", label: "Blacklist", path: "/blacklist" },
     { key: "profiles", label: "Profiles", path: "/profiles" },
+    { key: "live", label: "Live Activity", path: "/live" },
     { key: "logs", label: "Logs", path: "/logs" },
   ];
   const SETTINGS_ITEMS = [
     { key: "appearance", label: "Appearance", path: "/settings/appearance" },
+    { key: "whitelist", label: "Whitelist", path: "/settings/whitelist" },
+    { key: "blocklist", label: "Blocklist", path: "/settings/blocklist" },
+    { key: "users", label: "User", path: "/settings/users" },
     { key: "system", label: "System", path: "/settings/system" },
-    { key: "users", label: "Users", path: "/settings/users" },
   ];
   const STANDARD_PORTS = {
     dns: 53,
@@ -92,11 +92,11 @@
     if (pathname === "/live") {
       return "live";
     }
-    if (pathname === "/whitelist") {
+    if (pathname === "/whitelist" || pathname === "/settings/whitelist") {
       return "whitelist";
     }
-    if (pathname === "/blacklist") {
-      return "blacklist";
+    if (pathname === "/blacklist" || pathname === "/settings/blacklist" || pathname === "/settings/blocklist") {
+      return "blocklist";
     }
     if (pathname === "/profiles") {
       return "profiles";
@@ -2393,6 +2393,7 @@
         live: "Honeypot Director Live Monitor",
         whitelist: "Honeypot Director Whitelist",
         blacklist: "Honeypot Director Blacklist",
+        blocklist: "Honeypot Director Blocklist",
         profiles: "Honeypot Director Profiles",
         logs: "Honeypot Director Logs",
         appearance: "Honeypot Director Appearance",
@@ -2456,7 +2457,7 @@
       pageNode = h(LiveActivityPage, { session, onLogout: handleLogout });
     } else if (page === "whitelist") {
       pageNode = h(WhitelistPage, { session, onLogout: handleLogout });
-    } else if (page === "blacklist") {
+    } else if (page === "blacklist" || page === "blocklist") {
       pageNode = h(BlacklistPage, { session, onLogout: handleLogout });
     } else if (page === "profiles") {
       pageNode = h(ProfilesPage, { session, onLogout: handleLogout });

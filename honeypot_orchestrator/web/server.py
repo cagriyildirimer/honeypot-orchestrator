@@ -30,6 +30,8 @@ TEMPLATE_ROUTES = {
     "/profiles": "app.html",
     "/logs": "app.html",
     "/settings/appearance": "app.html",
+    "/settings/whitelist": "app.html",
+    "/settings/blocklist": "app.html",
     "/settings/system": "app.html",
     "/settings/users": "app.html",
 }
