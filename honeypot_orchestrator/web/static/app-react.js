@@ -1253,16 +1253,48 @@
                 
                 // Construct a beautiful CLI line representing the attacker's action
                 let detailText = "";
-                if (type === "login_attempt") {
-                  detailText = `Failed authentication as username='${event.username || "unknown"}' password='${event.password || "unknown"}'`;
+                if (type === "connection") {
+                  detailText = "New raw TCP handshake completed. (Possible port scan / Nmap ping)";
+                } else if (type === "client_disconnected") {
+                  detailText = "Target disconnected from honeypot socket.";
+                } else if (type === "connection_error") {
+                  detailText = `Socket connection errored out. (Type: ${event.error || "unknown"})`;
+                } else if (type === "smb_negotiate") {
+                  detailText = "SMBv2 session negotiation initiated. (Likely smbclient, Nmap probe, or mounting attempt)";
+                } else if (type === "smb_session_setup") {
+                  detailText = "SMB session security challenge requested. (El sıkışması başlatıldı)";
+                } else if (type === "login_attempt") {
+                  if (service === "SMB") {
+                    detailText = `SMB Authentication login attempted for domain='${event.domain || "WORKGROUP"}' username='${event.username || "anonymous"}' workstation='${event.workstation || "none"}' (Authentication rejected)`;
+                  } else if (service === "MSSQL") {
+                    detailText = `MSSQL Authentication attempted for database username='${event.username || "unknown"}'. Status: login failed.`;
+                  } else if (service === "SSH") {
+                    detailText = `SSH Login attempted for username='${event.username || "unknown"}' password='${event.password || "unknown"}' (Access Denied)`;
+                  } else if (service === "FTP") {
+                    detailText = `FTP Login attempted for user='${event.username || "unknown"}' password='${event.password || "unknown"}' (Access Denied)`;
+                  } else if (service === "TELNET") {
+                    detailText = `Telnet Login attempted for user='${event.username || "unknown"}' password='${event.password || "unknown"}' (Access Denied)`;
+                  } else if (service === "LDAP") {
+                    detailText = `LDAP Bind Authentication attempted for username='${event.username || "anonymous"}' password='${event.password ? "******" : "none"}' (Invalid Credentials)`;
+                  } else {
+                    detailText = `Authentication attempted for username='${event.username || "unknown"}' (Rejected)`;
+                  }
                 } else if (type === "ftp_command") {
-                  detailText = `Command executed: ${event.command} ${event.argument || ""}`;
+                  detailText = `FTP Command executed: ${event.command} ${event.argument || ""}`;
                 } else if (type === "dns_query") {
-                  detailText = `DNS Query: ${event.query_name} (${event.query_type})`;
+                  detailText = `DNS resolution queried for name='${event.query_name}' (Record Type: ${event.query_type}, Class: ${event.query_class})`;
                 } else if (type === "ldap_search") {
-                  detailText = `LDAP Search under DN: ${event.base_dn || "rootDSE"}`;
+                  detailText = `LDAP Query executed. scope='${event.scope}' base_dn='${event.base_dn || "rootDSE"}'`;
                 } else if (type === "rdp_connection_request") {
-                  detailText = `RDP connection initiated (cookie: ${event.cookie || "none"})`;
+                  detailText = `RDP X.224 Connection Request. (Cookie: ${event.cookie || "none"})`;
+                } else if (type === "netbios_session_request") {
+                  detailText = `NetBIOS Session Request captured for target name='${event.called_name}' from caller='${event.calling_name}'`;
+                } else if (type === "netbios_followup") {
+                  detailText = `NetBIOS Follow-up request payload: signature='${event.signature}'`;
+                } else if (type === "ldaps_tls_client_hello") {
+                  detailText = `LDAPS TLS handshake started. (TLS Client Hello, Version: ${event.tls_version}, Record Type: ${event.tls_record_type})`;
+                } else if (type === "mssql_prelogin") {
+                  detailText = `MSSQL Pre-login handshake negotiated. (TDS Packet Type: ${event.packet_type})`;
                 } else if (event.summary) {
                   detailText = event.summary;
                 } else {
