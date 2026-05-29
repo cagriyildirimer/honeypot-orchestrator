@@ -92,5 +92,59 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(set(orchestrator.services), set(config.services) & set(SERVICE_REGISTRY))
 
 
+class DefenseTests(unittest.TestCase):
+    def setUp(self) -> None:
+        import honeypot_orchestrator.defense as defense
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.original_whitelist = defense.WHITELIST_PATH
+        self.original_blacklist = defense.BLACKLIST_PATH
+        defense.WHITELIST_PATH = Path(self.temp_dir.name) / "whitelist.json"
+        defense.BLACKLIST_PATH = Path(self.temp_dir.name) / "blacklist.json"
+        defense._suspicious_counters.clear()
+
+    def tearDown(self) -> None:
+        import honeypot_orchestrator.defense as defense
+        defense.WHITELIST_PATH = self.original_whitelist
+        defense.BLACKLIST_PATH = self.original_blacklist
+        self.temp_dir.cleanup()
+
+    def test_whitelist_crud(self) -> None:
+        import honeypot_orchestrator.defense as defense
+        self.assertFalse(defense.is_whitelisted("192.168.1.10"))
+        self.assertTrue(defense.add_to_whitelist("192.168.1.10", "Test whitelist"))
+        self.assertTrue(defense.is_whitelisted("192.168.1.10"))
+        self.assertFalse(defense.add_to_whitelist("192.168.1.10", "Duplicate"))
+        self.assertTrue(defense.delete_from_whitelist("192.168.1.10"))
+        self.assertFalse(defense.is_whitelisted("192.168.1.10"))
+
+    def test_blacklist_crud(self) -> None:
+        import honeypot_orchestrator.defense as defense
+        self.assertFalse(defense.is_blacklisted("192.168.1.20"))
+        self.assertTrue(defense.add_to_blacklist("192.168.1.20", "Test blacklist"))
+        self.assertTrue(defense.is_blacklisted("192.168.1.20"))
+        self.assertFalse(defense.add_to_blacklist("192.168.1.20", "Duplicate"))
+        self.assertTrue(defense.delete_from_blacklist("192.168.1.20"))
+        self.assertFalse(defense.is_blacklisted("192.168.1.20"))
+
+    def test_auto_ban_threshold(self) -> None:
+        import honeypot_orchestrator.defense as defense
+        ip = "192.168.1.30"
+        for _ in range(99):
+            defense.record_suspicious_event(ip)
+        self.assertFalse(defense.is_blacklisted(ip))
+        
+        # 100th event triggers auto-ban
+        defense.record_suspicious_event(ip)
+        self.assertTrue(defense.is_blacklisted(ip))
+
+    def test_auto_ban_does_not_ban_whitelisted(self) -> None:
+        import honeypot_orchestrator.defense as defense
+        ip = "192.168.1.40"
+        defense.add_to_whitelist(ip, "Allowed scanner")
+        for _ in range(150):
+            defense.record_suspicious_event(ip)
+        self.assertFalse(defense.is_blacklisted(ip))
+
+
 if __name__ == "__main__":
     unittest.main()

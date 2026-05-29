@@ -25,6 +25,8 @@ TEMPLATE_ROUTES = {
     "/login": "login.html",
     "/dashboard": "app.html",
     "/live": "app.html",
+    "/whitelist": "app.html",
+    "/blacklist": "app.html",
     "/profiles": "app.html",
     "/logs": "app.html",
     "/settings/appearance": "app.html",
@@ -278,6 +280,92 @@ class WebDashboard:
                     },
                     status=HTTPStatus.CONFLICT,
                 )
+
+        if path == "/api/whitelist" and method == "GET":
+            from honeypot_orchestrator.defense import get_whitelist
+            return self._json_response({"whitelist": get_whitelist()})
+
+        if path == "/api/whitelist" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
+            payload = _decode_json_body(request["body"])
+            ip = str(payload.get("ip", "")).strip()
+            description = str(payload.get("description", "")).strip()
+            if not ip or not description:
+                return self._json_response(
+                    {"error": "IP and description are required."},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            from honeypot_orchestrator.defense import add_to_whitelist
+            if add_to_whitelist(ip, description):
+                from honeypot_orchestrator.defense import get_whitelist
+                return self._json_response({"ok": True, "whitelist": get_whitelist()})
+            return self._json_response(
+                {"error": "Failed to add or already exists."},
+                status=HTTPStatus.CONFLICT,
+            )
+
+        if path == "/api/whitelist/delete" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
+            payload = _decode_json_body(request["body"])
+            ip = str(payload.get("ip", "")).strip()
+            if not ip:
+                return self._json_response(
+                    {"error": "IP is required."},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            from honeypot_orchestrator.defense import delete_from_whitelist
+            if delete_from_whitelist(ip):
+                from honeypot_orchestrator.defense import get_whitelist
+                return self._json_response({"ok": True, "whitelist": get_whitelist()})
+            return self._json_response(
+                {"error": "Not found in whitelist."},
+                status=HTTPStatus.NOT_FOUND,
+            )
+
+        if path == "/api/blacklist" and method == "GET":
+            from honeypot_orchestrator.defense import get_blacklist
+            return self._json_response({"blacklist": get_blacklist()})
+
+        if path == "/api/blacklist" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
+            payload = _decode_json_body(request["body"])
+            ip = str(payload.get("ip", "")).strip()
+            description = str(payload.get("description", "")).strip()
+            if not ip or not description:
+                return self._json_response(
+                    {"error": "IP/MAC and description are required."},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            from honeypot_orchestrator.defense import add_to_blacklist
+            if add_to_blacklist(ip, description):
+                from honeypot_orchestrator.defense import get_blacklist
+                return self._json_response({"ok": True, "blacklist": get_blacklist()})
+            return self._json_response(
+                {"error": "Failed to add or already exists."},
+                status=HTTPStatus.CONFLICT,
+            )
+
+        if path == "/api/blacklist/delete" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
+            payload = _decode_json_body(request["body"])
+            ip = str(payload.get("ip", "")).strip()
+            if not ip:
+                return self._json_response(
+                    {"error": "IP/MAC is required."},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+            from honeypot_orchestrator.defense import delete_from_blacklist
+            if delete_from_blacklist(ip):
+                from honeypot_orchestrator.defense import get_blacklist
+                return self._json_response({"ok": True, "blacklist": get_blacklist()})
+            return self._json_response(
+                {"error": "Not found in blacklist."},
+                status=HTTPStatus.NOT_FOUND,
+            )
 
         if path.startswith("/api/"):
             return self._json_response(
@@ -647,6 +735,30 @@ class WebDashboard:
         ]
         by_service = Counter(record.get("service", "unknown") for record in records)
         by_type = Counter(record.get("event_type", "unknown") for record in records)
+
+        # Calculate top IP in the last 24 hours and dynamically resolve its MAC
+        now_ts = time.time()
+        start_ts = now_ts - 24 * 60 * 60
+        ip_totals = {}
+        for record in records:
+            ts_str = record.get("timestamp", "")
+            if not ts_str or not record.get("src_ip"):
+                continue
+            try:
+                dt = datetime.strptime(ts_str.replace(" UTC", ""), "%Y-%m-%d %H:%M:%S")
+                dt = dt.replace(tzinfo=UTC)
+                if start_ts <= dt.timestamp() <= now_ts:
+                    ip = str(record.get("src_ip"))
+                    ip_totals[ip] = ip_totals.get(ip, 0) + 1
+            except Exception:
+                pass
+
+        top_mac = "unknown"
+        if ip_totals:
+            from honeypot_orchestrator.defense import resolve_mac
+            top_ip = max(ip_totals, key=ip_totals.get)
+            top_mac = resolve_mac(top_ip)
+
         return {
             "services": self.orchestrator.service_status(display_host),
             "profile": self.orchestrator.profile_status(),
@@ -660,6 +772,7 @@ class WebDashboard:
                 "total_recent_events": len(records),
                 "by_service": dict(by_service),
                 "by_type": dict(by_type),
+                "top_ip_mac": top_mac,
             },
             "events": filtered[:limit],
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),

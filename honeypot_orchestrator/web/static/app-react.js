@@ -5,6 +5,8 @@
   const NAV_ITEMS = [
     { key: "dashboard", label: "Dashboard", path: "/dashboard" },
     { key: "live", label: "Live Activity", path: "/live" },
+    { key: "whitelist", label: "Whitelist", path: "/whitelist" },
+    { key: "blacklist", label: "Blacklist", path: "/blacklist" },
     { key: "profiles", label: "Profiles", path: "/profiles" },
     { key: "logs", label: "Logs", path: "/logs" },
   ];
@@ -89,6 +91,12 @@
     }
     if (pathname === "/live") {
       return "live";
+    }
+    if (pathname === "/whitelist") {
+      return "whitelist";
+    }
+    if (pathname === "/blacklist") {
+      return "blacklist";
     }
     if (pathname === "/profiles") {
       return "profiles";
@@ -764,7 +772,11 @@
                 { className: "risk-summary-item" },
                 h("span", null, "Most Suspicious IP"),
                 h("strong", null, suspiciousOverview.topIp ? suspiciousOverview.topIp.ip : "-"),
-                h("small", null, suspiciousOverview.topIp ? `${suspiciousOverview.topIp.count} requests in the last 24 hours` : "No source IP activity in the last 24 hours")
+                h("small", null, suspiciousOverview.topIp
+                  ? (stats.top_ip_mac && stats.top_ip_mac !== "unknown" && stats.top_ip_mac !== "N/A"
+                    ? `MAC: ${stats.top_ip_mac} (${suspiciousOverview.topIp.count} requests)`
+                    : `${suspiciousOverview.topIp.count} requests in the last 24 hours`)
+                  : "No source IP activity in the last 24 hours")
               )
             ),
             h(
@@ -1311,7 +1323,7 @@
                       paddingBottom: "8px"
                     }
                   },
-                  h("span", { style: { color: "rgba(255,255,255,0.4)", marginRight: "10px" } }, `[${timestamp}]`),
+                  h("span", { style: { color: "rgba(255,255,255,0.4)", marginRight: "10px" } }, `[${window.formatTimestamp(event.timestamp)}]`),
                   h("span", { style: { color: "#00d4ff", fontWeight: "bold", marginRight: "10px" } }, `[${src}]`),
                   h("span", { style: { color: "#ffb547", fontWeight: "bold", marginRight: "10px" } }, `[${service}]`),
                   h("span", { style: { color: "#ffffff" } }, detailText)
@@ -1621,6 +1633,302 @@
             )
           )
         : null
+    );
+  }
+
+  function WhitelistPage(props) {
+    const [entries, setEntries] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [ip, setIp] = useState("");
+    const [description, setDescription] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+
+    async function loadWhitelist() {
+      const next = await window.requestJson("/api/whitelist");
+      if (next && next.whitelist) {
+        setEntries(next.whitelist);
+      }
+      setLoading(false);
+    }
+
+    useEffect(() => {
+      loadWhitelist().catch((error) => window.showToast(error.message, "error"));
+    }, []);
+
+    async function handleAdd(event) {
+      event.preventDefault();
+      if (props.session.role !== "admin") {
+        window.showToast("Admin access required.", "error");
+        return;
+      }
+      if (!ip.trim() || !description.trim()) {
+        window.showToast("IP and Description are required.", "error");
+        return;
+      }
+      setSubmitting(true);
+      try {
+        await window.requestJson("/api/whitelist", {
+          method: "POST",
+          body: JSON.stringify({ ip: ip.trim(), description: description.trim() }),
+        });
+        window.showToast(`IP ${ip.trim()} added to whitelist.`, "success");
+        setIp("");
+        setDescription("");
+        await loadWhitelist();
+      } catch (error) {
+        window.showToast(error.message, "error");
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
+    async function handleDelete(targetIp) {
+      if (props.session.role !== "admin") {
+        window.showToast("Admin access required.", "error");
+        return;
+      }
+      try {
+        await window.requestJson("/api/whitelist/delete", {
+          method: "POST",
+          body: JSON.stringify({ ip: targetIp }),
+        });
+        window.showToast(`IP ${targetIp} removed from whitelist.`, "success");
+        await loadWhitelist();
+      } catch (error) {
+        window.showToast(error.message, "error");
+      }
+    }
+
+    if (loading) {
+      return h("div", { className: "panel" }, "Loading whitelist...");
+    }
+
+    const isAdmin = props.session.role === "admin";
+
+    return h(
+      React.Fragment,
+      null,
+      h(
+        "header",
+        { className: "topbar" },
+        h(
+          "div",
+          null,
+          h("h1", null, "Whitelist"),
+          h("p", { className: "page-subtitle" }, "Manage whitelisted IPs that are allowed to probe the decoy services without being banned.")
+        ),
+        h(
+          "div",
+          { className: "topbar-actions" },
+          h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
+          h("button", { type: "button", className: "button secondary", onClick: loadWhitelist }, "Refresh"),
+          h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
+        )
+      ),
+      isAdmin
+        ? h(
+            "section",
+            { className: "panel" },
+            h("div", { className: "section-heading compact" }, h("div", null, h("h2", null, "Add to Whitelist"), h("p", null, "Enter details to whitelist an IP. Description is mandatory."))),
+            h(
+              "form",
+              { className: "settings-form", onSubmit: handleAdd },
+              h(
+                "div",
+                { style: { display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: "16px", alignItems: "end" } },
+                h("label", { className: "field-block", style: { marginBottom: 0 } }, h("span", null, "IP Address"), h("input", { type: "text", value: ip, onChange: (e) => setIp(e.target.value), placeholder: "e.g. 192.168.1.50", required: true })),
+                h("label", { className: "field-block", style: { marginBottom: 0 } }, h("span", null, "Reason / Description"), h("input", { type: "text", value: description, onChange: (e) => setDescription(e.target.value), placeholder: "e.g. Admin workstation for testing", required: true })),
+                h("button", { type: "submit", className: "button", disabled: submitting }, submitting ? "Adding..." : "Add IP")
+              )
+            )
+          )
+        : null,
+      h(
+        "section",
+        { className: "panel" },
+        h("div", { className: "section-heading" }, h("div", null, h("h2", null, "Whitelisted IPs"), h("p", null, "Currently whitelisted IP addresses."))),
+        h(
+          "div",
+          { className: "table-shell" },
+          h(
+            "table",
+            null,
+            h(
+              "thead",
+              null,
+              h("tr", null, h("th", null, "IP Address"), h("th", null, "Description"), h("th", null, "Added Time"), h("th", { className: "table-actions-head" }, "Actions"))
+            ),
+            h(
+              "tbody",
+              null,
+              entries.length
+                ? entries.map((entry) =>
+                    h(
+                      "tr",
+                      { key: entry.ip },
+                      h("td", null, h("span", { className: "table-strong" }, window.text(entry.ip))),
+                      h("td", null, window.text(entry.description)),
+                      h("td", null, window.text(entry.timestamp)),
+                      h(
+                        "td",
+                        { className: "table-actions-cell" },
+                        h("button", { type: "button", className: "button danger secondary", disabled: !isAdmin, onClick: () => handleDelete(entry.ip) }, "Remove")
+                      )
+                    )
+                  )
+                : h("tr", null, h("td", { colSpan: 4, className: "empty-row" }, "No whitelisted IPs found."))
+            )
+          )
+        )
+      )
+    );
+  }
+
+  function BlacklistPage(props) {
+    const [entries, setEntries] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [ip, setIp] = useState("");
+    const [description, setDescription] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+
+    async function loadBlacklist() {
+      const next = await window.requestJson("/api/blacklist");
+      if (next && next.blacklist) {
+        setEntries(next.blacklist);
+      }
+      setLoading(false);
+    }
+
+    useEffect(() => {
+      loadBlacklist().catch((error) => window.showToast(error.message, "error"));
+    }, []);
+
+    async function handleAdd(event) {
+      event.preventDefault();
+      if (props.session.role !== "admin") {
+        window.showToast("Admin access required.", "error");
+        return;
+      }
+      if (!ip.trim() || !description.trim()) {
+        window.showToast("IP/MAC and Description are required.", "error");
+        return;
+      }
+      setSubmitting(true);
+      try {
+        await window.requestJson("/api/blacklist", {
+          method: "POST",
+          body: JSON.stringify({ ip: ip.trim(), description: description.trim() }),
+        });
+        window.showToast(`Target ${ip.trim()} added to blacklist.`, "success");
+        setIp("");
+        setDescription("");
+        await loadBlacklist();
+      } catch (error) {
+        window.showToast(error.message, "error");
+      } finally {
+        setSubmitting(false);
+      }
+    }
+
+    async function handleDelete(targetIp) {
+      if (props.session.role !== "admin") {
+        window.showToast("Admin access required.", "error");
+        return;
+      }
+      try {
+        await window.requestJson("/api/blacklist/delete", {
+          method: "POST",
+          body: JSON.stringify({ ip: targetIp }),
+        });
+        window.showToast(`Target ${targetIp} removed from blacklist.`, "success");
+        await loadBlacklist();
+      } catch (error) {
+        window.showToast(error.message, "error");
+      }
+    }
+
+    if (loading) {
+      return h("div", { className: "panel" }, "Loading blacklist...");
+    }
+
+    const isAdmin = props.session.role === "admin";
+
+    return h(
+      React.Fragment,
+      null,
+      h(
+        "header",
+        { className: "topbar" },
+        h(
+          "div",
+          null,
+          h("h1", null, "Blacklist"),
+          h("p", { className: "page-subtitle" }, "Manage blacklisted IPs and MAC addresses that are blocked from connecting to honeypot services.")
+        ),
+        h(
+          "div",
+          { className: "topbar-actions" },
+          h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
+          h("button", { type: "button", className: "button secondary", onClick: loadBlacklist }, "Refresh"),
+          h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
+        )
+      ),
+      isAdmin
+        ? h(
+            "section",
+            { className: "panel" },
+            h("div", { className: "section-heading compact" }, h("div", null, h("h2", null, "Add to Blacklist"), h("p", null, "Enter details to blacklist an IP or MAC address. Description is mandatory."))),
+            h(
+              "form",
+              { className: "settings-form", onSubmit: handleAdd },
+              h(
+                "div",
+                { style: { display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: "16px", alignItems: "end" } },
+                h("label", { className: "field-block", style: { marginBottom: 0 } }, h("span", null, "IP or MAC Address"), h("input", { type: "text", value: ip, onChange: (e) => setIp(e.target.value), placeholder: "e.g. 192.168.1.100 or 00:11:22:aa:bb:cc", required: true })),
+                h("label", { className: "field-block", style: { marginBottom: 0 } }, h("span", null, "Reason / Description"), h("input", { type: "text", value: description, onChange: (e) => setDescription(e.target.value), placeholder: "e.g. Automated port scanner detected", required: true })),
+                h("button", { type: "submit", className: "button", disabled: submitting }, submitting ? "Adding..." : "Block Target")
+              )
+            )
+          )
+        : null,
+      h(
+        "section",
+        { className: "panel" },
+        h("div", { className: "section-heading" }, h("div", null, h("h2", null, "Blacklisted Targets"), h("p", null, "Currently blocked IP or MAC addresses."))),
+        h(
+          "div",
+          { className: "table-shell" },
+          h(
+            "table",
+            null,
+            h(
+              "thead",
+              null,
+              h("tr", null, h("th", null, "IP / MAC Address"), h("th", null, "Description"), h("th", null, "Blocked Time"), h("th", { className: "table-actions-head" }, "Actions"))
+            ),
+            h(
+              "tbody",
+              null,
+              entries.length
+                ? entries.map((entry) =>
+                    h(
+                      "tr",
+                      { key: entry.ip },
+                      h("td", null, h("span", { className: "table-strong" }, window.text(entry.ip))),
+                      h("td", null, window.text(entry.description)),
+                      h("td", null, window.text(entry.timestamp)),
+                      h(
+                        "td",
+                        { className: "table-actions-cell" },
+                        h("button", { type: "button", className: "button danger secondary", disabled: !isAdmin, onClick: () => handleDelete(entry.ip) }, "Unblock")
+                      )
+                    )
+                  )
+                : h("tr", null, h("td", { colSpan: 4, className: "empty-row" }, "No blacklisted targets found."))
+            )
+          )
+        )
+      )
     );
   }
 
@@ -2082,6 +2390,9 @@
     useEffect(() => {
       const titles = {
         dashboard: "Honeypot Director Dashboard",
+        live: "Honeypot Director Live Monitor",
+        whitelist: "Honeypot Director Whitelist",
+        blacklist: "Honeypot Director Blacklist",
         profiles: "Honeypot Director Profiles",
         logs: "Honeypot Director Logs",
         appearance: "Honeypot Director Appearance",
@@ -2143,6 +2454,10 @@
       pageNode = h(DashboardPage, { session, onLogout: handleLogout, navigateClick });
     } else if (page === "live") {
       pageNode = h(LiveActivityPage, { session, onLogout: handleLogout });
+    } else if (page === "whitelist") {
+      pageNode = h(WhitelistPage, { session, onLogout: handleLogout });
+    } else if (page === "blacklist") {
+      pageNode = h(BlacklistPage, { session, onLogout: handleLogout });
     } else if (page === "profiles") {
       pageNode = h(ProfilesPage, { session, onLogout: handleLogout });
     } else if (page === "logs") {

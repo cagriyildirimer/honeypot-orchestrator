@@ -24,9 +24,9 @@ class BaseHoneypotService(ABC):
     async def start(self) -> None:
         if self.running:
             return
-        # Her yeni istemci baglantisi alt siniftaki handle_client metoduna gider.
+        # Her yeni istemci baglantisi once _connection_callback metoduna gider.
         self._server = await asyncio.start_server(
-            self.handle_client,
+            self._connection_callback,
             host=self.host,
             port=self.port,
         )
@@ -87,6 +87,34 @@ class BaseHoneypotService(ABC):
             await writer.wait_closed()
         except (BrokenPipeError, ConnectionResetError):
             pass
+
+    async def _connection_callback(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        from honeypot_orchestrator.defense import is_blacklisted, record_suspicious_event
+
+        peer_ip, peer_port = self.peer(writer)
+        if is_blacklisted(peer_ip):
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+            return
+
+        record_suspicious_event(peer_ip)
+
+        try:
+            await self.handle_client(reader, writer)
+        except Exception as exc:
+            await self.log_event(
+                "connection_error",
+                src_ip=peer_ip,
+                src_port=peer_port,
+                error=type(exc).__name__,
+            )
 
     @abstractmethod
     async def handle_client(
