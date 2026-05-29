@@ -756,10 +756,12 @@ class WebDashboard:
                 pass
 
         top_mac = "unknown"
+        top_ip_blocked = False
         if ip_totals:
-            from honeypot_orchestrator.defense import resolve_mac
+            from honeypot_orchestrator.defense import resolve_mac, is_blacklisted
             top_ip = max(ip_totals, key=ip_totals.get)
             top_mac = resolve_mac(top_ip)
+            top_ip_blocked = is_blacklisted(top_ip)
 
         return {
             "services": self.orchestrator.service_status(display_host),
@@ -775,6 +777,7 @@ class WebDashboard:
                 "by_service": dict(by_service),
                 "by_type": dict(by_type),
                 "top_ip_mac": top_mac,
+                "top_ip_blocked": top_ip_blocked,
             },
             "events": filtered[:limit],
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),

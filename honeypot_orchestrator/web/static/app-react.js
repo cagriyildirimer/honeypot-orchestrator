@@ -771,7 +771,16 @@
                 "div",
                 { className: "risk-summary-item" },
                 h("span", null, "Most Suspicious IP"),
-                h("strong", null, suspiciousOverview.topIp ? suspiciousOverview.topIp.ip : "-"),
+                h("strong", null,
+                  suspiciousOverview.topIp
+                    ? [
+                        suspiciousOverview.topIp.ip,
+                        stats.top_ip_blocked
+                          ? h("span", { key: "blocked-badge", style: { color: "#e31a1a", marginLeft: "6px" }, title: "Blocked" }, "⊘")
+                          : null
+                      ]
+                    : "-"
+                ),
                 h("small", null, suspiciousOverview.topIp
                   ? (stats.top_ip_mac && stats.top_ip_mac !== "unknown" && stats.top_ip_mac !== "N/A"
                     ? `MAC: ${stats.top_ip_mac} (${suspiciousOverview.topIp.count} requests)`
