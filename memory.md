@@ -11,3 +11,17 @@
 - Use `py -m ...` on this Windows workspace; plain `python` may hit the Microsoft Store alias.
 - Extra root folders `backend/`, `frontend/`, and `vision-ui-upstream/` were removed because they were unused/untracked leftovers.
 - Current target branch for pushing is `origin/main`.
+
+## Protocol Decoy Implementations & Architectural Details
+- **HTTP Decoy (`services/http.py`)**: Simulates basic HTTP servers, parses request lines and header structures (e.g. User-Agent), and returns profile-specific mock web pages.
+- **SSH Decoy (`services/ssh.py`)**: Emulates banner greetings and password prompts. Logs standard password-based login attempts and yields authentication denials.
+- **FTP Decoy (`services/ftp.py`)**: Mimics standard command sequences (USER, PASS, QUIT) and tracks login credentials and interaction logs.
+- **DNS Decoy (`services/dns.py`)**: Listens over TCP (port 1053 default), decodes DNS query headers, names, classes, and types (A, CNAME, TXT, etc.), returning structured NXDOMAIN packet responses.
+- **NetBIOS Decoy (`services/netbios.py`)**: Decodes NetBIOS-encoded name representations, handles session requests, and logs any follow-up binary payloads.
+- **LDAP Decoy (`services/ldap.py`)**: Performs ASN.1/BER decoding, handles authentication bind payloads (generating realistic Active Directory login failures), and supports baseObject/rootDSE searches with dynamic attributes like `currentTime`.
+- **LDAPS Decoy (`services/ldaps.py`)**: Reads the initial TLS Client Hello frame to parse the incoming TLS version, then returns a realistic TLS alert payload to gracefully reject further negotiation.
+- **MSSQL Decoy (`services/mssql.py`)**: Implements TDS packet headers, pre-login table structures, and parses Login7 packets to dynamically extract credentials and return highly realistic, username-interpolated SQL Server authentication failures (`Login failed for user '{username}'.`).
+- **RDP Decoy (`services/rdp.py`)**: Decodes standard TPKT frames, parses incoming `Cookie: mstshash` routing tokens, and closes connections with negotiation failure packets.
+- **SMB Decoy (`services/smb.py`)**: A robust custom state machine supporting both SMB1 and SMB2 protocols, including SPNEGO token encapsulation, NTLM challenge-response sequences, and NTLMSSP payload decoding (Domain/Username/Workstation).
+- **Live Attacker Monitor (`/live` Page)**: A terminal-like, real-time command monitoring dashboard built directly into the Web UI. It polls targeted honeypot events at 1.5-second intervals, providing instant operational feedback of attacker connections, inputs, and commands in a premium JetBrains Mono font face. External Webhooks/Telegram integrations were removed per user specifications to keep operational views fully self-contained.
+

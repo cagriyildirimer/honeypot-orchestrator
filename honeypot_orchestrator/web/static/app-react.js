@@ -4,6 +4,7 @@
 
   const NAV_ITEMS = [
     { key: "dashboard", label: "Dashboard", path: "/dashboard" },
+    { key: "live", label: "Live Activity", path: "/live" },
     { key: "profiles", label: "Profiles", path: "/profiles" },
     { key: "logs", label: "Logs", path: "/logs" },
   ];
@@ -76,7 +77,7 @@
   const APPEARANCE_THEMES = [
     { key: "vision", label: "Vision Blue", note: "Deep blue glass with cyan highlights.", colors: ["#0075ff", "#21d4fd"] },
     { key: "nebula", label: "Nebula Violet", note: "Violet and magenta for high-contrast monitoring.", colors: ["#8b5cf6", "#ec4899"] },
-    { key: "aurora", label: "Aurora Cyan", note: "Cold cyan and mint for clean operations views.", colors: ["#00d4ff", "#38f8c4"] },
+    { key: "aurora", label: "Aurora Cyan", note: "Cold cyan and mint for clean operational views.", colors: ["#00d4ff", "#38f8c4"] },
     { key: "emerald", label: "Emerald Ops", note: "Green operational palette with soft lime accents.", colors: ["#01b574", "#9ae66e"] },
     { key: "sunset", label: "Sunset Alert", note: "Warm orange/yellow for alert-heavy dashboards.", colors: ["#f97316", "#fbcf33"] },
     { key: "slate", label: "Slate Mono", note: "Neutral steel palette for quiet long-running sessions.", colors: ["#64748b", "#e2e8f0"] },
@@ -85,6 +86,9 @@
   function pathToPage(pathname) {
     if (pathname === "/dashboard" || pathname === "/") {
       return "dashboard";
+    }
+    if (pathname === "/live") {
+      return "live";
     }
     if (pathname === "/profiles") {
       return "profiles";
@@ -1161,6 +1165,131 @@
     );
   }
 
+  function LiveActivityPage(props) {
+    const [events, setEvents] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    async function loadEvents() {
+      const next = await window.requestJson("/api/events?limit=150");
+      if (next && next.events) {
+        // Filter down to interesting security/attacker actions
+        const securityEvents = next.events.filter(e => {
+          if (!e || !e.src_ip) return false;
+          // Avoid noise, show login_attempt, command, queries, etc.
+          return e.event_type !== "service_started" && e.event_type !== "service_stopped";
+        });
+        setEvents(securityEvents);
+      }
+      setLoading(false);
+    }
+
+    usePolling(loadEvents, 1500, []);
+
+    if (loading && !events.length) {
+      return h("div", { className: "panel" }, "Loading live activity console...");
+    }
+
+    return h(
+      React.Fragment,
+      null,
+      h(
+        "header",
+        { className: "topbar" },
+        h(
+          "div",
+          null,
+          h("h1", null, "Live Attacker Monitor"),
+          h("p", { className: "page-subtitle" }, "Real-time command stream and hostile interaction logs.")
+        ),
+        h(
+          "div",
+          { className: "topbar-actions" },
+          h(
+            "button",
+            {
+              type: "button",
+              className: "button",
+              onClick: () => loadEvents(),
+            },
+            "Force Sync"
+          ),
+          h(
+            "button",
+            { type: "button", className: "button secondary", onClick: props.onLogout },
+            "Log out"
+          )
+        )
+      ),
+      h(
+        "section",
+        { className: "panel raw-panel", style: { border: "1px solid var(--border)", background: "#060b28" } },
+        h(
+          "div",
+          { className: "section-heading" },
+          h("h2", null, "Attacker Activity Console"),
+          h("p", null, "Simulated interaction outputs caught on decoy listeners.")
+        ),
+        h(
+          "div",
+          {
+            className: "json-viewer",
+            style: {
+              background: "#020410",
+              color: "#38f8c4",
+              border: "1px solid rgba(56, 248, 196, 0.25)",
+              boxShadow: "0 0 15px rgba(56, 248, 196, 0.08)",
+              fontFamily: "'JetBrains Mono', monospace",
+              padding: "18px",
+              minHeight: "480px"
+            }
+          },
+          events.length === 0
+            ? h("div", { style: { color: "#a0aec0", textAlign: "center", paddingTop: "120px" } }, "📡 Listening for target activity... Expose decoy services to start receiving live logs.")
+            : events.map((event, idx) => {
+                const timestamp = event.timestamp || "";
+                const src = `${event.src_ip}:${event.src_port || 0}`;
+                const service = String(event.service || "unknown").toUpperCase();
+                const type = event.event_type || "";
+                
+                // Construct a beautiful CLI line representing the attacker's action
+                let detailText = "";
+                if (type === "login_attempt") {
+                  detailText = `Failed authentication as username='${event.username || "unknown"}' password='${event.password || "unknown"}'`;
+                } else if (type === "ftp_command") {
+                  detailText = `Command executed: ${event.command} ${event.argument || ""}`;
+                } else if (type === "dns_query") {
+                  detailText = `DNS Query: ${event.query_name} (${event.query_type})`;
+                } else if (type === "ldap_search") {
+                  detailText = `LDAP Search under DN: ${event.base_dn || "rootDSE"}`;
+                } else if (type === "rdp_connection_request") {
+                  detailText = `RDP connection initiated (cookie: ${event.cookie || "none"})`;
+                } else if (event.summary) {
+                  detailText = event.summary;
+                } else {
+                  detailText = JSON.stringify(event);
+                }
+
+                return h(
+                  "div",
+                  {
+                    key: idx,
+                    style: {
+                      marginBottom: "12px",
+                      borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
+                      paddingBottom: "8px"
+                    }
+                  },
+                  h("span", { style: { color: "rgba(255,255,255,0.4)", marginRight: "10px" } }, `[${timestamp}]`),
+                  h("span", { style: { color: "#00d4ff", fontWeight: "bold", marginRight: "10px" } }, `[${src}]`),
+                  h("span", { style: { color: "#ffb547", fontWeight: "bold", marginRight: "10px" } }, `[${service}]`),
+                  h("span", { style: { color: "#ffffff" } }, detailText)
+                );
+              })
+        )
+      )
+    );
+  }
+
   function ProfilesPage(props) {
     const [payload, setPayload] = useState(null);
     const [selectedProfile, setSelectedProfile] = useState("");
@@ -1980,6 +2109,8 @@
     let pageNode = null;
     if (page === "dashboard") {
       pageNode = h(DashboardPage, { session, onLogout: handleLogout, navigateClick });
+    } else if (page === "live") {
+      pageNode = h(LiveActivityPage, { session, onLogout: handleLogout });
     } else if (page === "profiles") {
       pageNode = h(ProfilesPage, { session, onLogout: handleLogout });
     } else if (page === "logs") {

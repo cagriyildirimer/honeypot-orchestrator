@@ -24,6 +24,7 @@ USER_ROLES = {ROLE_ADMIN, ROLE_VIEWER}
 TEMPLATE_ROUTES = {
     "/login": "login.html",
     "/dashboard": "app.html",
+    "/live": "app.html",
     "/profiles": "app.html",
     "/logs": "app.html",
     "/settings/appearance": "app.html",

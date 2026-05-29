@@ -41,7 +41,7 @@ class MSSQLHoneypot(BaseHoneypotService):
                 username=username,
                 summary=f"MSSQL login attempt for {username or '<unknown>'}",
             )
-            await _write_tds_packet(writer, 0x04, _build_login_error_response())
+            await _write_tds_packet(writer, 0x04, _build_login_error_response(username or "sa"))
         except (BrokenPipeError, ConnectionResetError):
             await self.log_event("client_disconnected", src_ip=src_ip, src_port=src_port)
         except Exception as exc:
@@ -91,8 +91,8 @@ def _build_prelogin_response() -> bytes:
     )
 
 
-def _build_login_error_response() -> bytes:
-    error_text = "Login failed for user"
+def _build_login_error_response(username: str) -> bytes:
+    error_text = f"Login failed for user '{username}'."
     server_name = "WIN-SRV2019"
     error_token = b"".join(
         [

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from honeypot_orchestrator.event_logger import JSONLEventLogger
 from honeypot_orchestrator.profiles import HoneypotProfile
 from honeypot_orchestrator.services.base import BaseHoneypotService
 
@@ -12,7 +13,7 @@ class TelnetHoneypot(BaseHoneypotService):
         name: str,
         host: str,
         port: int,
-        logger,
+        logger: JSONLEventLogger,
         profile: HoneypotProfile,
     ) -> None:
         super().__init__(name=name, host=host, port=port, logger=logger)
