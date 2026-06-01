@@ -40,6 +40,19 @@ class TelnetProfile:
 
 
 @dataclass(frozen=True)
+class SMBProfile:
+    template_name: str
+    hostname: str
+    domain: str
+    dns_domain: str
+    native_os: str
+    native_lanman: str
+    server_guid: str
+    signing_policy: int
+    ntlm_challenge: str
+
+
+@dataclass(frozen=True)
 class HoneypotProfile:
     name: str
     display_name: str
@@ -48,6 +61,7 @@ class HoneypotProfile:
     ssh: SSHProfile
     ftp: FTPProfile
     telnet: TelnetProfile
+    smb: SMBProfile
 
 
 PROFILES: dict[str, HoneypotProfile] = {
@@ -88,6 +102,17 @@ PROFILES: dict[str, HoneypotProfile] = {
             banner="",
             password_prompt="",
             login_failed_response="",
+        ),
+        smb=SMBProfile(
+            template_name="smb_empty",
+            hostname="WORKGROUP",
+            domain="WORKGROUP",
+            dns_domain="localdomain",
+            native_os="Windows 10 Pro 19042",
+            native_lanman="Windows 10 6.3",
+            server_guid="00000000000000000000000000000000",
+            signing_policy=0,
+            ntlm_challenge="0000000000000000",
         ),
     ),
     "linux_server": HoneypotProfile(
@@ -130,6 +155,17 @@ PROFILES: dict[str, HoneypotProfile] = {
             password_prompt="Password: ",
             login_failed_response="\r\nLogin incorrect\r\n",
         ),
+        smb=SMBProfile(
+            template_name="smb_linux",
+            hostname="ubuntu-srv",
+            domain="WORKGROUP",
+            dns_domain="localdomain",
+            native_os="Samba 4.15.13-Ubuntu",
+            native_lanman="Samba 4.15.13-Ubuntu",
+            server_guid="11223344556677889900aabbccddeeff",
+            signing_policy=1,
+            ntlm_challenge="1122334455667788",
+        ),
     ),
     "windows_server": HoneypotProfile(
         name="windows_server",
@@ -169,6 +205,17 @@ PROFILES: dict[str, HoneypotProfile] = {
             banner="Microsoft Telnet Service\r\nlogin: ",
             password_prompt="Password: ",
             login_failed_response="\r\nLogon failure: unknown user name or bad password.\r\n",
+        ),
+        smb=SMBProfile(
+            template_name="smb_windows",
+            hostname="WIN-SRV2019",
+            domain="CORP",
+            dns_domain="corp.local",
+            native_os="Windows Server 2019 Standard 17763",
+            native_lanman="Windows Server 2019 6.3",
+            server_guid="7da29f0dd5324af6a9b7227bb3140f9c",
+            signing_policy=1,
+            ntlm_challenge="0123456789abcdef",
         ),
     ),
 }

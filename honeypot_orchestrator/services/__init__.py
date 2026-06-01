@@ -36,4 +36,5 @@ PROFILE_AWARE_SERVICE_TYPES: tuple[ServiceType, ...] = (
     FakeSSHHoneypot,
     FTPHoneypot,
     TelnetHoneypot,
+    SMBHoneypot,
 )

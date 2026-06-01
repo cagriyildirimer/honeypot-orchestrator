@@ -212,7 +212,7 @@ class Orchestrator:
                 continue
 
     def _sync_service_profiles(self, profile: HoneypotProfile) -> None:
-        for service_name in ("http", "ssh", "ftp", "telnet"):
+        for service_name in ("http", "ssh", "ftp", "telnet", "smb"):
             service = self.services.get(service_name)
             if service is not None and hasattr(service, "set_profile"):
                 service.set_profile(profile)

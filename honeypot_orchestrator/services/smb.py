@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import Any
 
+from honeypot_orchestrator.profiles import HoneypotProfile
 from honeypot_orchestrator.services.base import BaseHoneypotService
 
 SMB_HOSTNAME = "WIN-SRV2019"
@@ -14,6 +16,20 @@ SMB_NATIVE_LANMAN = "Windows Server 2019 6.3"
 
 
 class SMBHoneypot(BaseHoneypotService):
+    def __init__(
+        self,
+        name: str,
+        host: str,
+        port: int,
+        logger,
+        profile: HoneypotProfile,
+    ) -> None:
+        super().__init__(name=name, host=host, port=port, logger=logger)
+        self.profile = profile
+
+    def set_profile(self, profile: HoneypotProfile) -> None:
+        self.profile = profile
+
     async def handle_client(
         self,
         reader: asyncio.StreamReader,
@@ -40,6 +56,8 @@ class SMBHoneypot(BaseHoneypotService):
                         process_id=smb1_request["process_id"],
                         user_id=smb1_request["user_id"],
                         tree_id=smb1_request["tree_id"],
+                        ntlm_challenge=bytes.fromhex(self.profile.smb.ntlm_challenge),
+                        domain=self.profile.smb.domain,
                     ),
                 )
                 try:
@@ -70,6 +88,9 @@ class SMBHoneypot(BaseHoneypotService):
                             process_id=session_setup["process_id"],
                             tree_id=session_setup["tree_id"],
                             user_id=0x0800,
+                            native_os=self.profile.smb.native_os,
+                            native_lanman=self.profile.smb.native_lanman,
+                            domain=self.profile.smb.domain,
                         ),
                     )
                 return
@@ -85,11 +106,20 @@ class SMBHoneypot(BaseHoneypotService):
                 return
 
             negotiate_request = _parse_smb2_header(first_packet)
+            client_dialects = _extract_smb2_dialects(first_packet)
+
+            signing_policies = {0: "disabled", 1: "enabled", 2: "required"}
+            signing_policy_str = signing_policies.get(self.profile.smb.signing_policy, "enabled")
+
             await self.log_event(
                 "smb_negotiate",
                 src_ip=src_ip,
                 src_port=src_port,
-                dialects=", ".join(_extract_smb2_dialects(first_packet)),
+                dialects=", ".join(client_dialects),
+                dialect_negotiated="SMB 3.1.1",
+                server_guid=self.profile.smb.server_guid,
+                signing_policy=signing_policy_str,
+                native_os=self.profile.smb.native_os,
                 summary="SMB2 negotiate request captured.",
             )
             await _write_nbss_frame(
@@ -97,6 +127,8 @@ class SMBHoneypot(BaseHoneypotService):
                 _build_smb2_negotiate_response(
                     message_id=negotiate_request["message_id"],
                     credit_request=negotiate_request["credits"],
+                    server_guid=bytes.fromhex(self.profile.smb.server_guid),
+                    signing_policy=self.profile.smb.signing_policy,
                 ),
             )
 
@@ -108,6 +140,9 @@ class SMBHoneypot(BaseHoneypotService):
                 src_ip=src_ip,
                 src_port=src_port,
                 ntlm_message_type=_ntlm_message_type(ntlm_negotiate),
+                ntlm_challenge=self.profile.smb.ntlm_challenge,
+                native_os=self.profile.smb.native_os,
+                signing_policy=signing_policy_str,
                 summary="SMB session setup negotiate captured.",
             )
             await _write_nbss_frame(
@@ -116,6 +151,11 @@ class SMBHoneypot(BaseHoneypotService):
                     message_id=session_setup_request["message_id"],
                     credit_request=session_setup_request["credits"],
                     session_id=session_id,
+                    ntlm_challenge=bytes.fromhex(self.profile.smb.ntlm_challenge),
+                    domain=self.profile.smb.domain,
+                    hostname=self.profile.smb.hostname,
+                    dns_domain=self.profile.smb.dns_domain,
+                    fqdn=f"{self.profile.smb.hostname.lower()}.{self.profile.smb.dns_domain}",
                 ),
             )
 
@@ -197,17 +237,17 @@ def _extract_smb2_dialects(packet: bytes) -> list[str]:
     return dialects
 
 
-def _build_smb2_negotiate_response(*, message_id: int, credit_request: int) -> bytes:
+def _build_smb2_negotiate_response(*, message_id: int, credit_request: int, server_guid: bytes, signing_policy: int) -> bytes:
     security_blob = _spnego_negotiate_token()
     security_offset = 64 + 65
     now = _filetime(datetime.now(UTC))
     body = b"".join(
         [
             (65).to_bytes(2, "little"),
-            (1).to_bytes(2, "little"),
+            (signing_policy).to_bytes(2, "little"),
             (0x0311).to_bytes(2, "little"),
             (0x0001).to_bytes(2, "little"),
-            bytes.fromhex("7da29f0dd5324af6a9b7227bb3140f9c"),
+            server_guid,
             (0x0000007F).to_bytes(4, "little"),
             (65536).to_bytes(4, "little"),
             (65536).to_bytes(4, "little"),
@@ -232,8 +272,24 @@ def _build_smb2_negotiate_response(*, message_id: int, credit_request: int) -> b
     return header + body
 
 
-def _build_smb2_session_setup_challenge(*, message_id: int, credit_request: int, session_id: int) -> bytes:
-    security_blob = _spnego_challenge_token()
+def _build_smb2_session_setup_challenge(
+    *,
+    message_id: int,
+    credit_request: int,
+    session_id: int,
+    ntlm_challenge: bytes,
+    domain: str,
+    hostname: str,
+    dns_domain: str,
+    fqdn: str,
+) -> bytes:
+    security_blob = _spnego_challenge_token(
+        ntlm_challenge=ntlm_challenge,
+        domain=domain,
+        hostname=hostname,
+        dns_domain=dns_domain,
+        fqdn=fqdn,
+    )
     security_offset = 64 + 8
     body = b"".join(
         [
@@ -353,8 +409,16 @@ def _build_smb1_header(
     )
 
 
-def _build_smb1_negotiate_response(*, multiplex_id: int, process_id: int, user_id: int, tree_id: int) -> bytes:
-    challenge = bytes.fromhex("6a4f9c1d2e7b4081")
+def _build_smb1_negotiate_response(
+    *,
+    multiplex_id: int,
+    process_id: int,
+    user_id: int,
+    tree_id: int,
+    ntlm_challenge: bytes,
+    domain: str,
+) -> bytes:
+    challenge = ntlm_challenge
     security_mode = 0x03
     capabilities = 0x8000E3FD
     now = _filetime(datetime.now(UTC))
@@ -372,9 +436,9 @@ def _build_smb1_negotiate_response(*, multiplex_id: int, process_id: int, user_i
             now.to_bytes(8, "little"),
             (180).to_bytes(2, "little", signed=True),
             bytes([len(challenge)]),
-            (len(challenge) + len(SMB_DOMAIN) + 1).to_bytes(2, "little"),
+            (len(challenge) + len(domain) + 1).to_bytes(2, "little"),
             challenge,
-            SMB_DOMAIN.encode("ascii") + b"\x00",
+            domain.encode("ascii") + b"\x00",
         ]
     )
     header = _build_smb1_header(
@@ -390,13 +454,22 @@ def _build_smb1_negotiate_response(*, multiplex_id: int, process_id: int, user_i
     return header + body
 
 
-def _build_smb1_session_setup_response(*, multiplex_id: int, process_id: int, tree_id: int, user_id: int) -> bytes:
+def _build_smb1_session_setup_response(
+    *,
+    multiplex_id: int,
+    process_id: int,
+    tree_id: int,
+    user_id: int,
+    native_os: str,
+    native_lanman: str,
+    domain: str,
+) -> bytes:
     payload = (
-        SMB_NATIVE_OS.encode("ascii")
+        native_os.encode("ascii")
         + b"\x00"
-        + SMB_NATIVE_LANMAN.encode("ascii")
+        + native_lanman.encode("ascii")
         + b"\x00"
-        + SMB_DOMAIN.encode("ascii")
+        + domain.encode("ascii")
         + b"\x00"
     )
     body = b"".join(
@@ -544,12 +617,25 @@ def _spnego_negotiate_token() -> bytes:
     return b"\x60" + _asn1_length(len(inner)) + inner
 
 
-def _spnego_challenge_token() -> bytes:
-    ntlm_challenge = _ntlm_challenge_message()
+def _spnego_challenge_token(
+    *,
+    ntlm_challenge: bytes,
+    domain: str,
+    hostname: str,
+    dns_domain: str,
+    fqdn: str,
+) -> bytes:
+    ntlm_challenge_data = _ntlm_challenge_message(
+        challenge=ntlm_challenge,
+        domain=domain,
+        hostname=hostname,
+        dns_domain=dns_domain,
+        fqdn=fqdn,
+    )
     supported_mech = _asn1_oid("1.3.6.1.4.1.311.2.2.10")
     neg_state = b"\xa0" + _asn1_length(3) + b"\x0a\x01\x01"
     mech = b"\xa1" + _asn1_length(len(supported_mech)) + supported_mech
-    response_token = b"\xa2" + _asn1_length(len(ntlm_challenge)) + ntlm_challenge
+    response_token = b"\xa2" + _asn1_length(len(ntlm_challenge_data)) + ntlm_challenge_data
     inner = b"\x30" + _asn1_length(len(neg_state) + len(mech) + len(response_token)) + neg_state + mech + response_token
     return b"\xa1" + _asn1_length(len(inner)) + inner
 
@@ -561,15 +647,22 @@ def _spnego_reject_token() -> bytes:
     return b"\xa1" + _asn1_length(len(inner)) + inner
 
 
-def _ntlm_challenge_message() -> bytes:
-    target_name = SMB_DOMAIN.encode("utf-16le")
+def _ntlm_challenge_message(
+    *,
+    challenge: bytes,
+    domain: str,
+    hostname: str,
+    dns_domain: str,
+    fqdn: str,
+) -> bytes:
+    target_name = domain.encode("utf-16le")
     now = _filetime(datetime.now(UTC))
     target_info = b"".join(
         [
-            _ntlm_av_pair(2, SMB_DOMAIN),
-            _ntlm_av_pair(1, SMB_HOSTNAME),
-            _ntlm_av_pair(4, SMB_DNS_DOMAIN),
-            _ntlm_av_pair(3, SMB_FQDN),
+            _ntlm_av_pair(2, domain),
+            _ntlm_av_pair(1, hostname),
+            _ntlm_av_pair(4, dns_domain),
+            _ntlm_av_pair(3, fqdn),
             _ntlm_av_pair(7, now.to_bytes(8, "little"), raw=True),
             _ntlm_av_pair(9, b"\x02\x00\x00\x00", raw=True),
             _ntlm_av_pair(10, b"\x00" * 16, raw=True),
@@ -587,7 +680,7 @@ def _ntlm_challenge_message() -> bytes:
             len(target_name).to_bytes(2, "little"),
             target_name_offset.to_bytes(4, "little"),
             (0xE28A8235).to_bytes(4, "little"),
-            bytes.fromhex("0123456789abcdef"),
+            challenge,
             b"\x00" * 8,
             len(target_info).to_bytes(2, "little"),
             len(target_info).to_bytes(2, "little"),
