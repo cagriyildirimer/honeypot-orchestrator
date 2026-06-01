@@ -457,7 +457,8 @@
   }
 
   function standardPortNote(service) {
-    const standardPort = STANDARD_PORTS[service.name];
+    const baseName = service.name.split("_")[0];
+    const standardPort = STANDARD_PORTS[baseName] || STANDARD_PORTS[service.name];
     if (!standardPort) {
       return "Custom listener";
     }
@@ -468,7 +469,8 @@
   }
 
   function servicePortTone(service) {
-    const standardPort = STANDARD_PORTS[service.name];
+    const baseName = service.name.split("_")[0];
+    const standardPort = STANDARD_PORTS[baseName] || STANDARD_PORTS[service.name];
     return standardPort && standardPort === service.port ? "standard" : "lab";
   }
 
@@ -1470,7 +1472,16 @@
                     h("span", { className: `tag ${servicePortTone(service)}` }, window.text(standardPortNote(service))),
                     h("span", { className: "tag template" }, window.text(service.template))
                   ),
-                  h("p", null, service.running ? "This listener is exposed right now." : "This listener exists in the profile but is not active.")
+                  h("p", null, service.running ? "This listener is exposed right now." : "This listener exists in the profile but is not active."),
+                  (function() {
+                    const baseName = service.name.split("_")[0];
+                    const standardPort = STANDARD_PORTS[baseName] || STANDARD_PORTS[service.name];
+                    return standardPort && standardPort !== service.port
+                      ? h("p", { style: { fontSize: "11.5px", color: "#f59e0b", marginTop: "8px", display: "flex", alignItems: "center", gap: "5px", lineHeight: "1.4" } }, 
+                          `⚠️ Exposed on custom port ${service.port} to prevent host port conflict (Standard: ${standardPort}).`
+                        )
+                      : null;
+                  })()
                 )
               )
             : h("article", { className: "service-card" }, h("p", null, "No listeners are assigned to the current profile."))
