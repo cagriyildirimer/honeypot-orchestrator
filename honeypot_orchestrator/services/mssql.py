@@ -23,7 +23,7 @@ class MSSQLHoneypot(BaseHoneypotService):
                 summary="MSSQL prelogin captured.",
             )
             if packet_type == 0x12:
-                await _write_tds_packet(writer, 0x04, _build_prelogin_response())
+                await _write_tds_packet(writer, 0x12, _build_prelogin_response())
             else:
                 return
 
@@ -305,7 +305,8 @@ def _skip_all_headers(payload: bytes) -> bytes:
         return payload
     # Read first 4 bytes as a little-endian integer (TotalLength of All Headers block)
     all_headers_len = int.from_bytes(payload[0:4], "little")
-    if 4 <= all_headers_len <= len(payload):
+    # A valid All Headers block must be strictly smaller than the entire payload length
+    if 4 <= all_headers_len < len(payload):
         return payload[all_headers_len:]
     return payload
 
