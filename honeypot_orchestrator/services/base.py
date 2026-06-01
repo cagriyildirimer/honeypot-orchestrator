@@ -123,3 +123,48 @@ class BaseHoneypotService(ABC):
         writer: asyncio.StreamWriter,
     ) -> None:
         raise NotImplementedError
+
+
+class BaseUDPHoneypotService(ABC):
+    def __init__(self, name: str, host: str, port: int, logger: JSONLEventLogger) -> None:
+        self.name = name
+        self.host = host
+        self.port = port
+        self.logger = logger
+        self._transport: asyncio.DatagramTransport | None = None
+        self._protocol: asyncio.DatagramProtocol | None = None
+
+    @property
+    def running(self) -> bool:
+        return self._transport is not None
+
+    async def start(self) -> None:
+        if self.running:
+            return
+        loop = asyncio.get_running_loop()
+        self._transport, self._protocol = await loop.create_datagram_endpoint(
+            lambda: self.create_protocol(),
+            local_addr=(self.host, self.port),
+        )
+        await self.log_event("service_started", summary=f"{self.name} listening (UDP).")
+
+    async def stop(self) -> None:
+        if self._transport is None:
+            return
+        self._transport.close()
+        self._transport = None
+        self._protocol = None
+        await self.log_event("service_stopped", summary=f"{self.name} stopped.")
+
+    async def log_event(self, event_type: str, **fields: Any) -> None:
+        await self.logger.log(
+            {
+                "service": self.name,
+                "event_type": event_type,
+                **fields,
+            }
+        )
+
+    @abstractmethod
+    def create_protocol(self) -> asyncio.DatagramProtocol:
+        raise NotImplementedError

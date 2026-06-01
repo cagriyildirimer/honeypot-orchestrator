@@ -5,7 +5,7 @@ import asyncio
 from honeypot_orchestrator.config import AppConfig
 from honeypot_orchestrator.event_logger import JSONLEventLogger
 from honeypot_orchestrator.profiles import HoneypotProfile, get_profile, list_profiles, load_profile
-from honeypot_orchestrator.services import PROFILE_AWARE_SERVICE_TYPES, SERVICE_REGISTRY
+from honeypot_orchestrator.services import PROFILE_AWARE_SERVICE_TYPES, SERVICE_REGISTRY, ServiceInstance, ServiceType
 from honeypot_orchestrator.services.base import BaseHoneypotService
 from honeypot_orchestrator.web.server import WebDashboard
 
@@ -101,8 +101,8 @@ class Orchestrator:
         print(f"Active profile: {self.profile.display_name}")
         print("Profile listeners are applied automatically.")
 
-    def _build_services(self) -> dict[str, BaseHoneypotService]:
-        services: dict[str, BaseHoneypotService] = {}
+    def _build_services(self) -> dict[str, ServiceInstance]:
+        services: dict[str, ServiceInstance] = {}
         for name, service_config in self.config.services.items():
             # enabled: false olan servisler dinlemeye acilmaz.
             if not service_config.enabled:
@@ -218,11 +218,11 @@ class Orchestrator:
 
     def _create_service(
         self,
-        service_cls: type[BaseHoneypotService],
+        service_cls: ServiceType,
         name: str,
         host: str,
         port: int,
-    ) -> BaseHoneypotService:
+    ) -> ServiceInstance:
         kwargs = {
             "name": name,
             "host": host,
