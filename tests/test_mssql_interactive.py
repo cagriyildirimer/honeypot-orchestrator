@@ -78,8 +78,10 @@ class MSSQLInteractiveTests(unittest.TestCase):
 
     def test_build_success_response(self) -> None:
         response = _build_login_success_response()
-        # Verify LOGINACK token (0xAD) is present
-        self.assertEqual(response[0], 0xAD)
+        # Verify ENVCHANGE token (0xE3) is present at the beginning
+        self.assertEqual(response[0], 0xE3)
+        # Verify LOGINACK token (0xAD) is present in the stream
+        self.assertIn(b"\xad", response)
         # Verify DONE token (0xFD) is appended
         self.assertIn(b"\xfd\x00\x00\x00", response)
 

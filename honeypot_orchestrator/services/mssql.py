@@ -119,6 +119,9 @@ class MSSQLHoneypot(BaseHoneypotService):
                     elif cmd_type == 0x0E:  # TRANSACTION MANAGER
                         # Respond with an empty done token
                         await _write_tds_packet(writer, 0x04, _build_sql_empty_response())
+                    elif cmd_type == 0x03:  # RPC Request
+                        # Return empty DONE token to keep connection alive
+                        await _write_tds_packet(writer, 0x04, _build_sql_empty_response())
                     else:
                         # Unhandled packet types inside session
                         break
@@ -203,28 +206,62 @@ def _build_login_success_response() -> bytes:
             b"\x07\xd0",  # Build: 2000
         ]
     )
-    done = b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-    return login_ack + done
+    
+    # ENVCHANGE for Database: master
+    db_new = "master".encode("utf-16le")
+    envchange_db = b"".join(
+        [
+            b"\xe3",
+            (1 + 1 + len(db_new) + 1).to_bytes(2, "little"),
+            b"\x01",  # Type: 1 (Database)
+            bytes([len("master")]),
+            db_new,
+            b"\x00",  # OldLen: 0
+        ]
+    )
+    
+    # ENVCHANGE for Packet Size: 4096
+    pkt_new = "4096".encode("utf-16le")
+    envchange_pkt = b"".join(
+        [
+            b"\xe3",
+            (1 + 1 + len(pkt_new) + 1).to_bytes(2, "little"),
+            b"\x03",  # Type: 3 (Packet Size)
+            bytes([len("4096")]),
+            pkt_new,
+            b"\x00",  # OldLen: 0
+        ]
+    )
+    
+    done = b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # Exactly 13 bytes
+    return envchange_db + envchange_pkt + login_ack + done
 
 
 def _build_login_error_response(username: str) -> bytes:
     error_text = f"Login failed for user '{username}'."
     server_name = "WIN-SRV2019"
+    msg_bytes = error_text.encode("utf-16le")
+    server_bytes = server_name.encode("utf-16le")
+    
+    # 4 (Number) + 1 (State) + 1 (Severity) + 2 (MsgLen) + MsgText + 1 (ServerLen) + ServerName + 1 (ProcLen) + 4 (LineNumber)
+    remaining_len = 4 + 1 + 1 + 2 + len(msg_bytes) + 1 + len(server_bytes) + 1 + 4
+    
     error_token = b"".join(
         [
             b"\xaa",
-            (16 + len(error_text.encode("utf-16le")) + len(server_name.encode("utf-16le"))).to_bytes(2, "little"),
-            (18456).to_bytes(4, "little"),
-            b"\x01",
-            b"\x0e",
-            len(error_text).to_bytes(2, "little"),
-            error_text.encode("utf-16le"),
-            len(server_name).to_bytes(1, "little"),
-            server_name.encode("utf-16le"),
-            b"\x01",
+            remaining_len.to_bytes(2, "little"),
+            (18456).to_bytes(4, "little"),  # Error number: 18456
+            b"\x01",  # State: 1
+            b"\x0e",  # Severity: 14
+            len(error_text).to_bytes(2, "little"),  # MsgLen character count
+            msg_bytes,
+            len(server_name).to_bytes(1, "little"),  # ServerLen character count
+            server_bytes,
+            b"\x00",  # ProcLen: 0 (No procedure name)
+            b"\x00\x00\x00\x00",  # LineNumber: 0 (4 bytes)
         ]
     )
-    done_token = b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+    done_token = b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # Exactly 13 bytes
     return error_token + done_token
 
 
