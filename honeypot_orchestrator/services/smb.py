@@ -163,27 +163,156 @@ class SMBHoneypot(BaseHoneypotService):
             auth_request = _parse_smb2_header(auth_packet)
             ntlm_auth = _extract_session_setup_security_blob(auth_packet)
             identity = _parse_ntlm_authenticate(ntlm_auth)
+            
             await self.log_event(
-                "login_attempt",
+                "login_success",
                 src_ip=src_ip,
                 src_port=src_port,
                 username=identity["username"],
                 domain=identity["domain"],
                 workstation=identity["workstation"],
                 summary=(
-                    f"SMB login attempt for {identity['domain']}\\{identity['username']}"
+                    f"SMB login success for {identity['domain']}\\{identity['username']}"
                     if identity["username"]
-                    else "SMB login attempt for <unknown>"
+                    else "SMB login success for <unknown>"
                 ),
             )
+            
             await _write_nbss_frame(
                 writer,
-                _build_smb2_logon_failure(
+                _build_smb2_session_setup_success(
                     message_id=auth_request["message_id"],
                     credit_request=auth_request["credits"],
                     session_id=session_id,
                 ),
             )
+
+            while True:
+                packet = await _read_nbss_frame(reader)
+                if not packet or not packet.startswith(b"\xfeSMB"):
+                    break
+                
+                header = _parse_smb2_header(packet)
+                command = header["command"]
+                message_id = header["message_id"]
+                credit_request = header["credits"]
+                tree_id = header["tree_id"]
+                
+                if command == 0x0003: # TREE_CONNECT
+                    share_path = _parse_smb2_tree_connect_path(packet)
+                    await self.log_event(
+                        "smb_tree_connect",
+                        src_ip=src_ip,
+                        src_port=src_port,
+                        path=share_path,
+                        summary=f"SMB tree connect to {share_path}",
+                    )
+                    await _write_nbss_frame(
+                        writer,
+                        _build_smb2_tree_connect_response(
+                            message_id=message_id,
+                            credit_request=credit_request,
+                            session_id=session_id,
+                            tree_id=0x1,
+                        ),
+                    )
+                
+                elif command == 0x0004: # TREE_DISCONNECT
+                    await _write_nbss_frame(
+                        writer,
+                        _build_smb2_generic_success(
+                            command=0x0004,
+                            message_id=message_id,
+                            credit_request=credit_request,
+                            session_id=session_id,
+                            tree_id=tree_id,
+                        ),
+                    )
+                
+                elif command == 0x0005: # CREATE
+                    filename = _parse_smb2_create_filename(packet)
+                    await self.log_event(
+                        "smb_create",
+                        src_ip=src_ip,
+                        src_port=src_port,
+                        filename=filename,
+                        summary=f"SMB open/create request for {filename or '<root>'}",
+                    )
+                    await _write_nbss_frame(
+                        writer,
+                        _build_smb2_create_response(
+                            message_id=message_id,
+                            credit_request=credit_request,
+                            session_id=session_id,
+                            tree_id=tree_id,
+                            file_id=0x55aa,
+                        ),
+                    )
+                
+                elif command == 0x0006: # CLOSE
+                    await _write_nbss_frame(
+                        writer,
+                        _build_smb2_generic_success(
+                            command=0x0006,
+                            message_id=message_id,
+                            credit_request=credit_request,
+                            session_id=session_id,
+                            tree_id=tree_id,
+                        ),
+                    )
+                
+                elif command == 0x000e: # QUERY_DIRECTORY
+                    await self.log_event(
+                        "smb_query_directory",
+                        src_ip=src_ip,
+                        src_port=src_port,
+                        summary="SMB directory listing requested.",
+                    )
+                    await _write_nbss_frame(
+                        writer,
+                        _build_smb2_query_directory_response(
+                            message_id=message_id,
+                            credit_request=credit_request,
+                            session_id=session_id,
+                            tree_id=tree_id,
+                        ),
+                    )
+                
+                elif command == 0x0008: # READ
+                    await self.log_event(
+                        "smb_read_file",
+                        src_ip=src_ip,
+                        src_port=src_port,
+                        summary="SMB read file request.",
+                    )
+                    decoy_content = (
+                        "[Deployment]\r\n"
+                        f"AdminPassword={self.profile.smb.hostname}123!\r\n"
+                        f"DomainController={self.profile.smb.hostname.upper()}.{self.profile.smb.dns_domain}\r\n"
+                        f"SQLServer=SQL-PROD-01.{self.profile.smb.dns_domain}\r\n"
+                    )
+                    await _write_nbss_frame(
+                        writer,
+                        _build_smb2_read_response(
+                            message_id=message_id,
+                            credit_request=credit_request,
+                            session_id=session_id,
+                            tree_id=tree_id,
+                            content=decoy_content.encode("utf-8"),
+                        ),
+                    )
+                
+                else:
+                    await _write_nbss_frame(
+                        writer,
+                        _build_smb2_generic_success(
+                            command=command,
+                            message_id=message_id,
+                            credit_request=credit_request,
+                            session_id=session_id,
+                            tree_id=tree_id,
+                        ),
+                    )
         except (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError):
             await self.log_event("client_disconnected", src_ip=src_ip, src_port=src_port)
         except Exception as exc:
@@ -741,3 +870,239 @@ def _ntlm_av_pair(av_id: int, value: str | bytes, *, raw: bool = False) -> bytes
 def _filetime(value: datetime) -> int:
     unix_time = int(value.timestamp() * 10_000_000)
     return unix_time + 116444736000000000
+
+
+def _build_smb2_session_setup_success(*, message_id: int, credit_request: int, session_id: int) -> bytes:
+    body = b"".join(
+        [
+            (9).to_bytes(2, "little"),
+            (0).to_bytes(2, "little"),
+            (72).to_bytes(2, "little"),
+            (0).to_bytes(2, "little"),
+        ]
+    )
+    header = _build_smb2_header(
+        command=1,
+        message_id=message_id,
+        credit_request=credit_request,
+        status=0,
+        session_id=session_id,
+        tree_id=0,
+        flags=0x00000001,
+    )
+    return header + body
+
+
+def _parse_smb2_tree_connect_path(packet: bytes) -> str:
+    if len(packet) < 64 + 8:
+        return ""
+    path_offset = int.from_bytes(packet[64 + 4 : 64 + 6], "little")
+    path_length = int.from_bytes(packet[64 + 6 : 64 + 8], "little")
+    start = path_offset
+    end = start + path_length
+    if end > len(packet):
+        return ""
+    return packet[start:end].decode("utf-16le", errors="replace")
+
+
+def _build_smb2_tree_connect_response(
+    *,
+    message_id: int,
+    credit_request: int,
+    session_id: int,
+    tree_id: int,
+) -> bytes:
+    body = b"".join(
+        [
+            (16).to_bytes(2, "little"),
+            (1).to_bytes(1, "little"),
+            (0).to_bytes(1, "little"),
+            (0).to_bytes(4, "little"),
+            (0).to_bytes(4, "little"),
+            (0x001F01FF).to_bytes(4, "little"),
+        ]
+    )
+    header = _build_smb2_header(
+        command=3,
+        message_id=message_id,
+        credit_request=credit_request,
+        status=0,
+        session_id=session_id,
+        tree_id=tree_id,
+        flags=0x00000001,
+    )
+    return header + body
+
+
+def _parse_smb2_create_filename(packet: bytes) -> str:
+    if len(packet) < 64 + 48:
+        return ""
+    name_offset = int.from_bytes(packet[64 + 44 : 64 + 46], "little")
+    name_length = int.from_bytes(packet[64 + 46 : 64 + 48], "little")
+    start = name_offset
+    end = start + name_length
+    if end > len(packet):
+        return ""
+    return packet[start:end].decode("utf-16le", errors="replace")
+
+
+def _build_smb2_create_response(
+    *,
+    message_id: int,
+    credit_request: int,
+    session_id: int,
+    tree_id: int,
+    file_id: int,
+) -> bytes:
+    now = _filetime(datetime.now(UTC))
+    body = b"".join(
+        [
+            (89).to_bytes(2, "little"),
+            (0).to_bytes(1, "little"),
+            (0).to_bytes(1, "little"),
+            (1).to_bytes(4, "little"),
+            now.to_bytes(8, "little"),
+            now.to_bytes(8, "little"),
+            now.to_bytes(8, "little"),
+            now.to_bytes(8, "little"),
+            (4096).to_bytes(8, "little"),
+            (4096).to_bytes(8, "little"),
+            (0x20).to_bytes(4, "little"),
+            (0).to_bytes(4, "little"),
+            file_id.to_bytes(8, "little") + b"\x00" * 8,
+            (0).to_bytes(4, "little"),
+            (0).to_bytes(4, "little"),
+        ]
+    )
+    header = _build_smb2_header(
+        command=5,
+        message_id=message_id,
+        credit_request=credit_request,
+        status=0,
+        session_id=session_id,
+        tree_id=tree_id,
+        flags=0x00000001,
+    )
+    return header + body
+
+
+def _build_smb2_generic_success(
+    *,
+    command: int,
+    message_id: int,
+    credit_request: int,
+    session_id: int,
+    tree_id: int,
+) -> bytes:
+    body = (4).to_bytes(2, "little") + b"\x00\x02"
+    header = _build_smb2_header(
+        command=command,
+        message_id=message_id,
+        credit_request=credit_request,
+        status=0,
+        session_id=session_id,
+        tree_id=tree_id,
+        flags=0x00000001,
+    )
+    return header + body
+
+
+def _build_smb2_query_directory_response(
+    *,
+    message_id: int,
+    credit_request: int,
+    session_id: int,
+    tree_id: int,
+) -> bytes:
+    buffer = _build_dir_listing_payload()
+    body = b"".join(
+        [
+            (9).to_bytes(2, "little"),
+            (72).to_bytes(2, "little"),
+            len(buffer).to_bytes(4, "little"),
+            buffer,
+        ]
+    )
+    header = _build_smb2_header(
+        command=14,
+        message_id=message_id,
+        credit_request=credit_request,
+        status=0,
+        session_id=session_id,
+        tree_id=tree_id,
+        flags=0x00000001,
+    )
+    return header + body
+
+
+def _build_dir_listing_payload() -> bytes:
+    entries = [
+        (".", 0, True),
+        ("..", 0, True),
+        ("unattended.xml", 865, False),
+        ("deployment_config.ini", 124, False),
+        ("production_db_backup.bak", 1540320, False),
+    ]
+    
+    payload = b""
+    for index, (name, size, is_dir) in enumerate(entries):
+        encoded_name = name.encode("utf-16le")
+        entry_size = 64 + len(encoded_name)
+        padding_needed = (8 - (entry_size % 8)) % 8
+        next_offset = 0 if index == len(entries) - 1 else entry_size + padding_needed
+        
+        entry_bytes = _build_dir_entry(next_offset=next_offset, filename=name, file_size=size, is_dir=is_dir)
+        payload += entry_bytes + (b"\x00" * padding_needed)
+    return payload
+
+
+def _build_dir_entry(*, next_offset: int, filename: str, file_size: int, is_dir: bool = False) -> bytes:
+    now = _filetime(datetime.now(UTC))
+    encoded_name = filename.encode("utf-16le")
+    attrs = 0x10 if is_dir else 0x20
+    return b"".join(
+        [
+            next_offset.to_bytes(4, "little"),
+            (0).to_bytes(4, "little"),
+            now.to_bytes(8, "little"),
+            now.to_bytes(8, "little"),
+            now.to_bytes(8, "little"),
+            now.to_bytes(8, "little"),
+            file_size.to_bytes(8, "little"),
+            file_size.to_bytes(8, "little"),
+            attrs.to_bytes(4, "little"),
+            len(encoded_name).to_bytes(4, "little"),
+            encoded_name,
+        ]
+    )
+
+
+def _build_smb2_read_response(
+    *,
+    message_id: int,
+    credit_request: int,
+    session_id: int,
+    tree_id: int,
+    content: bytes,
+) -> bytes:
+    body = b"".join(
+        [
+            (17).to_bytes(2, "little"),
+            (72).to_bytes(1, "little"),
+            (0).to_bytes(1, "little"),
+            len(content).to_bytes(4, "little"),
+            (0).to_bytes(4, "little"),
+            (0).to_bytes(4, "little"),
+            content,
+        ]
+    )
+    header = _build_smb2_header(
+        command=8,
+        message_id=message_id,
+        credit_request=credit_request,
+        status=0,
+        session_id=session_id,
+        tree_id=tree_id,
+        flags=0x00000001,
+    )
+    return header + body
