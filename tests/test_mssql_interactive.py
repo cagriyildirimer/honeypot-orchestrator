@@ -8,6 +8,7 @@ from honeypot_orchestrator.services.mssql import (
     _build_login_success_response,
     _build_sql_text_response,
     _build_sql_list_response,
+    _skip_all_headers,
 )
 
 
@@ -112,3 +113,16 @@ class MSSQLInteractiveTests(unittest.TestCase):
             self.assertIn(db.encode("utf-16le"), response)
         # Verify DONE token (0xFD)
         self.assertIn(b"\xfd", response)
+
+    def test_skip_all_headers(self) -> None:
+        # Case 1: No All Headers block (normal query)
+        query = "SELECT @@version".encode("utf-16le")
+        self.assertEqual(_skip_all_headers(query), query)
+        
+        # Case 2: All Headers block present (length 22)
+        all_headers_block = (22).to_bytes(4, "little") + b"\x00" * 18
+        payload = all_headers_block + query
+        self.assertEqual(_skip_all_headers(payload), query)
+        
+        # Case 3: Empty/Too short payload
+        self.assertEqual(_skip_all_headers(b"\x01"), b"\x01")

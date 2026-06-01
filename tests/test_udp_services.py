@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import unittest
 from honeypot_orchestrator.services.llmnr import _parse_llmnr_name, _build_llmnr_response
-from honeypot_orchestrator.services.nbtnns import _decode_netbios_ns_name, _parse_netbios_ns_name, _build_netbios_ns_response
+from honeypot_orchestrator.services.nbtnns import (
+    _decode_netbios_ns_name,
+    _parse_netbios_ns_name,
+    _build_netbios_ns_response,
+    _build_netbios_ns_node_status_response,
+)
 
 
 class LLMNRTests(unittest.TestCase):
@@ -70,3 +75,21 @@ class NBTNSTests(unittest.TestCase):
         self.assertEqual(response[2:4], b"\x85\x00")
         # Verify IP is appended correctly
         self.assertTrue(response.endswith(b"\x0a\x00\x00\x32"))
+
+    def test_build_netbios_ns_node_status_response(self) -> None:
+        encoded_name = self._encode_netbios_name("*")
+        query_data = b"\xaa\xbb\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x20" + encoded_name + b"\x00\x00\x21\x00\x01"
+        
+        response = _build_netbios_ns_node_status_response(query_data)
+        
+        # Verify transaction ID is copied
+        self.assertEqual(response[0:2], b"\xaa\xbb")
+        # Verify response code flags for Node Status response: 0x8400
+        self.assertEqual(response[2:4], b"\x84\x00")
+        # Verify NBSTAT answer type: 0x0021
+        self.assertEqual(response[46:48], b"\x00\x21")
+        # Verify names presence
+        self.assertIn(b"WIN-SRV2019", response)
+        self.assertIn(b"CORP", response)
+        # Verify MAC Address
+        self.assertIn(b"\x00\x15\x5d\xa1\xb2\xc3", response)

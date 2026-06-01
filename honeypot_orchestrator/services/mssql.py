@@ -39,12 +39,15 @@ class MSSQLHoneypot(BaseHoneypotService):
             if login_packet_type != 0x10:  # 0x10 is LOGIN7
                 return
 
+            # Preprocess payload to skip All Headers block if present
+            login7_payload = _skip_all_headers(login_payload)
+
             # 3. Extract LOGIN7 credentials and metadata
-            username = _extract_login7_string(login_payload, 40, 42)
-            password = _extract_login7_password(login_payload)
-            client_hostname = _extract_login7_string(login_payload, 36, 38)
-            app_name = _extract_login7_string(login_payload, 48, 50)
-            database_name = _extract_login7_string(login_payload, 60, 62)
+            username = _extract_login7_string(login7_payload, 40, 42)
+            password = _extract_login7_password(login7_payload)
+            client_hostname = _extract_login7_string(login7_payload, 36, 38)
+            app_name = _extract_login7_string(login7_payload, 48, 50)
+            database_name = _extract_login7_string(login7_payload, 60, 62)
 
             # 4. Validate credentials
             if _is_decoy_credential(username, password):
@@ -76,7 +79,9 @@ class MSSQLHoneypot(BaseHoneypotService):
                         break
                     
                     if cmd_type == 0x01:  # SQL Batch
-                        query_str = cmd_payload.decode("utf-16le", errors="ignore").strip()
+                        # Preprocess query payload to skip All Headers block if present
+                        query_payload = _skip_all_headers(cmd_payload)
+                        query_str = query_payload.decode("utf-16le", errors="ignore").strip()
                         # Clean up query string from prefix garbage if present
                         if "\x00" in query_str:
                             query_str = "".join([c for c in query_str if ord(c) >= 32])
@@ -256,6 +261,16 @@ def _extract_login7_password(payload: bytes) -> str:
         swapped = ((xored & 0x0F) << 4) | ((xored & 0xF0) >> 4)
         decrypted.append(swapped)
     return decrypted.decode("utf-16le", errors="replace")
+
+
+def _skip_all_headers(payload: bytes) -> bytes:
+    if len(payload) < 4:
+        return payload
+    # Read first 4 bytes as a little-endian integer (TotalLength of All Headers block)
+    all_headers_len = int.from_bytes(payload[0:4], "little")
+    if 4 <= all_headers_len <= len(payload):
+        return payload[all_headers_len:]
+    return payload
 
 
 def _is_decoy_credential(username: str, password: str) -> bool:
