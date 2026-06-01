@@ -2,11 +2,27 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import Any
 
+from honeypot_orchestrator.profiles import HoneypotProfile
 from honeypot_orchestrator.services.base import BaseHoneypotService
 
 
 class LDAPHoneypot(BaseHoneypotService):
+    def __init__(
+        self,
+        name: str,
+        host: str,
+        port: int,
+        logger,
+        profile: HoneypotProfile,
+    ) -> None:
+        super().__init__(name=name, host=host, port=port, logger=logger)
+        self.profile = profile
+
+    def set_profile(self, profile: HoneypotProfile) -> None:
+        self.profile = profile
+
     async def handle_client(
         self,
         reader: asyncio.StreamReader,
@@ -72,7 +88,23 @@ class LDAPHoneypot(BaseHoneypotService):
                 scope=scope,
                 summary=f"LDAP search under {base_dn or '<rootDSE>'}",
             )
-            for response_packet in _build_rootdse_search_response(message_id):
+            
+            responses = []
+            if not base_dn:
+                responses.extend(_build_rootdse_search_response(message_id, self.profile))
+            else:
+                mock_entries = _build_ad_mock_entries(self.profile)
+                for entry in mock_entries:
+                    responses.append(_build_search_entry_response(message_id, entry["dn"], entry["attributes"]))
+                
+                done_payload = _build_generic_result_payload(result_code=0, diagnostic_message="")
+                search_done = _wrap_ldap_message(
+                    message_id,
+                    bytes([0x65]) + _ber_length(len(done_payload)) + done_payload,
+                )
+                responses.append(search_done)
+                
+            for response_packet in responses:
                 await self.write_bytes(writer, response_packet)
             return True
 
@@ -157,12 +189,14 @@ def _build_generic_result_payload(*, result_code: int, diagnostic_message: str) 
     )
 
 
-def _build_rootdse_search_response(message_id: int) -> list[bytes]:
+def _build_rootdse_search_response(message_id: int, profile: HoneypotProfile) -> list[bytes]:
     current_time = datetime.now(UTC).strftime("%Y%m%d%H%M%S.0Z")
+    dns_domain = profile.smb.dns_domain
+    dc_suffix = ",".join(f"DC={part}" for part in dns_domain.split("."))
     attributes = [
         ("currentTime", [current_time]),
-        ("defaultNamingContext", ["DC=corp,DC=local"]),
-        ("dnsHostName", ["WIN-SRV2019.corp.local"]),
+        ("defaultNamingContext", [dc_suffix]),
+        ("dnsHostName", [f"{profile.smb.hostname.upper()}.{dns_domain}"]),
         ("supportedLDAPVersion", ["3"]),
     ]
     entry_payload = b"".join(
@@ -245,3 +279,108 @@ def _read_tlv(data: bytes, offset: int) -> tuple[int, int, bytes, int]:
     if end > len(data):
         raise ValueError("Truncated BER payload.")
     return tag, length, data[offset:end], end
+
+
+def _build_search_entry_response(message_id: int, dn: str, attributes: list[tuple[str, list[str]]]) -> bytes:
+    entry_payload = b"".join(
+        [
+            _ber_octet_string(dn),
+            _ber_sequence(b"".join(_build_partial_attribute(name, values) for name, values in attributes)),
+        ]
+    )
+    return _wrap_ldap_message(
+        message_id,
+        bytes([0x64]) + _ber_length(len(entry_payload)) + entry_payload,
+    )
+
+
+def _build_ad_mock_entries(profile: HoneypotProfile) -> list[dict[str, Any]]:
+    dns_domain = profile.smb.dns_domain
+    dc_suffix = ",".join(f"DC={part}" for part in dns_domain.split("."))
+    
+    return [
+        {
+            "dn": f"CN=Administrator,CN=Users,{dc_suffix}",
+            "attributes": [
+                ("objectClass", ["top", "person", "organizationalPerson", "user"]),
+                ("cn", ["Administrator"]),
+                ("sAMAccountName", ["Administrator"]),
+                ("userPrincipalName", f"Administrator@{dns_domain}"),
+                ("memberOf", [f"CN=Domain Admins,CN=Users,{dc_suffix}", f"CN=Enterprise Admins,CN=Users,{dc_suffix}"]),
+                ("pwdLastSet", ["132649032000000000"]),
+                ("userAccountControl", ["512"]),
+            ]
+        },
+        {
+            "dn": f"CN=cagri,CN=Users,{dc_suffix}",
+            "attributes": [
+                ("objectClass", ["top", "person", "organizationalPerson", "user"]),
+                ("cn", ["cagri"]),
+                ("sAMAccountName", ["cagri"]),
+                ("userPrincipalName", f"cagri@{dns_domain}"),
+                ("memberOf", [f"CN=Domain Users,CN=Users,{dc_suffix}"]),
+                ("pwdLastSet", ["132849032000000000"]),
+                ("userAccountControl", ["512"]),
+            ]
+        },
+        {
+            "dn": f"CN=sql_service,CN=Users,{dc_suffix}",
+            "attributes": [
+                ("objectClass", ["top", "person", "organizationalPerson", "user"]),
+                ("cn", ["sql_service"]),
+                ("sAMAccountName", ["sql_service"]),
+                ("userPrincipalName", f"sql_service@{dns_domain}"),
+                ("memberOf", [f"CN=Domain Users,CN=Users,{dc_suffix}"]),
+                ("pwdLastSet", ["132949032000000000"]),
+                ("servicePrincipalName", [f"MSSQLSvc/{profile.smb.hostname.upper()}.{dns_domain}:1433"]),
+                ("userAccountControl", ["512"]),
+            ]
+        },
+        {
+            "dn": f"CN={profile.smb.hostname.upper()},OU=Domain Controllers,{dc_suffix}",
+            "attributes": [
+                ("objectClass", ["top", "person", "organizationalPerson", "user", "computer"]),
+                ("cn", [profile.smb.hostname.upper()]),
+                ("sAMAccountName", [f"{profile.smb.hostname.upper()}$"]),
+                ("dnsHostName", [f"{profile.smb.hostname.upper()}.{dns_domain}"]),
+                ("userAccountControl", ["532480"]),
+            ]
+        },
+        {
+            "dn": f"CN=SQL-PROD-01,CN=Computers,{dc_suffix}",
+            "attributes": [
+                ("objectClass", ["top", "person", "organizationalPerson", "user", "computer"]),
+                ("cn", ["SQL-PROD-01"]),
+                ("sAMAccountName", ["SQL-PROD-01$"]),
+                ("dnsHostName", [f"SQL-PROD-01.{dns_domain}"]),
+                ("userAccountControl", ["4096"]),
+            ]
+        },
+        {
+            "dn": f"CN=Domain Admins,CN=Users,{dc_suffix}",
+            "attributes": [
+                ("objectClass", ["top", "group"]),
+                ("cn", ["Domain Admins"]),
+                ("sAMAccountName", ["Domain Admins"]),
+                ("member", [f"CN=Administrator,CN=Users,{dc_suffix}"]),
+            ]
+        },
+        {
+            "dn": f"CN=Enterprise Admins,CN=Users,{dc_suffix}",
+            "attributes": [
+                ("objectClass", ["top", "group"]),
+                ("cn", ["Enterprise Admins"]),
+                ("sAMAccountName", ["Enterprise Admins"]),
+                ("member", [f"CN=Administrator,CN=Users,{dc_suffix}"]),
+            ]
+        },
+        {
+            "dn": f"CN=Domain Users,CN=Users,{dc_suffix}",
+            "attributes": [
+                ("objectClass", ["top", "group"]),
+                ("cn", ["Domain Users"]),
+                ("sAMAccountName", ["Domain Users"]),
+                ("member", [f"CN=Administrator,CN=Users,{dc_suffix}", f"CN=cagri,CN=Users,{dc_suffix}", f"CN=sql_service,CN=Users,{dc_suffix}"]),
+            ]
+        }
+    ]

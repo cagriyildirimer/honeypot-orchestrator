@@ -14,47 +14,51 @@ auth:
   password: "admin123"
 
 services:
-  http:
+  http_linux:
     enabled: true
     host: "0.0.0.0"
     port: 8080
-  ssh:
+  http_windows:
+    enabled: true
+    host: "0.0.0.0"
+    port: 8082
+  ssh_linux:
     enabled: true
     host: "0.0.0.0"
     port: 2222
-  ftp:
+  ftp_linux:
     enabled: true
     host: "0.0.0.0"
     port: 2121
-  telnet:
+  telnet_linux:
     enabled: true
     host: "0.0.0.0"
     port: 2323
-  dns:
+  dns_windows:
     enabled: true
     host: "0.0.0.0"
     port: 1053
-  netbios:
+  netbios_windows:
     enabled: true
     host: "0.0.0.0"
     port: 139
-  ldap:
+  ldap_windows:
     enabled: true
     host: "0.0.0.0"
     port: 389
-  ldaps:
+  ldaps_windows:
     enabled: true
     host: "0.0.0.0"
     port: 636
-  mssql:
+  mssql_windows:
     enabled: true
     host: "0.0.0.0"
     port: 1433
-  rdp:
+  rdp_windows:
     enabled: true
     host: "0.0.0.0"
     port: 3389
-  smb:
+  smb_windows:
     enabled: true
     host: "0.0.0.0"
     port: 1445

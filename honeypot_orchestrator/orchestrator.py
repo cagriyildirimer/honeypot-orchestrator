@@ -126,13 +126,13 @@ class Orchestrator:
         return host
 
     def _service_template_name(self, service_name: str) -> str:
-        if service_name == "http":
+        if service_name.startswith("http"):
             return self.profile.http.template_name
-        if service_name == "ssh":
+        if service_name.startswith("ssh"):
             return self.profile.ssh.template_name
-        if service_name == "ftp":
+        if service_name.startswith("ftp"):
             return self.profile.ftp.template_name
-        if service_name == "telnet":
+        if service_name.startswith("telnet"):
             return self.profile.telnet.template_name
         return service_name
 
@@ -212,9 +212,8 @@ class Orchestrator:
                 continue
 
     def _sync_service_profiles(self, profile: HoneypotProfile) -> None:
-        for service_name in ("http", "ssh", "ftp", "telnet", "smb"):
-            service = self.services.get(service_name)
-            if service is not None and hasattr(service, "set_profile"):
+        for service in self.services.values():
+            if hasattr(service, "set_profile"):
                 service.set_profile(profile)
 
     def _create_service(

@@ -2,10 +2,25 @@ from __future__ import annotations
 
 import asyncio
 
+from honeypot_orchestrator.profiles import HoneypotProfile
 from honeypot_orchestrator.services.base import BaseHoneypotService
 
 
 class LDAPSHoneypot(BaseHoneypotService):
+    def __init__(
+        self,
+        name: str,
+        host: str,
+        port: int,
+        logger,
+        profile: HoneypotProfile,
+    ) -> None:
+        super().__init__(name=name, host=host, port=port, logger=logger)
+        self.profile = profile
+
+    def set_profile(self, profile: HoneypotProfile) -> None:
+        self.profile = profile
+
     async def handle_client(
         self,
         reader: asyncio.StreamReader,

@@ -118,7 +118,7 @@ PROFILES: dict[str, HoneypotProfile] = {
     "linux_server": HoneypotProfile(
         name="linux_server",
         display_name="Linux Server Profile",
-        services=("http", "ssh", "ftp", "telnet"),
+        services=("http_linux", "ssh_linux", "ftp_linux", "telnet_linux"),
         http=HTTPProfile(
             template_name="http_linux",
             server_header="nginx/1.18.0",
@@ -170,7 +170,7 @@ PROFILES: dict[str, HoneypotProfile] = {
     "windows_server": HoneypotProfile(
         name="windows_server",
         display_name="Windows Server Profile",
-        services=("http", "dns", "netbios", "ldap", "ldaps", "mssql", "rdp", "smb"),
+        services=("http_windows", "dns_windows", "netbios_windows", "ldap_windows", "ldaps_windows", "mssql_windows", "rdp_windows", "smb_windows"),
         http=HTTPProfile(
             template_name="http_windows",
             server_header="Microsoft-IIS/10.0",

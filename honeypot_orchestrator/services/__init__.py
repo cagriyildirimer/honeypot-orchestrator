@@ -18,17 +18,18 @@ from honeypot_orchestrator.services.telnet import TelnetHoneypot
 ServiceType = type[BaseHoneypotService]
 
 SERVICE_REGISTRY: dict[str, ServiceType] = {
-    "http": HTTPHoneypot,
-    "ssh": FakeSSHHoneypot,
-    "ftp": FTPHoneypot,
-    "telnet": TelnetHoneypot,
-    "dns": DNSHoneypot,
-    "netbios": NetBIOSHoneypot,
-    "ldap": LDAPHoneypot,
-    "ldaps": LDAPSHoneypot,
-    "mssql": MSSQLHoneypot,
-    "rdp": RDPHoneypot,
-    "smb": SMBHoneypot,
+    "http_linux": HTTPHoneypot,
+    "http_windows": HTTPHoneypot,
+    "ssh_linux": FakeSSHHoneypot,
+    "ftp_linux": FTPHoneypot,
+    "telnet_linux": TelnetHoneypot,
+    "dns_windows": DNSHoneypot,
+    "netbios_windows": NetBIOSHoneypot,
+    "ldap_windows": LDAPHoneypot,
+    "ldaps_windows": LDAPSHoneypot,
+    "mssql_windows": MSSQLHoneypot,
+    "rdp_windows": RDPHoneypot,
+    "smb_windows": SMBHoneypot,
 }
 
 PROFILE_AWARE_SERVICE_TYPES: tuple[ServiceType, ...] = (
@@ -37,4 +38,6 @@ PROFILE_AWARE_SERVICE_TYPES: tuple[ServiceType, ...] = (
     FTPHoneypot,
     TelnetHoneypot,
     SMBHoneypot,
+    LDAPHoneypot,
+    LDAPSHoneypot,
 )
