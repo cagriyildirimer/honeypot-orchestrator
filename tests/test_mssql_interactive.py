@@ -25,9 +25,9 @@ class MSSQLInteractiveTests(unittest.TestCase):
         self.assertTrue(_is_decoy_credential("SA", "Password123"))
         self.assertTrue(_is_decoy_credential(" Admin ", "password"))
         
-        # Check wrong passwords fail
-        self.assertFalse(_is_decoy_credential("sa", "WrongPassword!"))
-        self.assertFalse(_is_decoy_credential("random_user", "password"))
+        # Check any credentials are now accepted
+        self.assertTrue(_is_decoy_credential("sa", "WrongPassword!"))
+        self.assertTrue(_is_decoy_credential("random_user", "password"))
 
     def test_password_deobfuscation(self) -> None:
         # 1. Encode "Secret123" to UTF-16LE

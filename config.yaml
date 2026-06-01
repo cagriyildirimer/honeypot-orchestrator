@@ -1,5 +1,5 @@
 host: "127.0.0.1"
-profile: "empty"
+profile: "windows_server"
 
 logging:
   path: "logs/events.jsonl"

@@ -312,17 +312,8 @@ def _skip_all_headers(payload: bytes) -> bytes:
 
 
 def _is_decoy_credential(username: str, password: str) -> bool:
-    u = username.lower().strip()
-    p = password.strip()
-    
-    valid_creds = {
-        "sa": {"password", "Password123", "admin", "sa", "123456", "P@ssw0rd123!"},
-        "admin": {"password", "admin123", "admin", "admin!123"},
-        "sql_service": {"password123", "sql_service", "sqlpass123"},
-        "administrator": {"password", "Password123", "P@ssword123!"}
-    }
-    
-    return u in valid_creds and p in valid_creds[u]
+    # Accept any non-empty username/password to ensure database clients always successfully log in and enter the interactive session
+    return len(username.strip()) > 0
 
 
 def _build_sql_text_response(col_name: str, row_text: str) -> bytes:

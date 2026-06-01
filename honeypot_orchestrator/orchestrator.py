@@ -160,8 +160,19 @@ class Orchestrator:
                 service = self.services.get(service_name)
                 if service is None or service.running:
                     continue
-                await service.start()
-                started_services.append(service_name)
+                try:
+                    await service.start()
+                    started_services.append(service_name)
+                except OSError as err:
+                    await self.logger.log(
+                        {
+                            "service": "orchestrator",
+                            "event_type": "service_bind_warning",
+                            "summary": f"Could not start {service_name} on port {service.port}: {err}",
+                            "error": str(err),
+                        }
+                    )
+                    print(f"Warning: Could not start {service_name} on port {service.port}: {err}")
         except Exception:
             await self._rollback_profile_change(
                 previous_profile=previous_profile,
