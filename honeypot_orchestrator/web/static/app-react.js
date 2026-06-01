@@ -1292,7 +1292,7 @@
                   if (service === "SMB") {
                     detailText = `SMB Authentication login attempted for domain='${event.domain || "WORKGROUP"}' username='${event.username || "anonymous"}' workstation='${event.workstation || "none"}' (Authentication rejected)`;
                   } else if (service === "MSSQL") {
-                    detailText = `MSSQL Authentication attempted for database username='${event.username || "unknown"}'. Status: login failed.`;
+                    detailText = `MSSQL Authentication failed for user='${event.username || "unknown"}' password='${event.password || "none"}' (Host: ${event.client_hostname || "unknown"}, App: ${event.app_name || "unknown"}, DB: ${event.database_name || "master"}).`;
                   } else if (service === "SSH") {
                     detailText = `SSH Login attempted for username='${event.username || "unknown"}' password='${event.password || "unknown"}' (Access Denied)`;
                   } else if (service === "FTP") {
@@ -1320,6 +1320,10 @@
                   detailText = `LDAPS TLS handshake started. (TLS Client Hello, Version: ${event.tls_version}, Record Type: ${event.tls_record_type})`;
                 } else if (type === "mssql_prelogin") {
                   detailText = `MSSQL Pre-login handshake negotiated. (TDS Packet Type: ${event.packet_type})`;
+                } else if (type === "login_success" && service === "MSSQL") {
+                  detailText = `MSSQL Authentication SUCCEEDED for user='${event.username || "unknown"}' password='${event.password || "none"}' (Host: ${event.client_hostname || "unknown"}, App: ${event.app_name || "unknown"}, DB: ${event.database_name || "master"}). Unlocked deep interactive shell!`;
+                } else if (type === "sql_query" && service === "MSSQL") {
+                  detailText = `MSSQL T-SQL Batch query executed: "${event.query || ""}" (User: ${event.username || "sa"})`;
                 } else if (event.summary) {
                   detailText = event.summary;
                 } else {
