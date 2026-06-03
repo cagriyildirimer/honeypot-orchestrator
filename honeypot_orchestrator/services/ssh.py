@@ -137,7 +137,7 @@ class MySSHServer(asyncssh.SSHServer):
         if self.attempts >= 2 and len(username.strip()) > 0 and len(password.strip()) > 0:
             return True
             
-        raise asyncssh.AccessDenied()
+        return False
 
 
 class FakeSSHHoneypot(BaseHoneypotService):
