@@ -207,6 +207,15 @@ export HONEYPOT_LAN_GATEWAY="$LAN_GATEWAY"
 export HONEYPOT_LAN_IP="$LAN_IP"
 export HONEYPOT_LAN_NETWORK="$LAN_NETWORK"
 
+# Update or create the .env file with the selected LAN IP
+if [[ -f .env ]]; then
+  grep -v "^HONEYPOT_LAN_IP=" .env > .env.tmp || true
+  echo "HONEYPOT_LAN_IP=$LAN_IP" >> .env.tmp
+  mv .env.tmp .env
+else
+  echo "HONEYPOT_LAN_IP=$LAN_IP" > .env
+fi
+
 echo "Stopping host-published compose stack, if it is running"
 docker compose -f docker-compose.yml down --remove-orphans >/dev/null 2>&1 || true
 
