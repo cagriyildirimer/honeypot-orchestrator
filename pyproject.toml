@@ -5,6 +5,7 @@ description = "Lab-only honeypot orchestrator with web control, profile-driven p
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "asyncssh"
 ]
 
 [project.scripts]
