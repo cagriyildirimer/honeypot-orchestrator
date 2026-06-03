@@ -128,3 +128,30 @@ class MSSQLInteractiveTests(unittest.TestCase):
         
         # Case 3: Empty/Too short payload
         self.assertEqual(_skip_all_headers(b"\x01"), b"\x01")
+
+    def test_login7_parsing_with_padding(self) -> None:
+        # Create a realistic LOGIN7 payload with padding at the end
+        username_str = "sa"
+        username_bytes = username_str.encode("utf-16le")
+        
+        # Total payload will be 130 bytes, but LOGIN7 length field is 120
+        payload = bytearray(130)
+        payload[0:4] = (120).to_bytes(4, "little")
+        
+        # Set username offset and length at offsets 40 and 42
+        offset = 80
+        length = len(username_str)
+        payload[40:42] = offset.to_bytes(2, "little")
+        payload[42:44] = length.to_bytes(2, "little")
+        payload[offset : offset + len(username_bytes)] = username_bytes
+        
+        # Verify that even with padding (len(payload) > 120), we can extract username correctly
+        extracted = _extract_login7_string(bytes(payload), 40, 42)
+        self.assertEqual(extracted, username_str)
+        
+        # Show that _skip_all_headers would corrupt/slice this payload because
+        # it mistakes the LOGIN7 length field (120) for an All Headers block length.
+        # This is why we must not call it on the LOGIN7 payload.
+        corrupted_payload = _skip_all_headers(bytes(payload))
+        self.assertNotEqual(corrupted_payload, bytes(payload))
+        self.assertEqual(len(corrupted_payload), 10)  # It incorrectly slices to payload[120:]

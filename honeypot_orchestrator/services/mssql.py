@@ -39,8 +39,8 @@ class MSSQLHoneypot(BaseHoneypotService):
             if login_packet_type != 0x10:  # 0x10 is LOGIN7
                 return
 
-            # Preprocess payload to skip All Headers block if present
-            login7_payload = _skip_all_headers(login_payload)
+            # Use the raw login payload directly since LOGIN7 does not contain an All Headers block
+            login7_payload = login_payload
 
             # 3. Extract LOGIN7 credentials and metadata
             username = _extract_login7_string(login7_payload, 40, 42)
