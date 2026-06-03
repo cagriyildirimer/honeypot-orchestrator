@@ -4,6 +4,12 @@ import asyncio
 from honeypot_orchestrator.services.base import BaseHoneypotService
 
 
+def _uses_tds72_plus(tds_version_bytes: bytes) -> bool:
+    if len(tds_version_bytes) < 1:
+        return False
+    return tds_version_bytes[0] >= 0x72
+
+
 class MSSQLHoneypot(BaseHoneypotService):
     async def handle_client(
         self,
@@ -42,6 +48,10 @@ class MSSQLHoneypot(BaseHoneypotService):
             # Use the raw login payload directly since LOGIN7 does not contain an All Headers block
             login7_payload = login_payload
 
+            # Extract TDS version from LOGIN7 payload (offset 4, 4 bytes)
+            tds_version_bytes = login7_payload[4:8] if len(login7_payload) >= 8 else b"\x71\x00\x00\x01"
+            uses_tds72 = _uses_tds72_plus(tds_version_bytes)
+
             # 3. Extract LOGIN7 credentials and metadata
             username = _extract_login7_string(login7_payload, 40, 42)
             password = _extract_login7_password(login7_payload)
@@ -66,7 +76,7 @@ class MSSQLHoneypot(BaseHoneypotService):
                 )
                 
                 # Write login success response (TDS packet type 0x04)
-                await _write_tds_packet(writer, 0x04, _build_login_success_response())
+                await _write_tds_packet(writer, 0x04, _build_login_success_response(uses_tds72))
                 
                 # 5. Enter Interactive Query Loop!
                 while True:
@@ -105,23 +115,23 @@ class MSSQLHoneypot(BaseHoneypotService):
                                 "\tCopyright (C) 2019 Microsoft Corporation\n"
                                 "\tStandard Edition on Windows Server 2019 Standard 10.0 <X64> (Build 17763: )\n"
                             )
-                            response_payload = _build_sql_text_response("version", version_text)
+                            response_payload = _build_sql_text_response("version", version_text, uses_tds72)
                         elif "sys.databases" in query_lower or "sysdatabases" in query_lower:
                             db_list = ["master", "tempdb", "model", "msdb", "prod_customer_db"]
-                            response_payload = _build_sql_list_response("name", db_list)
+                            response_payload = _build_sql_list_response("name", db_list, uses_tds72)
                         elif "@@servername" in query_lower:
-                            response_payload = _build_sql_text_response("servername", "WIN-SRV2019")
+                            response_payload = _build_sql_text_response("servername", "WIN-SRV2019", uses_tds72)
                         else:
-                            response_payload = _build_sql_empty_response()
+                            response_payload = _build_sql_empty_response(uses_tds72)
                             
                         # Write SQL Batch response (TDS packet type 0x04)
                         await _write_tds_packet(writer, 0x04, response_payload)
                     elif cmd_type == 0x0E:  # TRANSACTION MANAGER
                         # Respond with an empty done token
-                        await _write_tds_packet(writer, 0x04, _build_sql_empty_response())
+                        await _write_tds_packet(writer, 0x04, _build_sql_empty_response(uses_tds72))
                     elif cmd_type == 0x03:  # RPC Request
                         # Return empty DONE token to keep connection alive
-                        await _write_tds_packet(writer, 0x04, _build_sql_empty_response())
+                        await _write_tds_packet(writer, 0x04, _build_sql_empty_response(uses_tds72))
                     else:
                         # Unhandled packet types inside session
                         break
@@ -141,7 +151,7 @@ class MSSQLHoneypot(BaseHoneypotService):
                 )
                 
                 # Write login failure response (TDS packet type 0x04)
-                await _write_tds_packet(writer, 0x04, _build_login_error_response(username or "sa"))
+                await _write_tds_packet(writer, 0x04, _build_login_error_response(username or "sa", uses_tds72))
         except (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError):
             await self.log_event("client_disconnected", src_ip=src_ip, src_port=src_port)
         except Exception as exc:
@@ -195,15 +205,18 @@ def _build_prelogin_response() -> bytes:
     )
 
 
-def _build_login_success_response() -> bytes:
+def _build_login_success_response(uses_tds72: bool = False) -> bytes:
     progname_bytes = "Microsoft SQL Server".encode("utf-16le")
     login_ack_len = 1 + 4 + 1 + len(progname_bytes) + 1 + 1 + 2
+    
+    tds_version = b"\x74\x00\x00\x04" if uses_tds72 else b"\x71\x00\x00\x01"
+    
     login_ack = b"".join(
         [
             b"\xad",
             login_ack_len.to_bytes(2, "little"),
             b"\x01",  # Interface: LSQL_TS
-            b"\x74\x00\x00\x04",  # Version: TDS 7.4
+            tds_version,
             bytes([len("Microsoft SQL Server")]),
             progname_bytes,
             b"\x0f",  # Major: 15
@@ -238,18 +251,24 @@ def _build_login_success_response() -> bytes:
         ]
     )
     
-    done = b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # Exactly 13 bytes
+    if uses_tds72:
+        done = b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # Exactly 13 bytes
+    else:
+        done = b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00"  # Exactly 9 bytes
     return envchange_db + envchange_pkt + login_ack + done
 
 
-def _build_login_error_response(username: str) -> bytes:
+def _build_login_error_response(username: str, uses_tds72: bool = False) -> bytes:
     error_text = f"Login failed for user '{username}'."
     server_name = "WIN-SRV2019"
     msg_bytes = error_text.encode("utf-16le")
     server_bytes = server_name.encode("utf-16le")
     
-    # 4 (Number) + 1 (State) + 1 (Severity) + 2 (MsgLen) + MsgText + 1 (ServerLen) + ServerName + 1 (ProcLen) + 4 (LineNumber)
-    remaining_len = 4 + 1 + 1 + 2 + len(msg_bytes) + 1 + len(server_bytes) + 1 + 4
+    line_number_len = 4 if uses_tds72 else 2
+    # 4 (Number) + 1 (State) + 1 (Severity) + 2 (MsgLen) + MsgText + 1 (ServerLen) + ServerName + 1 (ProcLen) + line_number_len
+    remaining_len = 4 + 1 + 1 + 2 + len(msg_bytes) + 1 + len(server_bytes) + 1 + line_number_len
+    
+    line_number_bytes = b"\x00\x00\x00\x00" if uses_tds72 else b"\x00\x00"
     
     error_token = b"".join(
         [
@@ -263,10 +282,13 @@ def _build_login_error_response(username: str) -> bytes:
             len(server_name).to_bytes(1, "little"),  # ServerLen character count
             server_bytes,
             b"\x00",  # ProcLen: 0 (No procedure name)
-            b"\x00\x00\x00\x00",  # LineNumber: 0 (4 bytes)
+            line_number_bytes,  # LineNumber
         ]
     )
-    done_token = b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # Exactly 13 bytes
+    if uses_tds72:
+        done_token = b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # Exactly 13 bytes
+    else:
+        done_token = b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00"  # Exactly 9 bytes
     return error_token + done_token
 
 
@@ -321,15 +343,17 @@ def _is_decoy_credential(username: str, password: str) -> bool:
     return len(username.strip()) > 0
 
 
-def _build_sql_text_response(col_name: str, row_text: str) -> bytes:
+def _build_sql_text_response(col_name: str, row_text: str, uses_tds72: bool = False) -> bytes:
     col_name_bytes = col_name.encode("utf-16le")
     row_bytes = row_text.encode("utf-16le")
+    
+    usertype_bytes = b"\x00\x00\x00\x00" if uses_tds72 else b"\x00\x00"
     
     colmetadata = b"".join(
         [
             b"\x81",
             b"\x01\x00",  # 1 column
-            b"\x00\x00\x00\x00",  # UserType
+            usertype_bytes,  # UserType (4 bytes or 2 bytes)
             b"\x09\x00",  # Flags: Nullable
             b"\xe7",  # Type: NVARCHAR
             (500).to_bytes(2, "little"),  # MaxLen
@@ -347,25 +371,37 @@ def _build_sql_text_response(col_name: str, row_text: str) -> bytes:
         ]
     )
     
-    done = b"".join(
-        [
-            b"\xfd",
-            b"\x10\x00",  # Status: DONE_FINAL
-            b"\x00\x00",  # CurCmd
-            b"\x01\x00\x00\x00\x00\x00\x00\x00",  # Row count = 1
-        ]
-    )
+    if uses_tds72:
+        done = b"".join(
+            [
+                b"\xfd",
+                b"\x10\x00",  # Status: DONE_FINAL
+                b"\x00\x00",  # CurCmd
+                b"\x01\x00\x00\x00\x00\x00\x00\x00",  # Row count = 1 (8 bytes)
+            ]
+        )
+    else:
+        done = b"".join(
+            [
+                b"\xfd",
+                b"\x10\x00",  # Status: DONE_FINAL
+                b"\x00\x00",  # CurCmd
+                b"\x01\x00\x00\x00",  # Row count = 1 (4 bytes)
+            ]
+        )
     
     return colmetadata + row + done
 
 
-def _build_sql_list_response(col_name: str, rows_list: list[str]) -> bytes:
+def _build_sql_list_response(col_name: str, rows_list: list[str], uses_tds72: bool = False) -> bytes:
     col_name_bytes = col_name.encode("utf-16le")
+    usertype_bytes = b"\x00\x00\x00\x00" if uses_tds72 else b"\x00\x00"
+    
     colmetadata = b"".join(
         [
             b"\x81",
             b"\x01\x00",  # 1 column
-            b"\x00\x00\x00\x00",  # UserType
+            usertype_bytes,  # UserType
             b"\x09\x00",  # Flags: Nullable
             b"\xe7",  # Type: NVARCHAR
             (256).to_bytes(2, "little"),  # MaxLen
@@ -389,24 +425,35 @@ def _build_sql_list_response(col_name: str, rows_list: list[str]) -> bytes:
         )
     rows = b"".join(row_tokens)
     
-    done = b"".join(
-        [
-            b"\xfd",
-            b"\x10\x00",  # Status: DONE_FINAL
-            b"\x00\x00",  # CurCmd
-            len(rows_list).to_bytes(8, "little"),  # Row count
-        ]
-    )
+    if uses_tds72:
+        done = b"".join(
+            [
+                b"\xfd",
+                b"\x10\x00",  # Status: DONE_FINAL
+                b"\x00\x00",  # CurCmd
+                len(rows_list).to_bytes(8, "little"),  # Row count (8 bytes)
+            ]
+        )
+    else:
+        done = b"".join(
+            [
+                b"\xfd",
+                b"\x10\x00",  # Status: DONE_FINAL
+                b"\x00\x00",  # CurCmd
+                len(rows_list).to_bytes(4, "little"),  # Row count (4 bytes)
+            ]
+        )
     
     return colmetadata + rows + done
 
 
-def _build_sql_empty_response() -> bytes:
+def _build_sql_empty_response(uses_tds72: bool = False) -> bytes:
+    row_count_bytes = b"\x00\x00\x00\x00\x00\x00\x00\x00" if uses_tds72 else b"\x00\x00\x00\x00"
     return b"".join(
         [
             b"\xfd",
             b"\x10\x00",  # Status: DONE_FINAL
             b"\x00\x00",  # CurCmd
-            b"\x00\x00\x00\x00\x00\x00\x00\x00",  # Row count = 0
+            row_count_bytes,  # Row count = 0 (8 bytes or 4 bytes)
         ]
     )

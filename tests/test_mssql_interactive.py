@@ -10,6 +10,9 @@ from honeypot_orchestrator.services.mssql import (
     _build_sql_list_response,
     _skip_all_headers,
     _build_prelogin_response,
+    _uses_tds72_plus,
+    _build_login_error_response,
+    _build_sql_empty_response,
 )
 
 
@@ -78,44 +81,67 @@ class MSSQLInteractiveTests(unittest.TestCase):
         self.assertEqual(extracted, original_str)
 
     def test_build_success_response(self) -> None:
-        response = _build_login_success_response()
-        # Verify ENVCHANGE token (0xE3) is present at the beginning
-        self.assertEqual(response[0], 0xE3)
-        # Verify LOGINACK token (0xAD) is present in the stream
-        self.assertIn(b"\xad", response)
-        # Verify DONE token (0xFD) is appended
-        self.assertIn(b"\xfd\x00\x00\x00", response)
+        # Case 1: uses_tds72 = True
+        response_72 = _build_login_success_response(uses_tds72=True)
+        self.assertEqual(response_72[0], 0xE3)
+        self.assertIn(b"\xad", response_72)
+        # 13 bytes done token ends with 8 zero bytes
+        self.assertTrue(response_72.endswith(b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"))
+        
+        # Case 2: uses_tds72 = False
+        response_71 = _build_login_success_response(uses_tds72=False)
+        self.assertEqual(response_71[0], 0xE3)
+        self.assertIn(b"\xad", response_71)
+        # 9 bytes done token ends with 4 zero bytes
+        self.assertTrue(response_71.endswith(b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00"))
 
     def test_build_sql_text_response(self) -> None:
         col_name = "test_col"
         row_text = "test_val"
-        response = _build_sql_text_response(col_name, row_text)
         
-        # Verify COLMETADATA token (0x81)
-        self.assertEqual(response[0], 0x81)
-        # Verify column count is 1
-        self.assertEqual(response[1:3], b"\x01\x00")
-        # Verify column name is present in UTF-16LE
-        self.assertIn(col_name.encode("utf-16le"), response)
-        # Verify ROW token (0xD1)
-        self.assertIn(b"\xd1", response)
-        # Verify row text is present in UTF-16LE
-        self.assertIn(row_text.encode("utf-16le"), response)
-        # Verify DONE token (0xFD) is appended
-        self.assertTrue(response.endswith(b"\x01\x00\x00\x00\x00\x00\x00\x00"))
+        # Case 1: uses_tds72 = True
+        response_72 = _build_sql_text_response(col_name, row_text, uses_tds72=True)
+        self.assertEqual(response_72[0], 0x81)
+        self.assertEqual(response_72[1:3], b"\x01\x00")
+        # UserType (4 bytes)
+        self.assertEqual(response_72[3:7], b"\x00\x00\x00\x00")
+        self.assertIn(col_name.encode("utf-16le"), response_72)
+        self.assertIn(b"\xd1", response_72)
+        self.assertIn(row_text.encode("utf-16le"), response_72)
+        # DONE Row count is 8 bytes
+        self.assertTrue(response_72.endswith(b"\x01\x00\x00\x00\x00\x00\x00\x00"))
+        
+        # Case 2: uses_tds72 = False
+        response_71 = _build_sql_text_response(col_name, row_text, uses_tds72=False)
+        self.assertEqual(response_71[0], 0x81)
+        self.assertEqual(response_71[1:3], b"\x01\x00")
+        # UserType (2 bytes)
+        self.assertEqual(response_71[3:5], b"\x00\x00")
+        self.assertIn(col_name.encode("utf-16le"), response_71)
+        self.assertIn(b"\xd1", response_71)
+        self.assertIn(row_text.encode("utf-16le"), response_71)
+        # DONE Row count is 4 bytes
+        self.assertTrue(response_71.endswith(b"\x01\x00\x00\x00"))
 
     def test_build_sql_list_response(self) -> None:
         col_name = "db_names"
         dbs = ["master", "tempdb", "prod_db"]
-        response = _build_sql_list_response(col_name, dbs)
         
-        # Verify COLMETADATA token (0x81)
-        self.assertEqual(response[0], 0x81)
-        # Verify row values exist
+        # Case 1: uses_tds72 = True
+        response_72 = _build_sql_list_response(col_name, dbs, uses_tds72=True)
+        self.assertEqual(response_72[0], 0x81)
         for db in dbs:
-            self.assertIn(db.encode("utf-16le"), response)
-        # Verify DONE token (0xFD)
-        self.assertIn(b"\xfd", response)
+            self.assertIn(db.encode("utf-16le"), response_72)
+        # DONE Row count is 8 bytes
+        self.assertTrue(response_72.endswith(len(dbs).to_bytes(8, "little")))
+        
+        # Case 2: uses_tds72 = False
+        response_71 = _build_sql_list_response(col_name, dbs, uses_tds72=False)
+        self.assertEqual(response_71[0], 0x81)
+        for db in dbs:
+            self.assertIn(db.encode("utf-16le"), response_71)
+        # DONE Row count is 4 bytes
+        self.assertTrue(response_71.endswith(len(dbs).to_bytes(4, "little")))
 
     def test_skip_all_headers(self) -> None:
         # Case 1: No All Headers block (normal query)
@@ -196,3 +222,33 @@ class MSSQLInteractiveTests(unittest.TestCase):
         self.assertEqual(response[encryption_offset], 0x02) # ENCRYPT_NOT_SUP
         self.assertEqual(response[instance_offset], 0x00)   # Empty instance name
         self.assertEqual(response[threadid_offset : threadid_offset + threadid_len], b"\x00\x00\x00\x00")
+
+    def test_uses_tds72_plus(self) -> None:
+        self.assertFalse(_uses_tds72_plus(b""))
+        # TDS 7.1
+        self.assertFalse(_uses_tds72_plus(b"\x71\x00\x00\x01"))
+        self.assertFalse(_uses_tds72_plus(b"\x70\x00\x00\x00"))
+        # TDS 7.2+
+        self.assertTrue(_uses_tds72_plus(b"\x72\x09\x00\x02"))
+        self.assertTrue(_uses_tds72_plus(b"\x73\x00\x00\x00"))
+        self.assertTrue(_uses_tds72_plus(b"\x74\x00\x00\x04"))
+
+    def test_build_login_error_response(self) -> None:
+        # Case 1: uses_tds72 = True
+        resp_72 = _build_login_error_response("sa", uses_tds72=True)
+        self.assertEqual(resp_72[0], 0xAA)
+        self.assertTrue(resp_72.endswith(b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"))
+        
+        # Case 2: uses_tds72 = False
+        resp_71 = _build_login_error_response("sa", uses_tds72=False)
+        self.assertEqual(resp_71[0], 0xAA)
+        self.assertTrue(resp_71.endswith(b"\xfd\x00\x00\x00\x00\x00\x00\x00\x00"))
+
+    def test_build_sql_empty_response(self) -> None:
+        # Case 1: uses_tds72 = True
+        resp_72 = _build_sql_empty_response(uses_tds72=True)
+        self.assertEqual(resp_72, b"\xfd\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+        
+        # Case 2: uses_tds72 = False
+        resp_71 = _build_sql_empty_response(uses_tds72=False)
+        self.assertEqual(resp_71, b"\xfd\x10\x00\x00\x00\x00\x00\x00\x00")
