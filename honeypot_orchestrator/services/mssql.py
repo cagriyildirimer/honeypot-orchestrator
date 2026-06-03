@@ -5,9 +5,43 @@ from honeypot_orchestrator.services.base import BaseHoneypotService
 
 
 def _uses_tds72_plus(tds_version_bytes: bytes) -> bool:
-    if len(tds_version_bytes) < 1:
+    if len(tds_version_bytes) < 4:
         return False
-    return tds_version_bytes[0] >= 0x72
+    
+    # Parse as both big-endian and little-endian
+    val_be = int.from_bytes(tds_version_bytes, "big")
+    val_le = int.from_bytes(tds_version_bytes, "little")
+    
+    # Legacy TDS versions (7.0, 7.1)
+    legacy_versions = {
+        0x00000070, 0x07000000,
+        0x00000071, 0x07010000, 0x01000071
+    }
+    
+    # Known TDS login versions
+    known_versions = {
+        0x00000070, 0x07000000,
+        0x00000071, 0x07010000, 0x01000071,
+        0x02000972, 0x03000A73, 0x03000B73, 0x04000074, 0x08000000
+    }
+    
+    if val_le in known_versions:
+        return val_le not in legacy_versions
+    elif val_be in known_versions:
+        return val_be not in legacy_versions
+    else:
+        # Fallback: if unrecognized, check if it looks like a 7.2+ version in either endianness.
+        major_be = tds_version_bytes[0]
+        major_le = tds_version_bytes[3]
+        
+        # If big-endian version is 0x08 or >= 0x72
+        if major_be == 0x08 or 0x72 <= major_be <= 0x74:
+            return True
+        # If little-endian version is 0x08 or >= 0x72
+        if major_le == 0x08 or 0x72 <= major_le <= 0x74:
+            return True
+            
+        return False
 
 
 class MSSQLHoneypot(BaseHoneypotService):
@@ -19,37 +53,55 @@ class MSSQLHoneypot(BaseHoneypotService):
         src_ip, src_port = self.peer(writer)
         await self.log_event("connection", src_ip=src_ip, src_port=src_port)
         try:
-            # 1. Read PRELOGIN packet
-            packet_type, _payload = await _read_tds_packet(reader)
-            await self.log_event(
-                "mssql_prelogin",
-                src_ip=src_ip,
-                src_port=src_port,
-                packet_type=f"0x{packet_type:02x}",
-                summary="MSSQL prelogin captured.",
-            )
-            if packet_type == 0x12:
-                await _write_tds_packet(writer, 0x12, _build_prelogin_response())
-            else:
-                return
-
-            # 2. Read LOGIN7 packet
+            # 1. Read first packet (either PRELOGIN or LOGIN7 directly)
             try:
-                login_packet_type, login_payload = await asyncio.wait_for(
+                packet_type, payload = await asyncio.wait_for(
                     _read_tds_packet(reader),
                     timeout=10.0,
                 )
             except (TimeoutError, asyncio.IncompleteReadError):
                 return
 
-            if login_packet_type != 0x10:  # 0x10 is LOGIN7
+            if packet_type == 0x12:
+                # Client sent PRELOGIN
+                await self.log_event(
+                    "mssql_prelogin",
+                    src_ip=src_ip,
+                    src_port=src_port,
+                    packet_type=f"0x{packet_type:02x}",
+                    summary="MSSQL prelogin captured.",
+                )
+                await _write_tds_packet(writer, 0x12, _build_prelogin_response())
+
+                # Read LOGIN7 packet next
+                try:
+                    login_packet_type, login_payload = await asyncio.wait_for(
+                        _read_tds_packet(reader),
+                        timeout=10.0,
+                    )
+                except (TimeoutError, asyncio.IncompleteReadError):
+                    return
+
+                if login_packet_type != 0x10:
+                    return
+            elif packet_type == 0x10:
+                # Client bypassed PRELOGIN and sent LOGIN7 directly
+                await self.log_event(
+                    "mssql_login_direct",
+                    src_ip=src_ip,
+                    src_port=src_port,
+                    packet_type=f"0x{packet_type:02x}",
+                    summary="MSSQL direct login (no prelogin) captured.",
+                )
+                login_payload = payload
+            else:
                 return
 
             # Use the raw login payload directly since LOGIN7 does not contain an All Headers block
             login7_payload = login_payload
 
             # Extract TDS version from LOGIN7 payload (offset 4, 4 bytes)
-            tds_version_bytes = login7_payload[4:8] if len(login7_payload) >= 8 else b"\x71\x00\x00\x01"
+            tds_version_bytes = login7_payload[4:8] if len(login7_payload) >= 8 else b"\x00\x00\x00\x71"
             uses_tds72 = _uses_tds72_plus(tds_version_bytes)
 
             # 3. Extract LOGIN7 credentials and metadata
@@ -244,7 +296,7 @@ def _build_login_success_response(uses_tds72: bool = False) -> bytes:
         [
             b"\xe3",
             (1 + 1 + len(pkt_new) + 1).to_bytes(2, "little"),
-            b"\x03",  # Type: 3 (Packet Size)
+            b"\x04",  # Type: 4 (Packet Size)
             bytes([len("4096")]),
             pkt_new,
             b"\x00",  # OldLen: 0

@@ -225,13 +225,21 @@ class MSSQLInteractiveTests(unittest.TestCase):
 
     def test_uses_tds72_plus(self) -> None:
         self.assertFalse(_uses_tds72_plus(b""))
-        # TDS 7.1
-        self.assertFalse(_uses_tds72_plus(b"\x71\x00\x00\x01"))
-        self.assertFalse(_uses_tds72_plus(b"\x70\x00\x00\x00"))
-        # TDS 7.2+
-        self.assertTrue(_uses_tds72_plus(b"\x72\x09\x00\x02"))
-        self.assertTrue(_uses_tds72_plus(b"\x73\x00\x00\x00"))
-        self.assertTrue(_uses_tds72_plus(b"\x74\x00\x00\x04"))
+        # TDS 7.1 (Legacy) - should return False
+        self.assertFalse(_uses_tds72_plus(b"\x71\x00\x00\x01"))  # little-endian
+        self.assertFalse(_uses_tds72_plus(b"\x01\x00\x00\x71"))  # big-endian
+        self.assertFalse(_uses_tds72_plus(b"\x70\x00\x00\x00"))  # TDS 7.0
+        
+        # TDS 7.2+ - should return True
+        self.assertTrue(_uses_tds72_plus(b"\x72\x09\x00\x02"))   # TDS 7.2 little-endian
+        self.assertTrue(_uses_tds72_plus(b"\x02\x00\x09\x72"))   # TDS 7.2 big-endian
+        self.assertTrue(_uses_tds72_plus(b"\x73\x00\x00\x00"))   # TDS 7.3
+        self.assertTrue(_uses_tds72_plus(b"\x74\x00\x00\x04"))   # TDS 7.4 little-endian
+        self.assertTrue(_uses_tds72_plus(b"\x04\x00\x00\x74"))   # TDS 7.4 big-endian
+        
+        # TDS 8.0 - should return True
+        self.assertTrue(_uses_tds72_plus(b"\x00\x00\x00\x08"))   # TDS 8.0 little-endian
+        self.assertTrue(_uses_tds72_plus(b"\x08\x00\x00\x00"))   # TDS 8.0 big-endian
 
     def test_build_login_error_response(self) -> None:
         # Case 1: uses_tds72 = True
