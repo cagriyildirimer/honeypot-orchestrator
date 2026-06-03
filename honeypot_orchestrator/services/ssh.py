@@ -156,6 +156,13 @@ class FakeSSHHoneypot(BaseHoneypotService):
     def set_profile(self, profile: HoneypotProfile) -> None:
         self.profile = profile
 
+    async def handle_client(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        pass
+
     @property
     def running(self) -> bool:
         return self._server is not None
