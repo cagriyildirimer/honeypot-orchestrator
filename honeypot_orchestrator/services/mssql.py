@@ -172,20 +172,25 @@ async def _write_tds_packet(writer: asyncio.StreamWriter, packet_type: int, payl
 
 
 def _build_prelogin_response() -> bytes:
-    table_size = 5 + 5 + 5 + 1
+    # 4 options (Version, Encryption, Instance, ThreadID) + 1 terminator
+    table_size = 5 + 5 + 5 + 5 + 1
     version_offset = table_size
     encryption_offset = version_offset + 6
     instance_offset = encryption_offset + 1
+    threadid_offset = instance_offset + 1
+    
     sql_server_2019_version = b"\x0f\x00\x07\xd0\x00\x00"
     return b"".join(
         [
             b"\x00" + version_offset.to_bytes(2, "big") + b"\x00\x06",
             b"\x01" + encryption_offset.to_bytes(2, "big") + b"\x00\x01",
             b"\x02" + instance_offset.to_bytes(2, "big") + b"\x00\x01",
+            b"\x03" + threadid_offset.to_bytes(2, "big") + b"\x00\x04",
             b"\xff",
             sql_server_2019_version,
-            b"\x02",
-            b"\x00",
+            b"\x02",                  # Encryption: ENCRYPT_NOT_SUP (0x02)
+            b"\x00",                  # Instance: empty name (1 byte \x00)
+            b"\x00\x00\x00\x00",      # ThreadID: 4 bytes
         ]
     )
 

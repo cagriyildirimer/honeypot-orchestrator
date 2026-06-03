@@ -9,6 +9,7 @@ from honeypot_orchestrator.services.mssql import (
     _build_sql_text_response,
     _build_sql_list_response,
     _skip_all_headers,
+    _build_prelogin_response,
 )
 
 
@@ -155,3 +156,43 @@ class MSSQLInteractiveTests(unittest.TestCase):
         corrupted_payload = _skip_all_headers(bytes(payload))
         self.assertNotEqual(corrupted_payload, bytes(payload))
         self.assertEqual(len(corrupted_payload), 10)  # It incorrectly slices to payload[120:]
+
+    def test_build_prelogin_response(self) -> None:
+        response = _build_prelogin_response()
+        # Header table size (21 bytes) + data: Version (6), Encryption (1), Instance (1), ThreadID (4) = 33 bytes
+        self.assertEqual(len(response), 33)
+        
+        # Verify Token IDs in header table
+        self.assertEqual(response[0], 0x00)  # Version Token
+        self.assertEqual(response[5], 0x01)  # Encryption Token
+        self.assertEqual(response[10], 0x02) # Instance Token
+        self.assertEqual(response[15], 0x03) # ThreadID Token
+        self.assertEqual(response[20], 0xFF) # Terminator (EndToken)
+        
+        # Verify offsets
+        version_offset = int.from_bytes(response[1:3], "big")
+        encryption_offset = int.from_bytes(response[6:8], "big")
+        instance_offset = int.from_bytes(response[11:13], "big")
+        threadid_offset = int.from_bytes(response[16:18], "big")
+        
+        self.assertEqual(version_offset, 21)
+        self.assertEqual(encryption_offset, 27)
+        self.assertEqual(instance_offset, 28)
+        self.assertEqual(threadid_offset, 29)
+        
+        # Verify lengths
+        version_len = int.from_bytes(response[3:5], "big")
+        encryption_len = int.from_bytes(response[8:10], "big")
+        instance_len = int.from_bytes(response[13:15], "big")
+        threadid_len = int.from_bytes(response[18:20], "big")
+        
+        self.assertEqual(version_len, 6)
+        self.assertEqual(encryption_len, 1)
+        self.assertEqual(instance_len, 1)
+        self.assertEqual(threadid_len, 4)
+        
+        # Verify data values using offsets and lengths
+        self.assertEqual(response[version_offset : version_offset + version_len], b"\x0f\x00\x07\xd0\x00\x00")
+        self.assertEqual(response[encryption_offset], 0x02) # ENCRYPT_NOT_SUP
+        self.assertEqual(response[instance_offset], 0x00)   # Empty instance name
+        self.assertEqual(response[threadid_offset : threadid_offset + threadid_len], b"\x00\x00\x00\x00")
