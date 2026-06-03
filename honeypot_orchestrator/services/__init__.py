@@ -24,6 +24,7 @@ SERVICE_REGISTRY: dict[str, ServiceType] = {
     "http_linux": HTTPHoneypot,
     "http_windows": HTTPHoneypot,
     "ssh_linux": FakeSSHHoneypot,
+    "ssh_windows": FakeSSHHoneypot,
     "ftp_linux": FTPHoneypot,
     "telnet_linux": TelnetHoneypot,
     "dns_windows": DNSHoneypot,
