@@ -185,27 +185,42 @@ def _service_env_key(service_name: str, field: str) -> str:
 
 
 def _validate_config(config: AppConfig) -> None:
-    bind_targets: list[tuple[str, str, int]] = []
+    from honeypot_orchestrator.profiles import PROFILES
+
     if not (1 <= config.web.port <= 65535):
         raise ValueError(f"Invalid web port: {config.web.port}")
-    if config.web.enabled:
-        bind_targets.append(("web", config.web.host, config.web.port))
 
     for service_name, service in config.services.items():
         if not (1 <= service.port <= 65535):
             raise ValueError(f"Invalid port for service {service_name}: {service.port}")
-        if service.enabled:
-            bind_targets.append((service_name, service.host, service.port))
 
-    for index, (left_name, left_host, left_port) in enumerate(bind_targets):
-        for right_name, right_host, right_port in bind_targets[index + 1 :]:
-            if left_port != right_port:
-                continue
-            if _hosts_conflict(left_host, right_host):
-                raise ValueError(
-                    f"Port conflict detected between {left_name} ({left_host}:{left_port}) "
-                    f"and {right_name} ({right_host}:{right_port})."
-                )
+    # Web paneli her zaman açık olduğu için tüm etkin servislerle çakışması kontrol edilir
+    if config.web.enabled:
+        for service_name, service in config.services.items():
+            if service.enabled and service.port == config.web.port:
+                if _hosts_conflict(config.web.host, service.host):
+                    raise ValueError(
+                        f"Port conflict detected between web ({config.web.host}:{config.web.port}) "
+                        f"and service {service_name} ({service.host}:{service.port})."
+                    )
+
+    # Her profil için kendi içindeki servislerin çakışması kontrol edilir
+    for profile_name, profile in PROFILES.items():
+        bind_targets: list[tuple[str, str, int]] = []
+        for service_name in profile.services:
+            service = config.services.get(service_name)
+            if service and service.enabled:
+                bind_targets.append((service_name, service.host, service.port))
+
+        for index, (left_name, left_host, left_port) in enumerate(bind_targets):
+            for right_name, right_host, right_port in bind_targets[index + 1 :]:
+                if left_port != right_port:
+                    continue
+                if _hosts_conflict(left_host, right_host):
+                    raise ValueError(
+                        f"Port conflict detected in profile '{profile_name}' between {left_name} ({left_host}:{left_port}) "
+                        f"and {right_name} ({right_host}:{right_port})."
+                    )
 
 
 def _hosts_conflict(left: str, right: str) -> bool:
