@@ -2,6 +2,8 @@ services:
   honeypot-orchestrator:
     build: .
     container_name: honeypot-orchestrator
+    cap_add:
+      - NET_ADMIN
     ports:
       - "8000:8000"
       - "8080:8080"

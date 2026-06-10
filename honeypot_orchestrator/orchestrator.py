@@ -8,6 +8,7 @@ from honeypot_orchestrator.profiles import HoneypotProfile, get_profile, list_pr
 from honeypot_orchestrator.services import PROFILE_AWARE_SERVICE_TYPES, SERVICE_REGISTRY, ServiceInstance, ServiceType
 from honeypot_orchestrator.services.base import BaseHoneypotService
 from honeypot_orchestrator.web.server import WebDashboard
+from honeypot_orchestrator.net_tuner import apply_profile_network_settings
 
 
 class Orchestrator:
@@ -150,6 +151,7 @@ class Orchestrator:
 
         self.profile = profile
         self._sync_service_profiles(profile)
+        await apply_profile_network_settings(profile.name, self.logger)
         try:
             for service_name, service in self.services.items():
                 if service.running and service_name not in target_services:
@@ -212,6 +214,7 @@ class Orchestrator:
 
         self.profile = previous_profile
         self._sync_service_profiles(previous_profile)
+        await apply_profile_network_settings(previous_profile.name, self.logger)
 
         for service_name in stopped_services:
             service = self.services.get(service_name)
