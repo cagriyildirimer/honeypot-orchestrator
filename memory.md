@@ -25,13 +25,15 @@
 - **OS Emulation**: Modifies system-level TCP/IP parameters inside the container network namespace to match target profiles:
   - **`windows_server` profile**: Set IP default Time to Live (TTL) to `128`, disable TCP Timestamps (`tcp_timestamps=0`), enable TCP Window Scaling (`tcp_window_scaling=1`) and TCP SACK (`tcp_sack=1`), and set receive/send buffers (`tcp_rmem` and `tcp_wmem`) default values to `65536` to emulate a typical Windows TCP initial window configuration.
   - **`linux_server` / `empty` profiles**: Set IP default TTL to `64`, enable TCP Timestamps (`tcp_timestamps=1`), enable TCP Window Scaling (`tcp_window_scaling=1`) and TCP SACK (`tcp_sack=1`), and restore standard Linux buffer limits.
-- **Dynamic Firewall (iptables)**: Dynamically constructs custom rules inside the container netns when a profile is applied:
+  - **Dynamic Firewall (iptables)**: Dynamically constructs custom rules inside the container netns when a profile is applied:
   - Creates a custom `HONEYPOT_INPUT` chain and injects a jump from `INPUT`.
   - Allows localhost (`lo`) and established connections (`ESTABLISHED,RELATED`).
   - Allows only the active profile's open decoy ports and the web dashboard port (8000).
   - Drops all other TCP, UDP, and ICMP traffic. This hides closed ports (making them appear as `filtered` instead of sending TCP RST resets) and blocks ICMP OS discovery probes, preventing Nmap stack fingerprinting from detecting Linux.
+  - Drops Nmap's exotic TCP probing flags (e.g. SYN+FIN, NULL, PSH+URG) entirely to degrade fingerprinting reliability.
   - On application termination (`stop`), the custom rules and chain are flushed and removed (`cleanup_firewall`).
-- **Implementation**: Writes values directly to namespaced sysctl paths under `/proc/sys/net/ipv4/` and controls firewall configuration via `iptables` commands executed in subprocesses. If these paths or commands are unavailable (due to permissions, OS differences, or direct non-docker runtimes), warnings are logged gracefully without halting orchestrator execution.
+- **Packet Mangler (`packet_mangler.py`)**: For perfect `windows_server` emulation, an NFQUEUE-based userspace interceptor rewrites the TCP headers of outgoing SYN-ACK responses using Scapy. It forces the TCP options order to `[MSS, NOP, WScale, SAckOK]`, sets incremental IP IDs, and forces a specific TCP Window Size. This ensures Nmap reports 100% Windows and never leaks the underlying Linux kernel TCP Option ordering.
+- **Implementation**: Writes values directly to namespaced sysctl paths under `/proc/sys/net/ipv4/` and controls firewall/NFQUEUE configuration via `iptables` commands executed in subprocesses. If these paths or commands are unavailable (due to permissions, OS differences, or direct non-docker runtimes), warnings are logged gracefully without halting orchestrator execution.
 
 ## Web Dashboard & User RBAC (`web/server.py`)
 - **Custom Web Server**: Implements a standard-library-only TCP socket listener handling basic HTTP framing, cookie routing, static file parsing, and JSON API payloads.

@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y iptables && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y iptables libnetfilter-queue-dev python3-dev gcc libpcap-dev && rm -rf /var/lib/apt/lists/*
 
 RUN addgroup --system honeypot && adduser --system --ingroup honeypot honeypot
 

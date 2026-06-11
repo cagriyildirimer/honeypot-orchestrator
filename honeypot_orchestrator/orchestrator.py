@@ -9,7 +9,7 @@ from honeypot_orchestrator.services import PROFILE_AWARE_SERVICE_TYPES, SERVICE_
 from honeypot_orchestrator.services.base import BaseHoneypotService
 from honeypot_orchestrator.web.server import WebDashboard
 from honeypot_orchestrator.net_tuner import apply_profile_network_settings
-
+from honeypot_orchestrator.packet_mangler import PacketMangler
 
 class Orchestrator:
     def __init__(self, config: AppConfig) -> None:
@@ -22,12 +22,15 @@ class Orchestrator:
         self._service_lock = asyncio.Lock()
         # Web paneli orkestratorden servis durumunu ve log yolunu okuyacak sekilde baglanir.
         self.web_dashboard = WebDashboard(config.web.host, config.web.port, self)
+        # OS obfuscation icin packet mangler servisi baslatilir
+        self.packet_mangler = PacketMangler()
 
     async def start(self) -> None:
         # Bu yeni akista uygulama acilisinda yalnizca web paneli dinlemeye baslar.
         if self.config.web.enabled:
             await self.web_dashboard.start()
 
+        self.packet_mangler.start()
         await self._apply_profile(self.profile, emit_log=False)
 
         # Baslangic olayi log dosyasina yazilir; panelde de gorulebilir.
@@ -44,6 +47,8 @@ class Orchestrator:
         # Güvenlik duvarı kurallarını temizler.
         from honeypot_orchestrator.net_tuner import cleanup_firewall
         cleanup_firewall()
+        
+        self.packet_mangler.stop()
 
         # Kapanisin basladigini loglayarak sonradan inceleme icin iz birakir.
         await self.logger.log(
@@ -154,6 +159,7 @@ class Orchestrator:
         stopped_services: list[str] = []
 
         self.profile = profile
+        self.packet_mangler.set_profile(profile.name)
         self._sync_service_profiles(profile)
         await apply_profile_network_settings(
             profile.name,

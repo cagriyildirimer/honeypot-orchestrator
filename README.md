@@ -37,10 +37,16 @@ Orkestratör, uygulanan profile göre konteynerin ağ ad alanında (network name
 Orkestratör, uygulanan profile göre konteyner içinde dinamik güvenlik duvarı kuralları tanımlar:
 - `HONEYPOT_INPUT` adında özel bir zincir oluşturulur ve `INPUT` zincirinin en başına yerleştirilir.
 - Sadece localhost (`lo`), mevcut açık bağlantılar (`ESTABLISHED,RELATED`), aktif profilin açık honeypot portları ve web arayüzü portuna (8000) gelen isteklere izin verilir (`ACCEPT`).
-- Diğer tüm kapalı port TCP/UDP istekleri ve ICMP (ping) tarama paketleri sessizce düşürülür (`DROP`). Bu sayede kapalı portlardan Linux çekirdeğine ait TCP RST paketlerinin dönmesi engellenir; Nmap kapalı portları `closed` yerine `filtered` olarak görür. ICMP engeli ise ping tabanlı aktif OS tespit yöntemlerini engeller.
+- Diğer tüm kapalı port TCP/UDP istekleri ve ICMP (ping) tarama paketleri sessizce düşürülür (`DROP`). Nmap'in OS tespitini yanıltmak için T2-T7 probları (geçersiz TCP bayraklarına sahip paketler) önceden filtrelenir.
 - Uygulama kapatılırken (`stop` anında) eklenen kurallar tamamen silinir ve temizlenir (`cleanup_firewall`).
 
-Bu sayede saldırganların `ping` veya `nmap` taramalarında işletim sistemini doğru tahmin etmeleri (OS fingerprinting) simüle edilir. Konteynerin bu ayarları uygulayabilmesi için `cap_add: [NET_ADMIN]` yetkisine sahip olması gerekir. Yetki yoksa orkestratör hata vermez, bir uyarı logu oluşturarak çalışmaya devam eder.
+**Derin İşletim Sistemi Taklidi (Packet Mangling)**:
+- Nmap gibi gelişmiş tarayıcılar, işletim sistemini SYN-ACK paketlerindeki TCP Seçeneklerinin (TCP Options) sıralamasına ve IP ID üretim yöntemine bakarak anlar.
+- Orkestratör `windows_server` profilinde iken, konteyner içindeki tüm SYN-ACK paketleri `NFQUEUE` (Netfilter Queue) aracılığıyla özel bir arka plan servisine (`packet_mangler.py`) aktarılır.
+- Bu servis, Scapy kullanarak TCP Seçenekleri sırasını Windows Server mimarisine uygun hale getirir (örn: `[MSS, NOP, WScale, SAckOK]`), IP ID değerini sıralı hale getirir ve TCP Pencere boyutunu sahteler.
+- Bu işlem sayesinde Linux çekirdeğinin statik yapısı tamamen gizlenir ve dışarıya %100 Windows Server profili sunulur.
+
+Bu sayede saldırganların `ping` veya `nmap` taramalarında işletim sistemini doğru tahmin etmeleri (OS fingerprinting) kusursuz bir şekilde simüle edilir. Konteynerin bu ayarları uygulayabilmesi için `cap_add: [NET_ADMIN]` yetkisine sahip olması ve imajında `libnetfilter-queue-dev` kurulu olması gerekir. Yetki yoksa orkestratör hata vermez, bir uyarı logu oluşturarak çalışmaya devam eder.
 
 ## Güvenlik & Otomatik Engelleme (Defense)
 
