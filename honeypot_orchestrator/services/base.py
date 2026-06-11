@@ -24,11 +24,22 @@ class BaseHoneypotService(ABC):
     async def start(self) -> None:
         if self.running:
             return
+        
+        ssl_ctx = None
+        if self.port == 636:
+            import ssl
+            import os
+            cert_path = os.path.join(os.path.dirname(__file__), "..", "..", "certs", "dummy.pem")
+            if os.path.exists(cert_path):
+                ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+                ssl_ctx.load_cert_chain(certfile=cert_path)
+        
         # Her yeni istemci baglantisi once _connection_callback metoduna gider.
         self._server = await asyncio.start_server(
             self._connection_callback,
             host=self.host,
             port=self.port,
+            ssl=ssl_ctx,
         )
         await self.log_event("service_started", summary=f"{self.name} listening.")
 

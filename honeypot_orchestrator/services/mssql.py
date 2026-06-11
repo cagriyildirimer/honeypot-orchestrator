@@ -71,7 +71,7 @@ class MSSQLHoneypot(BaseHoneypotService):
                     packet_type=f"0x{packet_type:02x}",
                     summary="MSSQL prelogin captured.",
                 )
-                await _write_tds_packet(writer, 0x12, _build_prelogin_response())
+                await _write_tds_packet(writer, 0x04, _build_prelogin_response())
 
                 # Read LOGIN7 packet next
                 try:

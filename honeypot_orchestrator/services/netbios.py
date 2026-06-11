@@ -46,6 +46,27 @@ class NetBIOSHoneypot(BaseHoneypotService):
                         signature=next_frame[:16].hex(),
                         summary="NetBIOS follow-up payload captured.",
                     )
+            elif packet_type == 0x00 and payload.startswith(b"\xffSMB"):
+                # Nmap sends an SMB Negotiate Request directly wrapped in a Session Message (0x00)
+                from honeypot_orchestrator.services.smb import _parse_smb1_header, _build_smb1_negotiate_response
+                smb1_request = _parse_smb1_header(header + payload)
+                await self.log_event(
+                    "netbios_smb_negotiate",
+                    src_ip=src_ip,
+                    src_port=src_port,
+                    summary="NetBIOS received direct SMB1 negotiate request.",
+                )
+                smb_resp = _build_smb1_negotiate_response(
+                    multiplex_id=smb1_request["multiplex_id"],
+                    process_id=smb1_request["process_id"],
+                    user_id=smb1_request["user_id"],
+                    tree_id=smb1_request["tree_id"],
+                    ntlm_challenge=b"\x11\x22\x33\x44\x55\x66\x77\x88",
+                    domain="CORP",
+                )
+                # Wrap it in a NetBIOS Session Message header
+                nbss_header = b"\x00\x00" + len(smb_resp).to_bytes(2, "big")
+                await self.write_bytes(writer, nbss_header + smb_resp)
             else:
                 await self.write_bytes(writer, b"\x83\x00\x00\x01\x80")
         except (asyncio.IncompleteReadError, BrokenPipeError, ConnectionResetError):

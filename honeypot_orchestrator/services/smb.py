@@ -549,7 +549,7 @@ def _build_smb1_negotiate_response(
 ) -> bytes:
     challenge = ntlm_challenge
     security_mode = 0x03
-    capabilities = 0x8000E3FD
+    capabilities = 0x0001E3FD
     now = _filetime(datetime.now(UTC))
     body = b"".join(
         [
@@ -560,7 +560,7 @@ def _build_smb1_negotiate_response(
             (1).to_bytes(2, "little"),
             (16644).to_bytes(4, "little"),
             (65536).to_bytes(4, "little"),
-            (0x00004D2B).to_bytes(4, "little"),
+            (0).to_bytes(4, "little"),
             capabilities.to_bytes(4, "little"),
             now.to_bytes(8, "little"),
             (180).to_bytes(2, "little", signed=True),
@@ -573,8 +573,8 @@ def _build_smb1_negotiate_response(
     header = _build_smb1_header(
         command=0x72,
         status=0,
-        flags=0x98,
-        flags2=0xC803,
+        flags=0x88,
+        flags2=0x4001,
         tree_id=tree_id,
         process_id=process_id,
         user_id=user_id,
