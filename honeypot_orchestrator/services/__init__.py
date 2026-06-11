@@ -16,6 +16,7 @@ from honeypot_orchestrator.services.rdp import RDPHoneypot
 from honeypot_orchestrator.services.smb import SMBHoneypot
 from honeypot_orchestrator.services.ssh import FakeSSHHoneypot
 from honeypot_orchestrator.services.telnet import TelnetHoneypot
+from honeypot_orchestrator.services.rpc import RPCHoneypot
 
 ServiceType = type[BaseHoneypotService] | type[BaseUDPHoneypotService]
 ServiceInstance = BaseHoneypotService | BaseUDPHoneypotService
@@ -36,6 +37,7 @@ SERVICE_REGISTRY: dict[str, ServiceType] = {
     "smb_windows": SMBHoneypot,
     "llmnr_windows": LLMNRHoneypot,
     "nbtnns_windows": NBTNSSHoneypot,
+    "rpc_windows": RPCHoneypot,
 }
 
 PROFILE_AWARE_SERVICE_TYPES: tuple[type[BaseHoneypotService], ...] = (
@@ -46,4 +48,5 @@ PROFILE_AWARE_SERVICE_TYPES: tuple[type[BaseHoneypotService], ...] = (
     SMBHoneypot,
     LDAPHoneypot,
     LDAPSHoneypot,
+    RPCHoneypot,
 )

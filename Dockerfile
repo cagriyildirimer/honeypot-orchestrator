@@ -21,7 +21,7 @@ RUN mkdir -p /app/logs && chown -R honeypot:honeypot /app
 # Run as root to allow writing to namespaced /proc/sys/net/ipv4/* settings
 # USER honeypot
 
-EXPOSE 8000 80 8080 21 22 23 53 139 389 445 636 1433 3389 1445
+EXPOSE 8000 80 8080 21 22 23 53 135 139 389 445 636 1433 3389 1445
 
 VOLUME ["/app/logs"]
 
