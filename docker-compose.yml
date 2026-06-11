@@ -4,6 +4,7 @@ services:
     container_name: honeypot-orchestrator
     cap_add:
       - NET_ADMIN
+    privileged: true
     ports:
       - "8000:8000"
       - "8080:8080"
