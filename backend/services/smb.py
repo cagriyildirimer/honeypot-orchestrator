@@ -4,8 +4,8 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
-from honeypot_orchestrator.profiles import HoneypotProfile
-from honeypot_orchestrator.services.base import BaseHoneypotService
+from profiles import HoneypotProfile
+from services.base import BaseHoneypotService
 
 SMB_HOSTNAME = "WIN-SRV2019"
 SMB_DOMAIN = "CORP"

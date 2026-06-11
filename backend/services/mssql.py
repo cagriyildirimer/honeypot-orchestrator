@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from honeypot_orchestrator.services.base import BaseHoneypotService
+from services.base import BaseHoneypotService
 
 
 def _uses_tds72_plus(tds_version_bytes: bytes) -> bool:

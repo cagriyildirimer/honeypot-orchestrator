@@ -11,10 +11,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
-from honeypot_orchestrator import __version__
+from config import __version__
 
 if TYPE_CHECKING:
-    from honeypot_orchestrator.orchestrator import Orchestrator
+    from orchestrator import Orchestrator
 
 
 ROLE_ADMIN = "admin"
@@ -30,8 +30,25 @@ class WebDashboard:
         # Panel de kucuk bir asyncio HTTP sunucusu olarak calisir.
         self._server: asyncio.AbstractServer | None = None
         # Basit oturumlar bellek icinde, kullanicilar yerel JSON dosyasinda tutulur.
-        self._sessions: dict[str, str] = {}
         self._users_path = self.orchestrator.config.logging.path.parent / "web_users.json"
+        self._sessions_path = self.orchestrator.config.logging.path.parent / "web_sessions.json"
+        self._sessions: dict[str, str] = self._load_sessions()
+
+    def _load_sessions(self) -> dict[str, str]:
+        try:
+            if self._sessions_path.exists():
+                with open(self._sessions_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {}
+
+    def _save_sessions(self) -> None:
+        try:
+            with open(self._sessions_path, "w", encoding="utf-8") as f:
+                json.dump(self._sessions, f)
+        except Exception:
+            pass
         self._users = _load_users(
             self._users_path,
             {
@@ -99,6 +116,22 @@ class WebDashboard:
 
         if path == "/healthz" and method == "GET":
             return self._json_response({"ok": True, "service": "web"})
+
+
+        if path == "/api/services/toggle" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._json_response(
+                    {"error": "Admin access required."},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+            payload = _decode_json_body(request["body"])
+            service_name = str(payload.get("service", ""))
+            enabled = bool(payload.get("enabled", False))
+            if enabled:
+                success = await self.orchestrator.start_service(service_name)
+            else:
+                success = await self.orchestrator.stop_service(service_name)
+            return self._json_response({"ok": success})
 
         if path == "/api/login" and method == "POST":
             payload = _decode_json_body(request["body"])
@@ -235,7 +268,7 @@ class WebDashboard:
                 )
 
         if path == "/api/whitelist" and method == "GET":
-            from honeypot_orchestrator.defense import get_whitelist
+            from defense import get_whitelist
             return self._json_response({"whitelist": get_whitelist()})
 
         if path == "/api/whitelist" and method == "POST":
@@ -249,9 +282,9 @@ class WebDashboard:
                     {"error": "IP and description are required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            from honeypot_orchestrator.defense import add_to_whitelist
+            from defense import add_to_whitelist
             if add_to_whitelist(ip, description):
-                from honeypot_orchestrator.defense import get_whitelist
+                from defense import get_whitelist
                 return self._json_response({"ok": True, "whitelist": get_whitelist()})
             return self._json_response(
                 {"error": "Failed to add or already exists."},
@@ -268,9 +301,9 @@ class WebDashboard:
                     {"error": "IP is required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            from honeypot_orchestrator.defense import delete_from_whitelist
+            from defense import delete_from_whitelist
             if delete_from_whitelist(ip):
-                from honeypot_orchestrator.defense import get_whitelist
+                from defense import get_whitelist
                 return self._json_response({"ok": True, "whitelist": get_whitelist()})
             return self._json_response(
                 {"error": "Not found in whitelist."},
@@ -278,7 +311,7 @@ class WebDashboard:
             )
 
         if path == "/api/blacklist" and method == "GET":
-            from honeypot_orchestrator.defense import get_blacklist
+            from defense import get_blacklist
             return self._json_response({"blacklist": get_blacklist()})
 
         if path == "/api/blacklist" and method == "POST":
@@ -292,9 +325,9 @@ class WebDashboard:
                     {"error": "IP/MAC and description are required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            from honeypot_orchestrator.defense import add_to_blacklist
+            from defense import add_to_blacklist
             if add_to_blacklist(ip, description):
-                from honeypot_orchestrator.defense import get_blacklist
+                from defense import get_blacklist
                 return self._json_response({"ok": True, "blacklist": get_blacklist()})
             return self._json_response(
                 {"error": "Failed to add or already exists."},
@@ -311,9 +344,9 @@ class WebDashboard:
                     {"error": "IP/MAC is required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            from honeypot_orchestrator.defense import delete_from_blacklist
+            from defense import delete_from_blacklist
             if delete_from_blacklist(ip):
-                from honeypot_orchestrator.defense import get_blacklist
+                from defense import get_blacklist
                 return self._json_response({"ok": True, "blacklist": get_blacklist()})
             return self._json_response(
                 {"error": "Not found in blacklist."},
@@ -344,8 +377,9 @@ class WebDashboard:
                 status=HTTPStatus.UNAUTHORIZED,
             )
 
-        token = secrets.token_urlsafe(24)
+        token = secrets.token_hex(32)
         self._sessions[token] = username
+        self._save_sessions()
         await self.orchestrator.logger.log(
             {
                 "service": "web",
@@ -360,7 +394,9 @@ class WebDashboard:
 
     async def _handle_logout(self, cookies: dict[str, str]) -> dict[str, Any]:
         token = cookies.get("session", "")
-        self._sessions.pop(token, None)
+        if token:
+            self._sessions.pop(token, None)
+            self._save_sessions()
         return self._json_response(
             {"ok": True},
             cookies=[_build_cookie("session", "", max_age=0)],
@@ -431,8 +467,9 @@ class WebDashboard:
         self._sessions = {
             token: session_username
             for token, session_username in self._sessions.items()
-            if session_username != username
+            if session_username in self._users
         }
+        self._save_sessions()
         await asyncio.to_thread(_save_users, self._users_path, self._users)
         await self.orchestrator.logger.log(
             {
@@ -708,11 +745,35 @@ class WebDashboard:
 
         top_mac = "unknown"
         top_ip_blocked = False
+        geo_markers = []
         if ip_totals:
-            from honeypot_orchestrator.defense import resolve_mac, is_blacklisted
+            from defense import resolve_mac, is_blacklisted
             top_ip = max(ip_totals, key=ip_totals.get)
             top_mac = resolve_mac(top_ip)
             top_ip_blocked = is_blacklisted(top_ip)
+            # GeoIP lookup for map markers
+            try:
+                from geo import bulk_lookup
+                geo_data = bulk_lookup(list(ip_totals.keys())[:200])
+                seen_coords: set[tuple[float, float]] = set()
+                for ip, count in sorted(ip_totals.items(), key=lambda x: x[1], reverse=True):
+                    info = geo_data.get(ip, {})
+                    lat = info.get("lat", 0)
+                    lon = info.get("lon", 0)
+                    if lat == 0 and lon == 0:
+                        continue
+                    coord_key = (round(lat, 1), round(lon, 1))
+                    if coord_key in seen_coords:
+                        continue
+                    seen_coords.add(coord_key)
+                    geo_markers.append({
+                        "ip": ip, "lat": lat, "lon": lon,
+                        "country": info.get("country", ""),
+                        "city": info.get("city", ""),
+                        "count": count,
+                    })
+            except Exception:
+                pass
 
         return {
             "services": self.orchestrator.service_status(display_host),
@@ -730,6 +791,7 @@ class WebDashboard:
                 "top_ip_mac": top_mac,
                 "top_ip_blocked": top_ip_blocked,
             },
+            "geo_markers": geo_markers,
             "events": filtered[:limit],
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
         }

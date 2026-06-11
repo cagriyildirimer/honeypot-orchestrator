@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from honeypot_orchestrator.services.base import BaseHoneypotService
+from services.base import BaseHoneypotService
 
 
 class DNSHoneypot(BaseHoneypotService):

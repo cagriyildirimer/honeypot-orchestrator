@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from honeypot_orchestrator.services.base import BaseHoneypotService, BaseUDPHoneypotService
-from honeypot_orchestrator.services.dns import DNSHoneypot
-from honeypot_orchestrator.services.ftp import FTPHoneypot
-from honeypot_orchestrator.services.http import HTTPHoneypot
-from honeypot_orchestrator.services.ldap import LDAPHoneypot
-from honeypot_orchestrator.services.ldaps import LDAPSHoneypot
-from honeypot_orchestrator.services.llmnr import LLMNRHoneypot
-from honeypot_orchestrator.services.mssql import MSSQLHoneypot
-from honeypot_orchestrator.services.nbtnns import NBTNSSHoneypot
-from honeypot_orchestrator.services.netbios import NetBIOSHoneypot
-from honeypot_orchestrator.services.rdp import RDPHoneypot
-from honeypot_orchestrator.services.smb import SMBHoneypot
-from honeypot_orchestrator.services.ssh import FakeSSHHoneypot
-from honeypot_orchestrator.services.telnet import TelnetHoneypot
-from honeypot_orchestrator.services.rpc import RPCHoneypot
+from services.base import BaseHoneypotService, BaseUDPHoneypotService
+from services.dns import DNSHoneypot
+from services.ftp import FTPHoneypot
+from services.http import HTTPHoneypot
+from services.ldap import LDAPHoneypot
+from services.ldaps import LDAPSHoneypot
+from services.llmnr import LLMNRHoneypot
+from services.mssql import MSSQLHoneypot
+from services.nbtnns import NBTNSSHoneypot
+from services.netbios import NetBIOSHoneypot
+from services.rdp import RDPHoneypot
+from services.smb import SMBHoneypot
+from services.ssh import FakeSSHHoneypot
+from services.telnet import TelnetHoneypot
+from services.rpc import RPCHoneypot
 
 ServiceType = type[BaseHoneypotService] | type[BaseUDPHoneypotService]
 ServiceInstance = BaseHoneypotService | BaseUDPHoneypotService

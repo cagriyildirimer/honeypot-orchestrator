@@ -154,12 +154,27 @@ def delete_from_blacklist(ip_or_mac: str) -> bool:
     return True
 
 
+import time
+
+_rate_limits: dict[str, list[float]] = {}
+
 def record_suspicious_event(ip: str) -> None:
     if not ip or ip in {"127.0.0.1", "::1", "localhost", "unknown"}:
         return
     if is_whitelisted(ip):
         return
+    
     current = _suspicious_counters.get(ip, 0) + 1
     _suspicious_counters[ip] = current
     if current >= 100:
         add_to_blacklist(ip, "Automated ban: reached 100 suspicious events")
+        return
+    
+    # Sliding window rate limiting: 10 events / second
+    now = time.time()
+    history = _rate_limits.get(ip, [])
+    history = [ts for ts in history if now - ts < 1.0]
+    history.append(now)
+    _rate_limits[ip] = history
+    if len(history) >= 10:
+        add_to_blacklist(ip, "Automated ban: rate limit exceeded (10 events/sec)")

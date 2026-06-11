@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from honeypot_orchestrator.event_logger import JSONLEventLogger
-from honeypot_orchestrator.profiles import HoneypotProfile
-from honeypot_orchestrator.services.base import BaseHoneypotService
+from event_logger import JSONLEventLogger
+from profiles import HoneypotProfile
+from services.base import BaseHoneypotService
 
 
 class HTTPHoneypot(BaseHoneypotService):

@@ -4,7 +4,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Any
 
-from honeypot_orchestrator.event_logger import JSONLEventLogger
+from event_logger import JSONLEventLogger
 
 
 class BaseHoneypotService(ABC):
@@ -104,7 +104,7 @@ class BaseHoneypotService(ABC):
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
-        from honeypot_orchestrator.defense import is_blacklisted, record_suspicious_event
+        from defense import is_blacklisted, record_suspicious_event
 
         peer_ip, peer_port = self.peer(writer)
         if is_blacklisted(peer_ip):

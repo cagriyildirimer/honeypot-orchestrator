@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+__version__ = "0.1.0"
+
 
 @dataclass(frozen=True)
 class ServiceConfig:
@@ -185,7 +187,7 @@ def _service_env_key(service_name: str, field: str) -> str:
 
 
 def _validate_config(config: AppConfig) -> None:
-    from honeypot_orchestrator.profiles import PROFILES
+    from profiles import PROFILES
 
     if not (1 <= config.web.port <= 65535):
         raise ValueError(f"Invalid web port: {config.web.port}")

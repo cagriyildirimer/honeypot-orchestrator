@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from honeypot_orchestrator.services.base import BaseHoneypotService
+from services.base import BaseHoneypotService
 
 logger = logging.getLogger(__name__)
 

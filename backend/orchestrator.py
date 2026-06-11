@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import asyncio
 
-from honeypot_orchestrator.config import AppConfig
-from honeypot_orchestrator.event_logger import JSONLEventLogger
-from honeypot_orchestrator.profiles import HoneypotProfile, get_profile, list_profiles, load_profile
-from honeypot_orchestrator.services import PROFILE_AWARE_SERVICE_TYPES, SERVICE_REGISTRY, ServiceInstance, ServiceType
-from honeypot_orchestrator.services.base import BaseHoneypotService
-from honeypot_orchestrator.web.server import WebDashboard
-from honeypot_orchestrator.net_tuner import apply_profile_network_settings
-from honeypot_orchestrator.packet_mangler import PacketMangler
+from config import AppConfig
+from event_logger import JSONLEventLogger
+from profiles import HoneypotProfile, get_profile, list_profiles, load_profile
+from services import PROFILE_AWARE_SERVICE_TYPES, SERVICE_REGISTRY, ServiceInstance, ServiceType
+from services.base import BaseHoneypotService
+from web.server import WebDashboard
+from net_tuner import apply_profile_network_settings
+from packet_mangler import PacketMangler
 
 class Orchestrator:
     def __init__(self, config: AppConfig) -> None:
@@ -45,7 +45,7 @@ class Orchestrator:
 
     async def stop(self) -> None:
         # Güvenlik duvarı kurallarını temizler.
-        from honeypot_orchestrator.net_tuner import cleanup_firewall
+        from net_tuner import cleanup_firewall
         cleanup_firewall()
         
         self.packet_mangler.stop()
@@ -148,6 +148,46 @@ class Orchestrator:
 
     def _configured_profile_services(self, profile: HoneypotProfile) -> list[str]:
         return [service_name for service_name in profile.services if service_name in self.services]
+
+
+    async def start_service(self, name: str) -> bool:
+        if name not in self.services:
+            return False
+        service = self.services[name]
+        if service.running:
+            return True
+        running = {n for n, s in self.services.items() if s.running}
+        running.add(name)
+        await service.start()
+        await apply_profile_network_settings(
+            self.profile.name, self.logger, self.services,
+            running, self.config.web.port, self.config.web.enabled,
+        )
+        await self.logger.log({
+            "service": "orchestrator",
+            "event_type": "service_started",
+            "summary": f"Service {name} manually started.",
+        })
+        return True
+
+    async def stop_service(self, name: str) -> bool:
+        if name not in self.services:
+            return False
+        service = self.services[name]
+        if not service.running:
+            return True
+        await service.stop()
+        running = {n for n, s in self.services.items() if s.running}
+        await apply_profile_network_settings(
+            self.profile.name, self.logger, self.services,
+            running, self.config.web.port, self.config.web.enabled,
+        )
+        await self.logger.log({
+            "service": "orchestrator",
+            "event_type": "service_stopped",
+            "summary": f"Service {name} manually stopped.",
+        })
+        return True
 
     async def _apply_profile(self, profile: HoneypotProfile, *, emit_log: bool) -> None:
         previous_profile = self.profile

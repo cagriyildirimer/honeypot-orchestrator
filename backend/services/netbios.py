@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from honeypot_orchestrator.services.base import BaseHoneypotService
+from services.base import BaseHoneypotService
 
 
 class NetBIOSHoneypot(BaseHoneypotService):
@@ -48,7 +48,7 @@ class NetBIOSHoneypot(BaseHoneypotService):
                     )
             elif packet_type == 0x00 and payload.startswith(b"\xffSMB"):
                 # Nmap sends an SMB Negotiate Request directly wrapped in a Session Message (0x00)
-                from honeypot_orchestrator.services.smb import _parse_smb1_header, _build_smb1_negotiate_response
+                from services.smb import _parse_smb1_header, _build_smb1_negotiate_response
                 smb1_request = _parse_smb1_header(header + payload)
                 await self.log_event(
                     "netbios_smb_negotiate",

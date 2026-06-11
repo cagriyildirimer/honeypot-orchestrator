@@ -2,6 +2,28 @@
   const h = React.createElement;
   const { useEffect, useState } = React;
 
+  // Global 3D Tilt Effect
+  document.addEventListener('mousemove', (e) => {
+    const target = e.target.closest('.tilt-effect');
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const midX = rect.width / 2;
+    const midY = rect.height / 2;
+    const rotateX = ((y - midY) / midY) * -1.5;
+    const rotateY = ((x - midX) / midX) * 1.5;
+    target.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+    target.style.transition = 'none';
+  });
+  document.addEventListener('mouseout', (e) => {
+    const target = e.target.closest('.tilt-effect');
+    if (!target) return;
+    target.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg)';
+    target.style.transition = 'transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)';
+  });
+
+
   const NAV_ITEMS = [
     { key: "dashboard", label: "Dashboard", path: "/dashboard" },
     { key: "profiles", label: "Profiles", path: "/profiles" },
@@ -534,6 +556,35 @@
     }, deps);
   }
 
+  function Skeleton(props) {
+    return h("div", { 
+      className: `skeleton ${props.className || ""}`, 
+      style: { width: "100%", height: "20px", ...props.style } 
+    });
+  }
+
+  function PageSkeleton() {
+    return h(
+      "div",
+      null,
+      h("header", { className: "topbar", style: { marginBottom: "18px" } }, 
+        h(Skeleton, { style: { width: "250px", height: "38px", borderRadius: "12px" } })
+      ),
+      h("section", { className: "metric-grid" },
+        Array.from({ length: 4 }).map((_, i) => 
+          h("article", { key: i, className: "metric-card" }, 
+            h(Skeleton, { style: { width: "40%", height: "14px", marginBottom: "12px" } }),
+            h(Skeleton, { style: { width: "70%", height: "28px", marginBottom: "12px" } }),
+            h(Skeleton, { style: { width: "100%", height: "12px" } })
+          )
+        )
+      ),
+      h("section", { className: "panel", style: { marginTop: "18px" } }, 
+        h(Skeleton, { style: { width: "100%", height: "300px", borderRadius: "16px" } })
+      )
+    );
+  }
+
   function NavLink(props) {
     return h(
       "a",
@@ -546,12 +597,45 @@
     );
   }
 
+  function AnimatedCounter(props) {
+    const value = typeof props.value === "string" ? parseInt(props.value, 10) : props.value;
+    if (isNaN(value)) return h("strong", null, props.value);
+
+    const [count, setCount] = useState(0);
+
+    useEffect(() => {
+      let start = count;
+      const end = value;
+      if (start === end) return;
+      
+      const duration = 1000;
+      let startTimestamp = null;
+      
+      const step = (timestamp) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        const easeProgress = 1 - Math.pow(1 - progress, 4);
+        setCount(Math.floor(start + easeProgress * (end - start)));
+        
+        if (progress < 1) {
+          window.requestAnimationFrame(step);
+        } else {
+          setCount(end);
+        }
+      };
+      
+      window.requestAnimationFrame(step);
+    }, [value]);
+
+    return h("strong", null, count.toString());
+  }
+
   function MetricCard(props) {
     return h(
       "article",
       { className: "metric-card" },
       h("span", null, props.label),
-      h("strong", null, props.value),
+      h(AnimatedCounter, { value: props.value }),
       h("small", null, props.note)
     );
   }
@@ -635,10 +719,79 @@
     );
   }
 
+  function EventDrawer(props) {
+    if (!props.event) return null;
+    return h(
+      "div",
+      { className: "drawer-overlay", onClick: props.onClose },
+      h(
+        "div",
+        { className: "drawer", onClick: (e) => e.stopPropagation() },
+        h(
+          "div",
+          { className: "drawer-header" },
+          h("h3", null, "Event Details"),
+          h("button", { className: "button secondary small", onClick: props.onClose }, "Close")
+        ),
+        h(
+          "div",
+          { className: "drawer-body" },
+          h("pre", { className: "json-viewer" }, JSON.stringify(props.event, null, 2))
+        )
+      )
+    );
+  }
+
+  function GeoWorldMap(props) {
+    const containerRef = React.useRef(null);
+    const globeRef = React.useRef(null);
+    const markers = props.markers || [];
+
+    React.useEffect(() => {
+      if (!containerRef.current) return;
+      if (!globeRef.current && window.Globe) {
+        globeRef.current = window.Globe()(containerRef.current)
+          .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+          .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+          .backgroundColor('rgba(0,0,0,0)')
+          .width(800)
+          .height(400)
+          .pointOfView({ altitude: 2.0 });
+
+        globeRef.current.controls().autoRotate = true;
+        globeRef.current.controls().autoRotateSpeed = 1.0;
+        globeRef.current.controls().enableZoom = false;
+      }
+
+      const globe = globeRef.current;
+      if (globe) {
+        const points = markers.map(m => ({
+          lat: m.lat,
+          lng: m.lon,
+          size: Math.max(0.1, Math.min(1.0, m.count / 10)),
+          color: '#e31a1a',
+          name: `${m.city ? m.city + ', ' : ''}${m.country} (${m.count} events - IP: ${m.ip})`
+        }));
+
+        globe.pointsData(points)
+          .pointAltitude(d => d.size * 0.1)
+          .pointColor('color')
+          .pointRadius(d => d.size * 2)
+          .pointLabel('name');
+      }
+    }, [markers]);
+
+    return h("div", { className: "geo-map-container", style: { display: 'flex', justifyContent: 'center', minHeight: '400px', position: 'relative' } },
+      h("div", { ref: containerRef }),
+      markers.length === 0 ? h("div", { className: "geo-empty", style: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none' } }, "No external attacker IPs detected yet.") : null
+    );
+  }
+
   function DashboardPage(props) {
     const [payload, setPayload] = useState(null);
     const [loading, setLoading] = useState(true);
     const [timelineRangeKey, setTimelineRangeKey] = useState("day");
+    const [selectedEvent, setSelectedEvent] = useState(null);
 
     async function loadOverview() {
       const next = await window.requestJson("/api/overview?limit=2000");
@@ -649,7 +802,7 @@
     usePolling(loadOverview, 5000, []);
 
     if (loading && !payload) {
-      return h("div", { className: "panel" }, "Loading dashboard...");
+      return h(PageSkeleton, null);
     }
 
     const stats = payload && payload.stats ? payload.stats : {};
@@ -659,8 +812,16 @@
     const runningServices = services.filter((service) => service.running).length;
     const suspiciousEvents = events.filter((event) => event && event.src_ip).length;
     const totalEvents = Number(stats.total_recent_events || events.length || 0);
-    const risk = buildRiskModel(events);
     const timelineReference = parseEventTime(payload && payload.generated_at);
+    
+    // B2: Real-time event counter for the last 60 seconds
+    const eventsLastMinute = events.filter((event) => {
+      if (!event.timestamp) return false;
+      const ts = parseEventTime(event.timestamp).getTime();
+      return timelineReference.getTime() - ts <= 60000;
+    }).length;
+
+    const risk = buildRiskModel(events);
     const suspiciousOverview = buildSuspiciousOverview(events, timelineReference);
     const timelineRange = timelineRangeConfig(timelineRangeKey);
     const timeline = buildTimelineBuckets(events, timelineReference, timelineRangeKey);
@@ -684,7 +845,10 @@
         h(
           "div",
           null,
-          h("h1", null, "Dashboard"),
+          h("h1", { style: { display: "flex", alignItems: "center", gap: "12px" } }, "Dashboard", 
+            h("span", { className: "status-pill running animate-pulse" }, "Live"),
+            h("span", { className: "status-counter", style: { fontSize: "14px", background: "rgba(255,255,255,0.05)", padding: "4px 8px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)" } }, `${eventsLastMinute} events/min`)
+          ),
           h("p", { className: "page-subtitle" }, "Recent activity and event volume overview.")
         ),
         h(
@@ -722,7 +886,18 @@
       ),
       h(
         "section",
-        { className: "panel risk-panel", "data-risk-tone": risk.band.tone },
+        { className: "panel geo-map-panel" },
+        h(
+          "div",
+          { className: "section-heading" },
+          h("div", null, h("h2", null, "Attacker Origins"), h("p", null, "Geographic distribution of suspicious IPs (last 24h).")),
+          h("span", { className: "status-counter" }, `${(payload.geo_markers || []).length} locations`)
+        ),
+        h(GeoWorldMap, { markers: payload.geo_markers || [] })
+      ),
+      h(
+        "section",
+        { className: "overview-section", "data-risk-tone": risk.band.tone },
         h(
           "div",
           { className: "section-heading" },
@@ -744,7 +919,7 @@
               { className: "risk-summary-row", "aria-label": "Risk highlights" },
               h(
                 "div",
-                { className: "risk-summary-item" },
+                { className: "risk-summary-item tilt-effect" },
                 h("span", null, "Peak Hour"),
                 h(
                   "strong",
@@ -760,21 +935,21 @@
               ),
               h(
                 "div",
-                { className: "risk-summary-item" },
+                { className: "risk-summary-item tilt-effect" },
                 h("span", null, "Suspicios Events"),
                 h("strong", null, String(suspiciousOverview.totalCount || 0)),
                 h("small", null, "Total suspicious events in the last 24 hours")
               ),
               h(
                 "div",
-                { className: "risk-summary-item" },
+                { className: "risk-summary-item tilt-effect" },
                 h("span", null, "Top Service"),
                 h("strong", null, suspiciousOverview.topService ? window.text(suspiciousOverview.topService.name) : "-"),
                 h("small", null, suspiciousOverview.topService ? `${suspiciousOverview.topService.count} suspicious events` : "No source-IP activity yet")
               ),
               h(
                 "div",
-                { className: "risk-summary-item" },
+                { className: "risk-summary-item tilt-effect" },
                 h("span", null, "Most Suspicious IP"),
                 h("strong", null,
                   suspiciousOverview.topIp
@@ -907,8 +1082,9 @@
             "Open logs"
           )
         ),
-        h(EventsTable, { events: events.slice(0, 10), fallbackProfile: profile ? profile.name : "-", onSelect: null })
-      )
+        h(EventsTable, { events: events.slice(0, 10), fallbackProfile: profile ? profile.name : "-", onSelect: (e) => setSelectedEvent(e) })
+      ),
+      h(EventDrawer, { event: selectedEvent, onClose: () => setSelectedEvent(null) })
     );
   }
 
@@ -1176,6 +1352,7 @@
                   {
                     key: `${event.timestamp || "event"}-${index}`,
                     onClick: props.onSelect ? () => props.onSelect(event) : undefined,
+                    className: "animate-slide-in",
                   },
                   h("td", null, window.text(window.formatTimestamp(event.timestamp))),
                   h("td", null, window.text(event.service)),
@@ -1194,6 +1371,7 @@
   function LiveActivityPage(props) {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [selectedEvent, setSelectedEvent] = useState(null);
 
     async function loadEvents() {
       const next = await window.requestJson("/api/events?limit=150");
@@ -1212,7 +1390,7 @@
     usePolling(loadEvents, 1500, []);
 
     if (loading && !events.length) {
-      return h("div", { className: "panel" }, "Loading live activity console...");
+      return h(PageSkeleton, null);
     }
 
     return h(
@@ -1343,7 +1521,9 @@
                   "div",
                   {
                     key: idx,
+                    onClick: () => setSelectedEvent(event),
                     style: {
+                      cursor: "pointer",
                       marginBottom: "12px",
                       borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
                       paddingBottom: "8px"
@@ -1356,7 +1536,8 @@
                 );
               })
         )
-      )
+      ),
+      h(EventDrawer, { event: selectedEvent, onClose: () => setSelectedEvent(null) })
     );
   }
 
@@ -1377,7 +1558,7 @@
     }, []);
 
     if (!payload) {
-      return h("div", { className: "panel" }, "Loading profiles...");
+      return h(PageSkeleton, null);
     }
 
     const services = payload.services || [];
@@ -1479,7 +1660,30 @@
                     "div",
                     { className: "service-card-header" },
                     h("div", null, h("strong", null, window.text(service.name)), h("span", null, `${window.text(service.display_host || service.host)}:${window.text(service.port)}`)),
-                    h("span", { className: `status-pill ${service.running ? "running" : "stopped"}` }, service.running ? "Live" : "Idle")
+                    h(
+                      "label",
+                      { className: "toggle-switch", title: service.running ? "Turn Off" : "Turn On" },
+                      h("input", {
+                        type: "checkbox",
+                        checked: service.running,
+                        onChange: async (e) => {
+                          const enabled = e.target.checked;
+                          const label = service.name.replace(/_/g, " ");
+                          try {
+                            await window.requestJson("/api/services/toggle", {
+                              method: "POST",
+                              body: JSON.stringify({ service: service.name, enabled: enabled })
+                            });
+                            window.showToast(enabled ? `${label} started` : `${label} stopped`, enabled ? "success" : "neutral");
+                            loadProfiles();
+                          } catch (err) {
+                            window.showToast(err.message || "Toggle failed", "error");
+                            loadProfiles();
+                          }
+                        }
+                      }),
+                      h("span", { className: "toggle-slider" })
+                    )
                   ),
                   h(
                     "div",
@@ -1526,7 +1730,7 @@
     usePolling(loadLogs, 6000, [filters.service, filters.eventType, filters.limit]);
 
     if (!payload) {
-      return h("div", { className: "panel" }, "Loading logs...");
+      return h(PageSkeleton, null);
     }
 
     const profile = payload.profile && payload.profile.current ? payload.profile.current.name : "-";
@@ -1635,39 +1839,7 @@
         h("div", { className: "section-heading" }, h("div", null, h("h2", null, "Events"), h("p", null, "Latest matching records from the event log."))),
         h(EventsTable, { events: visibleEvents, fallbackProfile: profile, onSelect: setSelectedEvent })
       ),
-      selectedEvent
-        ? h(
-            "div",
-            {
-              className: "modal-backdrop",
-              onClick: (event) => {
-                if (event.target === event.currentTarget) {
-                  setSelectedEvent(null);
-                }
-              },
-            },
-            h(
-              "div",
-              { className: "modal-panel" },
-              h("div", { className: "section-heading" }, h("div", null, h("h2", null, "Event Detail"), h("p", null, "Full JSON record."))),
-              h("pre", { className: "json-viewer" }, JSON.stringify(selectedEvent, null, 2)),
-              h(
-                "div",
-                { className: "button-row" },
-                h(
-                  "button",
-                  {
-                    type: "button",
-                    className: "button secondary",
-                    onClick: () => copyText(JSON.stringify(selectedEvent, null, 2)).then(() => window.showToast("Raw JSON copied.", "success")).catch((error) => window.showToast(error.message, "error")),
-                  },
-                  "Copy JSON"
-                ),
-                h("button", { type: "button", className: "button", onClick: () => setSelectedEvent(null) }, "Close")
-              )
-            )
-          )
-        : null
+      h(EventDrawer, { event: selectedEvent, onClose: () => setSelectedEvent(null) })
     );
   }
 
@@ -1735,7 +1907,7 @@
     }
 
     if (loading) {
-      return h("div", { className: "panel" }, "Loading whitelist...");
+      return h(PageSkeleton, null);
     }
 
     const isAdmin = props.session.role === "admin";
@@ -1883,7 +2055,7 @@
     }
 
     if (loading) {
-      return h("div", { className: "panel" }, "Loading blacklist...");
+      return h(PageSkeleton, null);
     }
 
     const isAdmin = props.session.role === "admin";
@@ -2036,7 +2208,7 @@
     usePolling(loadSettings, 5000, []);
 
     if (!payload) {
-      return h("div", { className: "panel" }, "Loading system settings...");
+      return h(PageSkeleton, null);
     }
 
     const isAdmin = props.session.role === "admin";
@@ -2482,7 +2654,7 @@
     }
 
     if (loading || !session) {
-      return h("div", { className: "app-frame" }, h("main", { className: "main-content" }, h("section", { className: "panel" }, "Loading application...")));
+      return h("div", { className: "app-frame" }, h("main", { className: "main-content" }, h(PageSkeleton, null)));
     }
 
     let pageNode = null;

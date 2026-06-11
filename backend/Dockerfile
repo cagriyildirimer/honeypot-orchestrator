@@ -11,11 +11,9 @@ RUN apt-get update && apt-get install -y iptables libnetfilter-queue-dev python3
 
 RUN addgroup --system honeypot && adduser --system --ingroup honeypot honeypot
 
-COPY pyproject.toml README.md config.yaml ./
-COPY honeypot_orchestrator ./honeypot_orchestrator
-COPY certs ./certs
+COPY . .
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir -r requirements.txt
 
 RUN mkdir -p /app/logs && chown -R honeypot:honeypot /app
 
@@ -29,4 +27,4 @@ VOLUME ["/app/logs"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()"
 
-CMD ["python", "-m", "honeypot_orchestrator.cli", "--config", "config.yaml"]
+CMD ["python", "-m", "cli", "--config", "config.yaml"]

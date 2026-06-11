@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 import asyncssh
 
-from honeypot_orchestrator.event_logger import JSONLEventLogger
-from honeypot_orchestrator.profiles import HoneypotProfile
-from honeypot_orchestrator.services.base import BaseHoneypotService
+from event_logger import JSONLEventLogger
+from profiles import HoneypotProfile
+from services.base import BaseHoneypotService
 
 
 def _resolve_windows_path(current: str, target: str) -> str:

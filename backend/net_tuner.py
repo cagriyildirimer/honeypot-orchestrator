@@ -5,7 +5,7 @@ import subprocess
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from honeypot_orchestrator.event_logger import JSONLEventLogger
+    from event_logger import JSONLEventLogger
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +146,7 @@ async def apply_profile_network_settings(
 
     # Collect active port information based on target decoy profile
     active_ports = []
-    from honeypot_orchestrator.services.base import BaseUDPHoneypotService
+    from services.base import BaseUDPHoneypotService
 
     for s_name in target_service_names:
         service = services.get(s_name)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from honeypot_orchestrator.services.base import BaseUDPHoneypotService
+from services.base import BaseUDPHoneypotService
 
 
 class NBTNSSProtocol(asyncio.DatagramProtocol):

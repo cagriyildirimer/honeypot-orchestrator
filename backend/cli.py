@@ -6,8 +6,8 @@ import platform
 import signal
 from collections.abc import Callable
 
-from honeypot_orchestrator.config import load_config
-from honeypot_orchestrator.orchestrator import Orchestrator
+from config import load_config
+from orchestrator import Orchestrator
 
 
 async def run(config_path: str) -> None:

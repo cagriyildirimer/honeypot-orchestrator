@@ -28,6 +28,20 @@ class JSONLEventLogger:
             await asyncio.to_thread(self._append_line, line)
 
     def _append_line(self, line: str) -> None:
+        # Check size for rotation (50MB)
+        if self.path.exists() and self.path.stat().st_size > 50 * 1024 * 1024:
+            self._rotate()
         # append modu eski kayitlari korur ve yeni olayi dosyanin sonuna ekler.
         with self.path.open("a", encoding="utf-8") as file:
             file.write(line + "\n")
+
+    def _rotate(self) -> None:
+        try:
+            for i in range(4, 0, -1):
+                old = Path(str(self.path) + f".{i}")
+                new = Path(str(self.path) + f".{i+1}")
+                if old.exists():
+                    old.replace(new)
+            self.path.replace(Path(str(self.path) + ".1"))
+        except Exception:
+            pass
