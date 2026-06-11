@@ -642,6 +642,7 @@
 
   function AppLayout(props) {
     const [settingsOpen, setSettingsOpen] = useState(isSettingsPage(props.page));
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     useEffect(() => {
       if (isSettingsPage(props.page)) {
@@ -653,14 +654,50 @@
       "div",
       { className: "app-frame" },
       h(
+        "header",
+        { className: "mobile-header" },
+        h(
+          "button",
+          {
+            type: "button",
+            className: "hamburger-btn",
+            onClick: () => setMobileMenuOpen(!mobileMenuOpen),
+            "aria-label": "Toggle Menu",
+          },
+          h("span", { className: `hamburger-icon${mobileMenuOpen ? " open" : ""}` })
+        ),
+        h(
+          "a",
+          {
+            className: "mobile-brand",
+            href: "/dashboard",
+            onClick: (e) => {
+              setMobileMenuOpen(false);
+              props.navigateClick("/dashboard")(e);
+            },
+          },
+          h("span", { className: "brand-mark" }, "HD"),
+          h("span", { className: "brand-text" }, "Honeypot Director")
+        )
+      ),
+      mobileMenuOpen
+        ? h("div", {
+            className: "sidebar-backdrop",
+            onClick: () => setMobileMenuOpen(false),
+          })
+        : null,
+      h(
         "aside",
-        { className: "sidebar" },
+        { className: `sidebar${mobileMenuOpen ? " mobile-open" : ""}` },
         h(
           "a",
           {
             className: "brand",
             href: "/dashboard",
-            onClick: props.navigateClick("/dashboard"),
+            onClick: (e) => {
+              setMobileMenuOpen(false);
+              props.navigateClick("/dashboard")(e);
+            },
             "aria-label": "Honeypot Director dashboard",
           },
           h("span", { className: "brand-mark" }, "HD"),
@@ -675,7 +712,10 @@
               href: item.path,
               label: item.label,
               active: props.page === item.key,
-              onClick: props.navigateClick(item.path),
+              onClick: (e) => {
+                setMobileMenuOpen(false);
+                props.navigateClick(item.path)(e);
+              },
             })
           ),
           h(
@@ -702,7 +742,10 @@
                       href: item.path,
                       label: item.label,
                       active: props.page === item.key,
-                      onClick: props.navigateClick(item.path),
+                      onClick: (e) => {
+                        setMobileMenuOpen(false);
+                        props.navigateClick(item.path)(e);
+                      },
                     })
                   )
                 )
@@ -1031,11 +1074,11 @@
                           h(
                             "li",
                             { key: service },
-                            h("span", null,
+                            h("span", { className: "donut-legend-label" },
                               h("i", {
                                 style: { background: DONUT_COLORS[index % DONUT_COLORS.length] },
                               }),
-                              service
+                              h("span", { className: "donut-legend-text" }, service)
                             ),
                             h("strong", null, String(count))
                           )
@@ -1138,6 +1181,13 @@
     const activeCount = activeEntry ? Number(activeEntry[1]) || 0 : 0;
     const activePercent = total > 0 && activeEntry ? Math.round((activeCount / total) * 100) : 0;
 
+    const truncatedService = activeEntry && activeEntry[0].length > 10
+      ? activeEntry[0].substring(0, 8) + "..."
+      : (activeEntry ? activeEntry[0] : "");
+
+    // 4px gap between segments if multiple segments exist
+    const gap = total > 0 && entries.length > 1 ? 4 : 0;
+
     return h(
       "div",
       { className: "donut-chart", onMouseLeave: () => setActiveIndex(null) },
@@ -1151,6 +1201,10 @@
               const segmentLength = (value / total) * circumference;
               const dashOffset = -offset;
               offset += segmentLength;
+
+              // Subtract the gap to separate segments visually
+              const drawLength = Math.max(0.1, segmentLength - gap);
+
               return h("circle", {
                 key: service,
                 className: `donut-segment${index === activeIndex ? " active" : ""}`,
@@ -1158,7 +1212,7 @@
                 cy: "110",
                 r: String(radius),
                 stroke: DONUT_COLORS[index % DONUT_COLORS.length],
-                strokeDasharray: `${segmentLength} ${Math.max(0, circumference - segmentLength)}`,
+                strokeDasharray: `${drawLength} ${Math.max(0, circumference - drawLength)}`,
                 strokeDashoffset: String(dashOffset),
                 transform: "rotate(-90 110 110)",
                 onMouseEnter: () => setActiveIndex(index),
@@ -1169,7 +1223,7 @@
             })
           : h("circle", { className: "donut-empty", cx: "110", cy: "110", r: String(radius) }),
         h("text", { className: "donut-center-label", x: "110", y: "104", textAnchor: "middle" }, String(activeEntry ? activeCount : total)),
-        h("text", { className: "donut-center-sub", x: "110", y: "128", textAnchor: "middle" }, activeEntry ? `${activePercent}% ${activeEntry[0]}` : "events")
+        h("text", { className: "donut-center-sub", x: "110", y: "128", textAnchor: "middle" }, activeEntry ? `${activePercent}% ${truncatedService}` : "events")
       ),
       activeEntry
         ? h(

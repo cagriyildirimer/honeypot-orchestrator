@@ -1338,7 +1338,7 @@ th,
 .donut-segment {
   fill: none;
   stroke-width: 18;
-  stroke-linecap: round;
+  stroke-linecap: butt;
   transition: opacity 0.16s ease, stroke-width 0.16s ease;
   cursor: crosshair;
   outline: none;
@@ -1420,13 +1420,22 @@ th,
 
 .donut-legend.compact li {
   padding: 7px 9px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
-.donut-legend span {
-  display: inline-flex;
+.donut-legend-label {
+  display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.donut-legend-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
 }
 
 .donut-legend i {
@@ -1993,34 +2002,146 @@ tbody tr.selected {
   font-weight: 700;
 }
 
+.mobile-header {
+  display: none;
+}
+.hamburger-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+.hamburger-icon {
+  position: relative;
+  width: 20px;
+  height: 2px;
+  background: var(--text, #ffffff);
+  transition: background 0.2s ease;
+}
+.hamburger-icon::before,
+.hamburger-icon::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 20px;
+  height: 2px;
+  background: var(--text, #ffffff);
+  transition: transform 0.2s ease, top 0.2s ease;
+}
+.hamburger-icon::before {
+  top: -6px;
+}
+.hamburger-icon::after {
+  top: 6px;
+}
+.hamburger-icon.open {
+  background: transparent;
+}
+.hamburger-icon.open::before {
+  top: 0;
+  transform: rotate(45deg);
+}
+.hamburger-icon.open::after {
+  top: 0;
+  transform: rotate(-45deg);
+}
+.mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #ffffff;
+  font-weight: 850;
+  text-decoration: none;
+}
+.mobile-brand .brand-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0075ff 0%, #00c6ff 100%);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 850;
+  box-shadow: 0 4px 12px rgba(0, 117, 255, 0.3);
+}
+.mobile-brand .brand-text {
+  font-size: 16px;
+  letter-spacing: -0.5px;
+  background: linear-gradient(90deg, #ffffff 0%, rgba(255, 255, 255, 0.7) 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
 @media (max-width: 1180px) {
-  .app-frame {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    position: static;
-    height: auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 12px 16px;
-  }
-
-  .brand {
-    padding: 0;
-  }
-
-  .nav-stack {
-    display: flex;
-  }
-
   .dashboard-grid,
   .logs-grid,
   .settings-grid,
   .users-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 992px) {
+  .app-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-header {
+    display: flex;
+    position: sticky;
+    top: 0;
+    height: 56px;
+    z-index: 90;
+    background: rgba(10, 14, 35, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.16);
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 95;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 280px;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    display: block !important;
+    padding: 20px 14px;
+    background: linear-gradient(127.09deg, rgba(6, 11, 40, 0.98) 19.41%, rgba(10, 14, 35, 0.95) 76.65%);
+    box-shadow: 18px 0 46px rgba(0, 0, 0, 0.5);
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .brand {
+    padding: 0 8px 22px;
+  }
+
+  .nav-stack {
+    display: grid;
   }
 }
 
@@ -2052,14 +2173,14 @@ tbody tr.selected {
     display: grid;
   }
 
-	  .profile-control,
-	  .metric-grid,
-	  .metric-grid.compact-metrics,
-	  .risk-layout,
-	  .overview-split,
-	  .risk-summary-row,
-	  .theme-grid,
-	  .donut-layout,
+  .profile-control,
+  .metric-grid,
+  .metric-grid.compact-metrics,
+  .risk-layout,
+  .overview-split,
+  .risk-summary-row,
+  .theme-grid,
+  .donut-layout,
   .service-grid,
   .filter-grid,
   .table-inline-form,
@@ -2070,15 +2191,6 @@ tbody tr.selected {
 
   .refresh-note {
     text-align: left;
-  }
-
-  .sidebar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .nav-stack {
-    display: grid;
   }
 
   .activity-heat-grid {

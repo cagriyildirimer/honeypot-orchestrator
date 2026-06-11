@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import hashlib
 import secrets
 import time
 from collections import Counter
@@ -368,7 +369,7 @@ class WebDashboard:
     async def _handle_login(self, payload: dict[str, Any]) -> dict[str, Any]:
         username = str(payload.get("username", ""))
         password = str(payload.get("password", ""))
-        if self._user_password(username) != password:
+        if not _verify_password(password, self._user_password(username)):
             await self.orchestrator.logger.log(
                 {
                     "service": "web",
@@ -425,7 +426,7 @@ class WebDashboard:
                 {"error": f"User already exists: {username}."},
                 status=HTTPStatus.CONFLICT,
             )
-        self._users[username] = {"password": password, "role": role}
+        self._users[username] = {"password": _hash_password(password), "role": role}
         await asyncio.to_thread(_save_users, self._users_path, self._users)
         await self.orchestrator.logger.log(
             {
@@ -473,8 +474,8 @@ class WebDashboard:
             for token, session_username in self._sessions.items()
             if session_username in self._users
         }
-        self._save_sessions()
         await asyncio.to_thread(_save_users, self._users_path, self._users)
+        self._save_sessions()
         await self.orchestrator.logger.log(
             {
                 "service": "web",
@@ -497,7 +498,7 @@ class WebDashboard:
                 {"error": f"Unknown user: {username}."},
                 status=HTTPStatus.NOT_FOUND,
             )
-        self._users[username]["password"] = password
+        self._users[username]["password"] = _hash_password(password)
         await asyncio.to_thread(_save_users, self._users_path, self._users)
         await self.orchestrator.logger.log(
             {
@@ -845,35 +846,72 @@ def _clear_file(path: Path) -> None:
     path.write_text("", encoding="utf-8")
 
 
-def _load_users(path: Path, default_users: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
-    if not path.exists():
-        _save_users(path, default_users)
-        return dict(default_users)
+def _hash_password(password: str, salt: bytes | None = None, iterations: int = 600000) -> str:
+    if salt is None:
+        salt = secrets.token_bytes(16)
+    hash_bytes = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, iterations)
+    return f"pbkdf2_sha256${iterations}${salt.hex()}${hash_bytes.hex()}"
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    if not hashed.startswith("pbkdf2_sha256$"):
+        return password == hashed
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return dict(default_users)
-    if not isinstance(payload, dict):
-        return dict(default_users)
-    users = payload.get("users", {})
-    if not isinstance(users, dict):
-        return dict(default_users)
+        parts = hashed.split("$")
+        if len(parts) != 4:
+            return False
+        _, iterations_str, salt_hex, hash_hex = parts
+        iterations = int(iterations_str)
+        salt = bytes.fromhex(salt_hex)
+        expected_hash = bytes.fromhex(hash_hex)
+        actual_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, iterations)
+        return secrets.compare_digest(actual_hash, expected_hash)
+    except Exception:
+        return False
+
+
+def _load_users(path: Path, default_users: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
     cleaned: dict[str, dict[str, str]] = {}
-    for username, value in users.items():
-        normalized_username = str(username).strip()
-        if not normalized_username:
-            continue
-        if isinstance(value, dict):
-            password = str(value.get("password", ""))
-            role = _normalize_role(str(value.get("role", ROLE_VIEWER)))
-        else:
-            password = str(value)
-            role = ROLE_ADMIN if normalized_username in default_users else ROLE_VIEWER
-        if password:
-            cleaned[normalized_username] = {"password": password, "role": role}
+    needs_save = False
+
+    if path.exists():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                users_data = payload.get("users", {})
+                if isinstance(users_data, dict):
+                    for username, value in users_data.items():
+                        normalized_username = str(username).strip()
+                        if not normalized_username:
+                            continue
+                        if isinstance(value, dict):
+                            password = str(value.get("password", ""))
+                            role = _normalize_role(str(value.get("role", ROLE_VIEWER)))
+                        else:
+                            password = str(value)
+                            role = ROLE_ADMIN if normalized_username in default_users else ROLE_VIEWER
+                        if password:
+                            cleaned[normalized_username] = {"password": password, "role": role}
+        except Exception:
+            pass
+
+    # Ensure all default_users exist in cleaned
     for username, user in default_users.items():
-        cleaned.setdefault(username, dict(user))
-    return cleaned or dict(default_users)
+        if username not in cleaned:
+            cleaned[username] = dict(user)
+            needs_save = True
+
+    # Hash any unhashed passwords
+    for username, user_info in cleaned.items():
+        password = user_info["password"]
+        if not password.startswith("pbkdf2_sha256$"):
+            user_info["password"] = _hash_password(password)
+            needs_save = True
+
+    if needs_save or not path.exists():
+        _save_users(path, cleaned)
+
+    return cleaned
 
 
 def _save_users(path: Path, users: dict[str, dict[str, str]]) -> None:
