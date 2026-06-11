@@ -33,6 +33,8 @@ class WebDashboard:
         self._users_path = self.orchestrator.config.logging.path.parent / "web_users.json"
         self._sessions_path = self.orchestrator.config.logging.path.parent / "web_sessions.json"
         self._sessions: dict[str, str] = self._load_sessions()
+        self._reload_users()
+        self._started_at = time.monotonic()
 
     def _load_sessions(self) -> dict[str, str]:
         try:
@@ -43,12 +45,7 @@ class WebDashboard:
             pass
         return {}
 
-    def _save_sessions(self) -> None:
-        try:
-            with open(self._sessions_path, "w", encoding="utf-8") as f:
-                json.dump(self._sessions, f)
-        except Exception:
-            pass
+    def _reload_users(self) -> None:
         self._users = _load_users(
             self._users_path,
             {
@@ -58,7 +55,14 @@ class WebDashboard:
                 },
             },
         )
-        self._started_at = time.monotonic()
+
+    def _save_sessions(self) -> None:
+        try:
+            with open(self._sessions_path, "w", encoding="utf-8") as f:
+                json.dump(self._sessions, f)
+        except Exception:
+            pass
+        self._reload_users()
 
     async def start(self) -> None:
         # Tarayici istekleri handle_client metoduna yonlendirilir.
