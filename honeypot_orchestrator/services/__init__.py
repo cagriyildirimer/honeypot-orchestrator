@@ -48,5 +48,4 @@ PROFILE_AWARE_SERVICE_TYPES: tuple[type[BaseHoneypotService], ...] = (
     SMBHoneypot,
     LDAPHoneypot,
     LDAPSHoneypot,
-    RPCHoneypot,
 )
