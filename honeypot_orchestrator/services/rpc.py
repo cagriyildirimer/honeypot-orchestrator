@@ -20,7 +20,7 @@ class RPCHoneypot(BaseHoneypotService):
 
         try:
             # We wait for the initial RPC payload
-            data = await asyncio.wait_for(reader.read(4096), timeout=5.0)
+            data = await reader.read(4096)
             if not data:
                 return
 
