@@ -40,28 +40,17 @@ class RPCHoneypot(BaseHoneypotService):
                     summary=f"Received DCERPC request with PTYPE {ptype}",
                 )
 
-                # Construct a realistic DCE/RPC Bind_Ack (Accept) PDU
-                # A standard Windows Bind_Ack is 68 bytes long
+                # Construct the exact DCE/RPC Bind_Nak (Reject) PDU expected by Nmap
+                # Nmap's regex expects: ^\x05\0\r\x03\x10\0\0\0\x18\0\0\0....\x04\0\x01\x05\0...$
                 response = (
-                    b"\x05\x00"           # RPC Version = 5, Minor = 0
-                    b"\x0c"               # PTYPE = bind_ack (0x0C)
-                    b"\x03"               # PFC Flags = 3 (PFC_FIRST_FRAG | PFC_LAST_FRAG)
-                    b"\x10\x00\x00\x00"   # Packed Data Representation (Little Endian)
-                    b"\x44\x00"           # Fragment Length = 68 bytes
-                    b"\x00\x00"           # Auth Length = 0
-                    + call_id +           # Call ID (Extracted from request)
-                    b"\x10\xb8\x00\x00"   # Max Xmit Frag (47104)
-                    b"\x10\xb8\x00\x00"   # Max Recv Frag (47104)
-                    b"\x12\x34\x56\x78"   # Assoc Group ID (Dummy)
-                    b"\x04\x00"           # Sec Addr Len (4 bytes for "135\x00")
-                    b"135\x00"            # Sec Addr
-                    b"\x00\x00\x00\x00"   # Padding to align to 4 bytes
-                    b"\x01\x00\x00\x00"   # Num Results (1)
-                    b"\x00\x00"           # Result: Acceptance (0)
-                    b"\x00\x00"           # Reason: Reason Not Specified (0)
-                    b"\x04\x5d\x88\x8a\xeb\x1c\xc9\x11"  # Transfer Syntax UUID (NDR)
-                    b"\x9f\xe8\x08\x00\x2b\x10\x48\x60"
-                    b"\x02\x00\x00\x00"   # Syntax Version (2)
+                    b"\x05\x00\x0d\x03"   # Version 5.0, Bind_Nak (0x0D), Flags 3
+                    b"\x10\x00\x00\x00"   # Little Endian Data Rep
+                    b"\x18\x00\x00\x00"   # Frag Len 24, Auth Len 0
+                    + call_id +           # Call ID (4 bytes)
+                    b"\x04\x00"           # Reject Reason: Local Limit Exceeded / Syntax
+                    b"\x01"               # Num supported versions: 1
+                    b"\x05\x00"           # Supported version: 5.0
+                    b"\x00\x00\x00"       # Padding to 24 bytes
                 )
 
                 writer.write(response)
