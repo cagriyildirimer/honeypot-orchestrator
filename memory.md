@@ -12,11 +12,38 @@
 - Extra root folders `backend/`, `frontend/`, and `vision-ui-upstream/` were removed because they were unused/untracked leftovers.
 - Current target branch for pushing is `origin/main`.
 
+## Security & Defense Mechanisms (`defense.py`)
+- **IP & MAC Banning**: Provides manual and automated filtering of attackers. Ban list persists in `logs/blacklist.json` while safe clients persist in `logs/whitelist.json`.
+- **MAC Address Resolution (`resolve_mac`)**: Dynamically queries the local ARP table using subprocess commands:
+  - Windows: Runs `arp -a <ip>` and extracts physical address via regex matching.
+  - Linux/macOS: Runs `arp -n <ip>` and extracts physical address.
+  - Returns `N/A` for loopback addresses, `unknown` on failure.
+- **Automated IP Banning**: If a connection client registers 100 or more suspicious events/connection attempts, it triggers an automated ban entry added to the blacklist.
+- **Pre-Connection Filter**: The orchestrator's TCP service base handler passes incoming sockets through a blacklist check first; matching IP or resolved MAC addresses have their connections abruptly closed prior to any protocol interaction.
+
+## Network Tuning & Fingerprint Emulation (`net_tuner.py`)
+- **OS Emulation**: Modifies system-level TCP/IP parameters inside the container network namespace to match target profiles:
+  - **`windows_server` profile**: Set IP default Time to Live (TTL) to `128` and disable TCP Timestamps (`tcp_timestamps=0`) to emulate Windows Server network fingerprints.
+  - **`linux_server` / `empty` profiles**: Set IP default TTL to `64` and enable TCP Timestamps (`tcp_timestamps=1`) to emulate standard Linux/Unix TCP behavior.
+- **Implementation**: Writes values directly to `/proc/sys/net/ipv4/ip_default_ttl` and `/proc/sys/net/ipv4/tcp_timestamps`. If these paths are unavailable (due to permission limits or OS differences), warnings are gracefully logged without crashing the orchestrator process.
+
+## Web Dashboard & User RBAC (`web/server.py`)
+- **Custom Web Server**: Implements a standard-library-only TCP socket listener handling basic HTTP framing, cookie routing, static file parsing, and JSON API payloads.
+- **Role-Based Access Control (RBAC)**:
+  - **`admin` role**: Full access to all endpoints. Required to modify the active profile, add/delete whitelist or blacklist entries, clear logs, and perform user management operations.
+  - **`viewer` role**: Read-only access to log events stream, overview charts, active profiles overview, and status checks. Unauthorized actions return a `403 Forbidden` response.
+- **User Management**: Allows admins to dynamically create, delete, alter roles, and change passwords for users. Credentials store in `logs/web_users.json`. A minimum of one admin user is enforced to prevent locking out.
+
 ## Protocol Decoy Implementations & Architectural Details
 - **HTTP Decoy (`services/http.py`)**: Simulates basic HTTP servers, parses request lines and header structures (e.g. User-Agent), and returns profile-specific mock web pages.
-- **SSH Decoy (`services/ssh.py`)**: Emulates banner greetings and password prompts. Logs standard password-based login attempts and yields authentication denials.
+- **SSH Decoy (`services/ssh.py`)**: Emulates banner greetings (e.g. OpenSSH or OpenSSH for Windows) and password prompts. Logs standard password-based login attempts and yields authentication denials.
 - **FTP Decoy (`services/ftp.py`)**: Mimics standard command sequences (USER, PASS, QUIT) and tracks login credentials and interaction logs.
+- **Telnet Decoy (`services/telnet.py`)**: Simulates basic Telnet authentication, capturing connection attempts, usernames, and passwords while returning standard authentication failures.
 - **DNS Decoy (`services/dns.py`)**: Listens over TCP (port 1053 default), decodes DNS query headers, names, classes, and types (A, CNAME, TXT, etc.), returning structured NXDOMAIN packet responses.
+- **LLMNR Decoy (`services/llmnr.py`)**: Listens over UDP (port 5355 default), decodes LLMNR query headers and names, and returns spoofed IP address responses to direct query sources back to the honeypot host.
+- **NBTNS Decoy (`services/nbtnns.py`)**: Listens over UDP (port 137 default). Handles NetBIOS Name Service queries:
+  - **Name Query (0x0020)**: Returns a spoofed name resolution mapping response.
+  - **Node Status Query / NBSTAT (0x0021)**: Returns realistic server details including Windows host (`WIN-SRV2019`), Domain (`CORP`), and MAC Address (`00:15:5d:a1:b2:c3`).
 - **NetBIOS Decoy (`services/netbios.py`)**: Decodes NetBIOS-encoded name representations, handles session requests, and logs any follow-up binary payloads.
 - **LDAP Decoy (`services/ldap.py`)**: Performs ASN.1/BER decoding, handles authentication bind payloads (generating realistic Active Directory login failures), and supports baseObject/rootDSE searches with dynamic attributes like `currentTime`.
 - **LDAPS Decoy (`services/ldaps.py`)**: Reads the initial TLS Client Hello frame to parse the incoming TLS version, then returns a realistic TLS alert payload to gracefully reject further negotiation.
@@ -25,3 +52,11 @@
 - **SMB Decoy (`services/smb.py`)**: A robust custom state machine supporting both SMB1 and SMB2 protocols, including SPNEGO token encapsulation, NTLM challenge-response sequences, and NTLMSSP payload decoding (Domain/Username/Workstation).
 - **Live Attacker Monitor (`/live` Page)**: A terminal-like, real-time command monitoring dashboard built directly into the Web UI. It polls targeted honeypot events at 1.5-second intervals, providing instant operational feedback of attacker connections, inputs, and commands in a premium JetBrains Mono font face. External Webhooks/Telegram integrations were removed per user specifications to keep operational views fully self-contained.
 
+## LAN / Macvlan Deployment Mode (`scripts/start-lan.sh`)
+- **Macvlan Network Mode**: Enables the honeypot orchestrator container to act as a physical device on the host's LAN network by registering its own MAC address and obtaining a dedicated IP address directly from the subnet.
+- **Automated setup script (`scripts/start-lan.sh`)**:
+  - Automatically identifies default gateways, parent interface interfaces, and subnets.
+  - Generates/updates `.env` network variables.
+  - Creates the custom docker macvlan network (default name `honeypot_lan_net`).
+  - Launches `docker-compose.lan.yml` in detached or interactive mode.
+  - Enables binding of decoy services to actual standard ports (HTTP `80`, SSH `22`, SMB `445`, DNS `53`, FTP `21`, Telnet `23`) inside the container namespace without clashing with host processes.
