@@ -47,30 +47,13 @@ def apply_nfqueue_rules(profile_name: str) -> None:
     try:
         # First, ensure we don't have duplicate OUTPUT rules
         subprocess.run(["iptables", "-D", "OUTPUT", "-p", "tcp", "--tcp-flags", "SYN,ACK", "SYN,ACK", "-j", "NFQUEUE", "--queue-num", "1"], capture_output=True)
-        # Drop invalid TCP flags (often used by Nmap to fingerprint OS)
-        subprocess.run(["iptables", "-D", "INPUT", "-p", "tcp", "--tcp-flags", "ALL", "NONE", "-j", "DROP"], capture_output=True)
-        subprocess.run(["iptables", "-D", "INPUT", "-p", "tcp", "--tcp-flags", "SYN,FIN", "SYN,FIN", "-j", "DROP"], capture_output=True)
-        subprocess.run(["iptables", "-D", "INPUT", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN,RST", "-j", "DROP"], capture_output=True)
-        subprocess.run(["iptables", "-D", "INPUT", "-p", "tcp", "--tcp-flags", "FIN,RST", "FIN,RST", "-j", "DROP"], capture_output=True)
-        subprocess.run(["iptables", "-D", "INPUT", "-p", "tcp", "--tcp-flags", "ACK,FIN", "FIN", "-j", "DROP"], capture_output=True)
-        subprocess.run(["iptables", "-D", "INPUT", "-p", "tcp", "--tcp-flags", "ACK,PSH", "PSH", "-j", "DROP"], capture_output=True)
-        subprocess.run(["iptables", "-D", "INPUT", "-p", "tcp", "--tcp-flags", "ACK,URG", "URG", "-j", "DROP"], capture_output=True)
 
         if profile_name == "windows_server":
-            # Add rules to drop invalid flags before they hit the stack
-            subprocess.run(["iptables", "-I", "INPUT", "1", "-p", "tcp", "--tcp-flags", "ALL", "NONE", "-j", "DROP"], capture_output=True)
-            subprocess.run(["iptables", "-I", "INPUT", "2", "-p", "tcp", "--tcp-flags", "SYN,FIN", "SYN,FIN", "-j", "DROP"], capture_output=True)
-            subprocess.run(["iptables", "-I", "INPUT", "3", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN,RST", "-j", "DROP"], capture_output=True)
-            subprocess.run(["iptables", "-I", "INPUT", "4", "-p", "tcp", "--tcp-flags", "FIN,RST", "FIN,RST", "-j", "DROP"], capture_output=True)
-            subprocess.run(["iptables", "-I", "INPUT", "5", "-p", "tcp", "--tcp-flags", "ACK,FIN", "FIN", "-j", "DROP"], capture_output=True)
-            subprocess.run(["iptables", "-I", "INPUT", "6", "-p", "tcp", "--tcp-flags", "ACK,PSH", "PSH", "-j", "DROP"], capture_output=True)
-            subprocess.run(["iptables", "-I", "INPUT", "7", "-p", "tcp", "--tcp-flags", "ACK,URG", "URG", "-j", "DROP"], capture_output=True)
-
             # Redirect SYN-ACK packets to NFQUEUE
             subprocess.run(["iptables", "-I", "OUTPUT", "1", "-p", "tcp", "--tcp-flags", "SYN,ACK", "SYN,ACK", "-j", "NFQUEUE", "--queue-num", "1"], capture_output=True)
-            logger.info("NFQUEUE and invalid flag drop rules applied for windows_server profile.")
+            logger.info("NFQUEUE rules applied for windows_server profile.")
         else:
-            logger.info("NFQUEUE and invalid flag drop rules removed for non-windows profile.")
+            logger.info("NFQUEUE rules removed for non-windows profile.")
     except Exception as e:
         logger.warning(f"Could not apply NFQUEUE rules: {e}")
 
@@ -104,8 +87,11 @@ async def apply_profile_network_settings(
     target_wmem = "4096 65536 12582912" if is_windows else "4096 65536 16777216"
 
     # Advanced TCP Obfuscation to strip Linux specific options in SYN-ACK
-    target_window_scaling = "0" if is_windows else "1"
-    target_sack = "0" if is_windows else "1"
+    # We MUST leave window_scaling and sack enabled (1) because Windows supports them
+    # and if we disable them in the kernel but our packet mangler adds them back, 
+    # the kernel will reject the connection leading to "tcpwrapped".
+    target_window_scaling = "1"
+    target_sack = "1"
     target_ecn = "0" if is_windows else "2"
     target_dsack = "0" if is_windows else "1"
     target_fack = "0" if is_windows else "1"
