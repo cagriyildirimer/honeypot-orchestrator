@@ -109,7 +109,7 @@ class MSSQLHoneypot(BaseHoneypotService):
             password = _extract_login7_password(login7_payload)
             client_hostname = _extract_login7_string(login7_payload, 36, 38)
             app_name = _extract_login7_string(login7_payload, 48, 50)
-            database_name = _extract_login7_string(login7_payload, 60, 62)
+            database_name = _extract_login7_string(login7_payload, 68, 70)
 
             # 4. Validate credentials
             if _is_decoy_credential(username, password):
@@ -247,12 +247,11 @@ def _build_prelogin_response() -> bytes:
             b"\x00" + version_offset.to_bytes(2, "big") + b"\x00\x06",
             b"\x01" + encryption_offset.to_bytes(2, "big") + b"\x00\x01",
             b"\x02" + instance_offset.to_bytes(2, "big") + b"\x00\x01",
-            b"\x03" + threadid_offset.to_bytes(2, "big") + b"\x00\x04",
+            b"\x03" + threadid_offset.to_bytes(2, "big") + b"\x00\x00",
             b"\xff",
             sql_server_2019_version,
             b"\x02",                  # Encryption: ENCRYPT_NOT_SUP (0x02)
             b"\x00",                  # Instance: empty name (1 byte \x00)
-            b"\x00\x00\x00\x00",      # ThreadID: 4 bytes
         ]
     )
 

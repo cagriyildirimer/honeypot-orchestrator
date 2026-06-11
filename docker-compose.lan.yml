@@ -1,6 +1,6 @@
 services:
-  honeypot-orchestrator:
-    build: .
+  backend:
+    build: ./backend
     container_name: honeypot-orchestrator-lan
     cap_add:
       - NET_BIND_SERVICE
@@ -51,6 +51,17 @@ services:
     networks:
       honeypot_lan:
         ipv4_address: "${HONEYPOT_LAN_IP:?Set HONEYPOT_LAN_IP to the reserved LAN IP for the container}"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: honeypot-frontend-lan
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - honeypot_lan
     restart: unless-stopped
 
 volumes:

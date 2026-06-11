@@ -17,32 +17,9 @@ if TYPE_CHECKING:
     from honeypot_orchestrator.orchestrator import Orchestrator
 
 
-WEB_DIR = Path(__file__).parent
 ROLE_ADMIN = "admin"
 ROLE_VIEWER = "viewer"
 USER_ROLES = {ROLE_ADMIN, ROLE_VIEWER}
-TEMPLATE_ROUTES = {
-    "/login": "login.html",
-    "/dashboard": "app.html",
-    "/live": "app.html",
-    "/whitelist": "app.html",
-    "/blacklist": "app.html",
-    "/profiles": "app.html",
-    "/logs": "app.html",
-    "/settings/appearance": "app.html",
-    "/settings/whitelist": "app.html",
-    "/settings/blocklist": "app.html",
-    "/settings/system": "app.html",
-    "/settings/users": "app.html",
-}
-STATIC_ROUTES = {
-    "/static/styles.css": ("styles.css", "text/css; charset=utf-8"),
-    "/static/common.js": ("common.js", "application/javascript; charset=utf-8"),
-    "/static/login.js": ("login.js", "application/javascript; charset=utf-8"),
-    "/static/app-react.js": ("app-react.js", "application/javascript; charset=utf-8"),
-    "/static/vendor/react.production.min.js": ("vendor/react.production.min.js", "application/javascript; charset=utf-8"),
-    "/static/vendor/react-dom.production.min.js": ("vendor/react-dom.production.min.js", "application/javascript; charset=utf-8"),
-}
 
 
 class WebDashboard:
@@ -119,32 +96,6 @@ class WebDashboard:
         path = request["path"]
         cookies = request["cookies"]
         authenticated = self._is_authenticated(cookies)
-
-        if path == "/":
-            return self._redirect(self._home_path(cookies) if authenticated else "/login")
-
-        if path == "/settings":
-            return self._redirect("/settings/appearance" if authenticated else "/login")
-
-        if path in TEMPLATE_ROUTES:
-            if path == "/login":
-                if authenticated:
-                    return self._redirect(self._home_path(cookies))
-            elif not authenticated:
-                return self._redirect("/login")
-            return _response(
-                HTTPStatus.OK,
-                "text/html; charset=utf-8",
-                (WEB_DIR / "templates" / TEMPLATE_ROUTES[path]).read_bytes(),
-            )
-
-        if path in STATIC_ROUTES:
-            filename, content_type = STATIC_ROUTES[path]
-            return _response(
-                HTTPStatus.OK,
-                content_type,
-                (WEB_DIR / "static" / filename).read_bytes(),
-            )
 
         if path == "/healthz" and method == "GET":
             return self._json_response({"ok": True, "service": "web"})

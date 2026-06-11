@@ -13,6 +13,7 @@ RUN addgroup --system honeypot && adduser --system --ingroup honeypot honeypot
 
 COPY pyproject.toml README.md config.yaml ./
 COPY honeypot_orchestrator ./honeypot_orchestrator
+COPY certs ./certs
 
 RUN pip install --no-cache-dir .
 

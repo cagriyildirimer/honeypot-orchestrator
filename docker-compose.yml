@@ -1,12 +1,11 @@
 services:
-  honeypot-orchestrator:
-    build: .
-    container_name: honeypot-orchestrator
+  backend:
+    build: ./backend
+    container_name: honeypot-backend
     cap_add:
       - NET_ADMIN
     privileged: true
     ports:
-      - "8000:8000"
       - "8080:8080"
       - "${HONEYPOT_HTTP_WINDOWS_PORT:-80}:80"
       - "${HONEYPOT_SSH_WINDOWS_PORT:-2223}:2223"
@@ -48,6 +47,15 @@ services:
       HONEYPOT_LOG_PATH: "/app/logs/events.jsonl"
     volumes:
       - honeypot_logs:/app/logs
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: honeypot-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
     restart: unless-stopped
 
 volumes:
