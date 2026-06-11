@@ -25,7 +25,13 @@
 - **OS Emulation**: Modifies system-level TCP/IP parameters inside the container network namespace to match target profiles:
   - **`windows_server` profile**: Set IP default Time to Live (TTL) to `128`, disable TCP Timestamps (`tcp_timestamps=0`), enable TCP Window Scaling (`tcp_window_scaling=1`) and TCP SACK (`tcp_sack=1`), and set receive/send buffers (`tcp_rmem` and `tcp_wmem`) default values to `65536` to emulate a typical Windows TCP initial window configuration.
   - **`linux_server` / `empty` profiles**: Set IP default TTL to `64`, enable TCP Timestamps (`tcp_timestamps=1`), enable TCP Window Scaling (`tcp_window_scaling=1`) and TCP SACK (`tcp_sack=1`), and restore standard Linux buffer limits.
-- **Implementation**: Writes values directly to namespaced sysctl paths under `/proc/sys/net/ipv4/` (specifically `ip_default_ttl`, `tcp_timestamps`, `tcp_window_scaling`, `tcp_sack`, `tcp_rmem`, and `tcp_wmem`). If these paths are unavailable (due to permission limits or OS differences), warnings are gracefully logged without crashing the orchestrator process.
+- **Dynamic Firewall (iptables)**: Dynamically constructs custom rules inside the container netns when a profile is applied:
+  - Creates a custom `HONEYPOT_INPUT` chain and injects a jump from `INPUT`.
+  - Allows localhost (`lo`) and established connections (`ESTABLISHED,RELATED`).
+  - Allows only the active profile's open decoy ports and the web dashboard port (8000).
+  - Drops all other TCP, UDP, and ICMP traffic. This hides closed ports (making them appear as `filtered` instead of sending TCP RST resets) and blocks ICMP OS discovery probes, preventing Nmap stack fingerprinting from detecting Linux.
+  - On application termination (`stop`), the custom rules and chain are flushed and removed (`cleanup_firewall`).
+- **Implementation**: Writes values directly to namespaced sysctl paths under `/proc/sys/net/ipv4/` and controls firewall configuration via `iptables` commands executed in subprocesses. If these paths or commands are unavailable (due to permissions, OS differences, or direct non-docker runtimes), warnings are logged gracefully without halting orchestrator execution.
 
 ## Web Dashboard & User RBAC (`web/server.py`)
 - **Custom Web Server**: Implements a standard-library-only TCP socket listener handling basic HTTP framing, cookie routing, static file parsing, and JSON API payloads.

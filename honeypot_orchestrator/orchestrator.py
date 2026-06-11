@@ -41,6 +41,10 @@ class Orchestrator:
         self.print_startup_summary()
 
     async def stop(self) -> None:
+        # Güvenlik duvarı kurallarını temizler.
+        from honeypot_orchestrator.net_tuner import cleanup_firewall
+        cleanup_firewall()
+
         # Kapanisin basladigini loglayarak sonradan inceleme icin iz birakir.
         await self.logger.log(
             {
@@ -151,7 +155,14 @@ class Orchestrator:
 
         self.profile = profile
         self._sync_service_profiles(profile)
-        await apply_profile_network_settings(profile.name, self.logger)
+        await apply_profile_network_settings(
+            profile.name,
+            self.logger,
+            self.services,
+            target_services,
+            self.config.web.port,
+            self.config.web.enabled,
+        )
         try:
             for service_name, service in self.services.items():
                 if service.running and service_name not in target_services:
@@ -214,7 +225,14 @@ class Orchestrator:
 
         self.profile = previous_profile
         self._sync_service_profiles(previous_profile)
-        await apply_profile_network_settings(previous_profile.name, self.logger)
+        await apply_profile_network_settings(
+            previous_profile.name,
+            self.logger,
+            self.services,
+            previously_running,
+            self.config.web.port,
+            self.config.web.enabled,
+        )
 
         for service_name in stopped_services:
             service = self.services.get(service_name)

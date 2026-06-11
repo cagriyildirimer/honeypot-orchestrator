@@ -33,6 +33,13 @@ Orkestratör, uygulanan profile göre konteynerin ağ ad alanında (network name
 - **`windows_server` profili**: Varsayılan TTL değeri `128` yapılır, TCP zaman damgaları kapatılır (`tcp_timestamps=0`), TCP pencere ölçekleme (`tcp_window_scaling=1`) ve SACK (`tcp_sack=1`) aktif edilir, ve TCP alma/gönderme tampon boyutlarının (`tcp_rmem` ve `tcp_wmem`) başlangıç varsayılan değeri `65536` yapılarak Windows tarzı bir TCP pencere yapısı emüle edilir.
 - **`linux_server` veya `empty` profili**: Varsayılan TTL değeri `64` yapılır, TCP zaman damgaları açılır (`tcp_timestamps=1`), TCP pencere ölçekleme (`tcp_window_scaling=1`) ve SACK (`tcp_sack=1`) aktif edilir ve standart Linux tampon sınırları geri yüklenir.
 
+**Dinamik Güvenlik Duvarı (iptables)**:
+Orkestratör, uygulanan profile göre konteyner içinde dinamik güvenlik duvarı kuralları tanımlar:
+- `HONEYPOT_INPUT` adında özel bir zincir oluşturulur ve `INPUT` zincirinin en başına yerleştirilir.
+- Sadece localhost (`lo`), mevcut açık bağlantılar (`ESTABLISHED,RELATED`), aktif profilin açık honeypot portları ve web arayüzü portuna (8000) gelen isteklere izin verilir (`ACCEPT`).
+- Diğer tüm kapalı port TCP/UDP istekleri ve ICMP (ping) tarama paketleri sessizce düşürülür (`DROP`). Bu sayede kapalı portlardan Linux çekirdeğine ait TCP RST paketlerinin dönmesi engellenir; Nmap kapalı portları `closed` yerine `filtered` olarak görür. ICMP engeli ise ping tabanlı aktif OS tespit yöntemlerini engeller.
+- Uygulama kapatılırken (`stop` anında) eklenen kurallar tamamen silinir ve temizlenir (`cleanup_firewall`).
+
 Bu sayede saldırganların `ping` veya `nmap` taramalarında işletim sistemini doğru tahmin etmeleri (OS fingerprinting) simüle edilir. Konteynerin bu ayarları uygulayabilmesi için `cap_add: [NET_ADMIN]` yetkisine sahip olması gerekir. Yetki yoksa orkestratör hata vermez, bir uyarı logu oluşturarak çalışmaya devam eder.
 
 ## Güvenlik & Otomatik Engelleme (Defense)

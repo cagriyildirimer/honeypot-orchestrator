@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+import subprocess
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from honeypot_orchestrator.event_logger import JSONLEventLogger
@@ -9,7 +10,56 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def apply_profile_network_settings(profile_name: str, event_logger: JSONLEventLogger) -> None:
+def setup_firewall(active_ports: list[tuple[int, str]], web_port: int | None) -> None:
+    try:
+        # Create chain if not exists
+        subprocess.run(["iptables", "-N", "HONEYPOT_INPUT"], capture_output=True)
+        # Flush the chain
+        subprocess.run(["iptables", "-F", "HONEYPOT_INPUT"], capture_output=True)
+        
+        # Check if INPUT jumps to HONEYPOT_INPUT, if not insert it
+        check_jump = subprocess.run(["iptables", "-C", "INPUT", "-j", "HONEYPOT_INPUT"], capture_output=True)
+        if check_jump.returncode != 0:
+            subprocess.run(["iptables", "-I", "INPUT", "1", "-j", "HONEYPOT_INPUT"], capture_output=True)
+            
+        # Allow loopback
+        subprocess.run(["iptables", "-A", "HONEYPOT_INPUT", "-i", "lo", "-j", "ACCEPT"], capture_output=True)
+        # Allow established/related
+        subprocess.run(["iptables", "-A", "HONEYPOT_INPUT", "-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED", "-j", "ACCEPT"], capture_output=True)
+        
+        # Allow web dashboard port if enabled
+        if web_port:
+            subprocess.run(["iptables", "-A", "HONEYPOT_INPUT", "-p", "tcp", "--dport", str(web_port), "-j", "ACCEPT"], capture_output=True)
+            
+        # Allow active decoy ports
+        for port, proto in active_ports:
+            subprocess.run(["iptables", "-A", "HONEYPOT_INPUT", "-p", proto, "--dport", str(port), "-j", "ACCEPT"], capture_output=True)
+            
+        # Drop all other TCP, UDP, ICMP
+        subprocess.run(["iptables", "-A", "HONEYPOT_INPUT", "-p", "tcp", "-j", "DROP"], capture_output=True)
+        subprocess.run(["iptables", "-A", "HONEYPOT_INPUT", "-p", "udp", "-j", "DROP"], capture_output=True)
+        subprocess.run(["iptables", "-A", "HONEYPOT_INPUT", "-p", "icmp", "-j", "DROP"], capture_output=True)
+    except Exception as e:
+        logger.warning(f"Could not apply firewall rules: {e}")
+
+
+def cleanup_firewall() -> None:
+    try:
+        subprocess.run(["iptables", "-D", "INPUT", "-j", "HONEYPOT_INPUT"], capture_output=True)
+        subprocess.run(["iptables", "-F", "HONEYPOT_INPUT"], capture_output=True)
+        subprocess.run(["iptables", "-X", "HONEYPOT_INPUT"], capture_output=True)
+    except Exception as e:
+        logger.warning(f"Could not cleanup firewall rules: {e}")
+
+
+async def apply_profile_network_settings(
+    profile_name: str,
+    event_logger: JSONLEventLogger,
+    services: dict[str, Any],
+    target_service_names: set[str],
+    web_port: int,
+    web_enabled: bool,
+) -> None:
     """
     Adjusts standard namespaced network settings inside the container's namespace:
     - windows_server profile: TTL=128, tcp_timestamps=0
@@ -65,3 +115,16 @@ async def apply_profile_network_settings(profile_name: str, event_logger: JSONLE
             "profile": profile_name,
             "modified_params": modified_params,
         })
+
+    # Collect active port information based on target decoy profile
+    active_ports: list[tuple[int, str]] = []
+    from honeypot_orchestrator.services.base import BaseUDPHoneypotService
+
+    for s_name in target_service_names:
+        service = services.get(s_name)
+        if service:
+            proto = "udp" if isinstance(service, BaseUDPHoneypotService) else "tcp"
+            active_ports.append((service.port, proto))
+
+    # Apply firewall rules to hide closed ports and ICMP scans
+    setup_firewall(active_ports, web_port if web_enabled else None)
