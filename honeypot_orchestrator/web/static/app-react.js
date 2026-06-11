@@ -26,6 +26,7 @@
     nbtnns: 137,
     netbios: 139,
     rdp: 3389,
+    rpc: 135,
     smb: 445,
     ssh: 22,
     telnet: 23,
@@ -1320,6 +1321,14 @@
                   detailText = `LDAPS TLS handshake started. (TLS Client Hello, Version: ${event.tls_version}, Record Type: ${event.tls_record_type})`;
                 } else if (type === "mssql_prelogin") {
                   detailText = `MSSQL Pre-login handshake negotiated. (TDS Packet Type: ${event.packet_type})`;
+                } else if (type === "rpc_connection") {
+                  detailText = `MSRPC Connection established. Waiting for bind request...`;
+                } else if (type === "rpc_request") {
+                  detailText = `MSRPC Request received (PTYPE: ${event.ptype || "unknown"}, Payload: ${event.data_hex || "none"})`;
+                } else if (type === "rpc_response") {
+                  detailText = event.summary || `MSRPC Response sent.`;
+                } else if (type === "rpc_error") {
+                  detailText = `MSRPC encountered an error: ${event.error || "unknown"}`;
                 } else if (type === "login_success" && service === "MSSQL") {
                   detailText = `MSSQL Authentication SUCCEEDED for user='${event.username || "unknown"}' password='${event.password || "none"}' (Host: ${event.client_hostname || "unknown"}, App: ${event.app_name || "unknown"}, DB: ${event.database_name || "master"}). Unlocked deep interactive shell!`;
                 } else if (type === "sql_query" && service === "MSSQL") {
