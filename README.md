@@ -30,8 +30,8 @@ Profil değişimi atomik yapılmaya çalışılır. Bir servis başlatılamazsa 
 ## Ağ Ayarları ve Kimlik Taklidi (Network Tuning)
 
 Orkestratör, uygulanan profile göre konteynerin ağ ad alanında (network namespace) sysctl parametrelerini değiştirerek TCP/IP parmak izi (fingerprint) taklidi gerçekleştirir:
-- **`windows_server` profili**: Varsayılan TTL değeri `128` yapılır ve TCP zaman damgaları kapatılır (`tcp_timestamps=0`).
-- **`linux_server` veya `empty` profili**: Varsayılan TTL değeri `64` yapılır ve TCP zaman damgaları açılır (`tcp_timestamps=1`).
+- **`windows_server` profili**: Varsayılan TTL değeri `128` yapılır, TCP zaman damgaları kapatılır (`tcp_timestamps=0`), TCP pencere ölçekleme (`tcp_window_scaling=1`) ve SACK (`tcp_sack=1`) aktif edilir, ve TCP alma/gönderme tampon boyutlarının (`tcp_rmem` ve `tcp_wmem`) başlangıç varsayılan değeri `65536` yapılarak Windows tarzı bir TCP pencere yapısı emüle edilir.
+- **`linux_server` veya `empty` profili**: Varsayılan TTL değeri `64` yapılır, TCP zaman damgaları açılır (`tcp_timestamps=1`), TCP pencere ölçekleme (`tcp_window_scaling=1`) ve SACK (`tcp_sack=1`) aktif edilir ve standart Linux tampon sınırları geri yüklenir.
 
 Bu sayede saldırganların `ping` veya `nmap` taramalarında işletim sistemini doğru tahmin etmeleri (OS fingerprinting) simüle edilir. Konteynerin bu ayarları uygulayabilmesi için `cap_add: [NET_ADMIN]` yetkisine sahip olması gerekir. Yetki yoksa orkestratör hata vermez, bir uyarı logu oluşturarak çalışmaya devam eder.
 

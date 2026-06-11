@@ -23,9 +23,9 @@
 
 ## Network Tuning & Fingerprint Emulation (`net_tuner.py`)
 - **OS Emulation**: Modifies system-level TCP/IP parameters inside the container network namespace to match target profiles:
-  - **`windows_server` profile**: Set IP default Time to Live (TTL) to `128` and disable TCP Timestamps (`tcp_timestamps=0`) to emulate Windows Server network fingerprints.
-  - **`linux_server` / `empty` profiles**: Set IP default TTL to `64` and enable TCP Timestamps (`tcp_timestamps=1`) to emulate standard Linux/Unix TCP behavior.
-- **Implementation**: Writes values directly to `/proc/sys/net/ipv4/ip_default_ttl` and `/proc/sys/net/ipv4/tcp_timestamps`. If these paths are unavailable (due to permission limits or OS differences), warnings are gracefully logged without crashing the orchestrator process.
+  - **`windows_server` profile**: Set IP default Time to Live (TTL) to `128`, disable TCP Timestamps (`tcp_timestamps=0`), enable TCP Window Scaling (`tcp_window_scaling=1`) and TCP SACK (`tcp_sack=1`), and set receive/send buffers (`tcp_rmem` and `tcp_wmem`) default values to `65536` to emulate a typical Windows TCP initial window configuration.
+  - **`linux_server` / `empty` profiles**: Set IP default TTL to `64`, enable TCP Timestamps (`tcp_timestamps=1`), enable TCP Window Scaling (`tcp_window_scaling=1`) and TCP SACK (`tcp_sack=1`), and restore standard Linux buffer limits.
+- **Implementation**: Writes values directly to namespaced sysctl paths under `/proc/sys/net/ipv4/` (specifically `ip_default_ttl`, `tcp_timestamps`, `tcp_window_scaling`, `tcp_sack`, `tcp_rmem`, and `tcp_wmem`). If these paths are unavailable (due to permission limits or OS differences), warnings are gracefully logged without crashing the orchestrator process.
 
 ## Web Dashboard & User RBAC (`web/server.py`)
 - **Custom Web Server**: Implements a standard-library-only TCP socket listener handling basic HTTP framing, cookie routing, static file parsing, and JSON API payloads.

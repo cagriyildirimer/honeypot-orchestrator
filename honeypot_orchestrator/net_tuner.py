@@ -18,11 +18,17 @@ async def apply_profile_network_settings(profile_name: str, event_logger: JSONLE
     is_windows = profile_name == "windows_server"
     target_ttl = "128" if is_windows else "64"
     target_timestamps = "0" if is_windows else "1"
+    target_rmem = "4096 65536 12582912" if is_windows else "4096 87380 16777216"
+    target_wmem = "4096 65536 12582912" if is_windows else "4096 65536 16777216"
 
     # Define path mappings
     sysctl_paths = {
         "net.ipv4.ip_default_ttl": ("/proc/sys/net/ipv4/ip_default_ttl", target_ttl),
         "net.ipv4.tcp_timestamps": ("/proc/sys/net/ipv4/tcp_timestamps", target_timestamps),
+        "net.ipv4.tcp_window_scaling": ("/proc/sys/net/ipv4/tcp_window_scaling", "1"),
+        "net.ipv4.tcp_sack": ("/proc/sys/net/ipv4/tcp_sack", "1"),
+        "net.ipv4.tcp_rmem": ("/proc/sys/net/ipv4/tcp_rmem", target_rmem),
+        "net.ipv4.tcp_wmem": ("/proc/sys/net/ipv4/tcp_wmem", target_wmem),
     }
 
     modified_params = []
