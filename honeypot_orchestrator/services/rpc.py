@@ -40,22 +40,35 @@ class RPCHoneypot(BaseHoneypotService):
                     summary=f"Received DCERPC request with PTYPE {ptype}",
                 )
 
-                # Construct a realistic DCE/RPC Bind_Nak (Reject) PDU
-                # 0x0004 = Presentation syntax not supported
-                reject_reason = b"\x04\x00"
+                # Construct a realistic DCE/RPC Bind_Ack (Accept) PDU
+                # A standard Windows Bind_Ack is 68 bytes long
                 response = (
                     b"\x05\x00"           # RPC Version = 5, Minor = 0
-                    b"\x0d"               # PTYPE = bind_nak (0x0D)
+                    b"\x0c"               # PTYPE = bind_ack (0x0C)
                     b"\x03"               # PFC Flags = 3 (PFC_FIRST_FRAG | PFC_LAST_FRAG)
                     b"\x10\x00\x00\x00"   # Packed Data Representation (Little Endian)
-                    b"\x12\x00"           # Fragment Length = 18 bytes
+                    b"\x44\x00"           # Fragment Length = 68 bytes
                     b"\x00\x00"           # Auth Length = 0
                     + call_id +           # Call ID (Extracted from request)
-                    reject_reason         # Reject Reason
+                    b"\x10\xb8\x00\x00"   # Max Xmit Frag (47104)
+                    b"\x10\xb8\x00\x00"   # Max Recv Frag (47104)
+                    b"\x12\x34\x56\x78"   # Assoc Group ID (Dummy)
+                    b"\x04\x00"           # Sec Addr Len (4 bytes for "135\x00")
+                    b"135\x00"            # Sec Addr
+                    b"\x00\x00\x00\x00"   # Padding to align to 4 bytes
+                    b"\x01\x00\x00\x00"   # Num Results (1)
+                    b"\x00\x00"           # Result: Acceptance (0)
+                    b"\x00\x00"           # Reason: Reason Not Specified (0)
+                    b"\x04\x5d\x88\x8a\xeb\x1c\xc9\x11"  # Transfer Syntax UUID (NDR)
+                    b"\x9f\xe8\x08\x00\x2b\x10\x48\x60"
+                    b"\x02\x00\x00\x00"   # Syntax Version (2)
                 )
 
                 writer.write(response)
                 await writer.drain()
+                
+                # Sleep briefly to ensure Nmap reads the response before we send FIN/RST
+                await asyncio.sleep(0.5)
 
                 await self.log_event(
                     "rpc_response",
@@ -63,6 +76,10 @@ class RPCHoneypot(BaseHoneypotService):
                     src_port=client_port,
                     summary="Sent DCERPC Bind_Nak response",
                 )
+            else:
+                # If Nmap sends a non-RPC probe (e.g. HTTP GET to port 135)
+                # Sleep briefly before closing to prevent immediate reset "tcpwrapped" labeling
+                await asyncio.sleep(0.5)
 
         except asyncio.TimeoutError:
             pass
