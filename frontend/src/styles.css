@@ -2403,3 +2403,330 @@ input:checked + .toggle-slider:before {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
+
+/* ============================================================
+   Threat Intelligence Panel
+   ============================================================ */
+
+.ti-panel {
+  padding: 20px;
+}
+
+.ti-panel .section-heading {
+  margin-bottom: 18px;
+}
+
+/* Summary Pills Row */
+.ti-summary-pills {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.ti-pill {
+  flex: 1 1 160px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: var(--card-gradient-soft);
+  border: 1px solid var(--border);
+  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.ti-pill:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.ti-pill-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.ti-pill-icon.tor {
+  background: rgba(118, 74, 188, 0.18);
+  color: #b794f6;
+}
+
+.ti-pill-icon.cloud {
+  background: rgba(33, 212, 253, 0.14);
+  color: #21d4fd;
+}
+
+.ti-pill-icon.abuse {
+  background: rgba(255, 181, 71, 0.14);
+  color: #ffb547;
+}
+
+.ti-pill-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ti-pill-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.ti-pill-value {
+  font-size: 22px;
+  font-weight: 850;
+  color: var(--text);
+  line-height: 1.15;
+}
+
+/* Attacker Table */
+.ti-table-wrap {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+}
+
+.ti-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.ti-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.ti-table th {
+  padding: 11px 14px;
+  background: var(--table-head-bg);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted-strong);
+  border-bottom: 1px solid var(--border);
+}
+
+.ti-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.07);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.ti-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.ti-table tbody tr:hover {
+  background: var(--row-accent-bg);
+}
+
+.ti-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ti-ip-cell {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.ti-rdns-cell {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ti-asn-cell {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Abuse Score Bar */
+.abuse-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 100px;
+}
+
+.abuse-bar {
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  position: relative;
+}
+
+.abuse-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.abuse-bar-fill[data-level="low"] {
+  background: linear-gradient(90deg, #01b574, #38f8c4);
+}
+
+.abuse-bar-fill[data-level="medium"] {
+  background: linear-gradient(90deg, #ffb547, #f97316);
+}
+
+.abuse-bar-fill[data-level="high"] {
+  background: linear-gradient(90deg, #f97316, #e31a1a);
+}
+
+.abuse-bar-fill[data-level="critical"] {
+  background: linear-gradient(90deg, #e31a1a, #ff4444);
+  box-shadow: 0 0 8px rgba(227, 26, 26, 0.4);
+}
+
+.abuse-score-text {
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 28px;
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.abuse-score-na {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* GreyNoise Badge */
+.greynoise-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
+}
+
+.greynoise-badge[data-class="malicious"] {
+  background: var(--danger-soft);
+  color: #ff6b6b;
+  border: 1px solid var(--danger-border);
+}
+
+.greynoise-badge[data-class="benign"] {
+  background: var(--success-soft);
+  color: #4fd1a0;
+  border: 1px solid var(--success-border);
+}
+
+.greynoise-badge[data-class="unknown"] {
+  background: var(--tag-neutral-bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.greynoise-badge[data-class="n/a"] {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  opacity: 0.6;
+}
+
+/* Tor Indicator */
+.tor-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 16px;
+  opacity: 0.3;
+  transition: opacity 0.2s ease;
+}
+
+.tor-indicator.active {
+  opacity: 1;
+}
+
+.tor-indicator .tor-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tor-indicator.active .tor-label {
+  color: #b794f6;
+}
+
+/* Cloud Provider Cell */
+.cloud-cell {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-focus);
+}
+
+.cloud-cell.none {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+/* Event Count Badge */
+.event-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-focus);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* TI empty state */
+.ti-empty {
+  display: grid;
+  place-items: center;
+  min-height: 140px;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: center;
+  padding: 24px;
+}
+
+.ti-empty-icon {
+  font-size: 36px;
+  margin-bottom: 10px;
+  opacity: 0.4;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .ti-summary-pills {
+    flex-direction: column;
+  }
+  .ti-table-wrap {
+    font-size: 12px;
+  }
+}
+

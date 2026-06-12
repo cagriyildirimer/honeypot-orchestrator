@@ -830,11 +830,207 @@
     );
   }
 
+  function abuseScoreLevel(score) {
+    if (typeof score !== "number") return "low";
+    if (score >= 80) return "critical";
+    if (score >= 50) return "high";
+    if (score >= 25) return "medium";
+    return "low";
+  }
+
+  function ThreatIntelPanel(props) {
+    const data = props.data;
+    if (!data) {
+      return h(
+        "section",
+        { className: "panel ti-panel", id: "ti-panel" },
+        h(
+          "div",
+          { className: "section-heading" },
+          h("div", null,
+            h("h2", null, "Threat Intelligence"),
+            h("p", null, "Enrichment data for top attacker IPs (last 24h).")
+          ),
+          h("span", { className: "status-counter" }, "Loading...")
+        ),
+        h("div", { className: "ti-empty" },
+          h("div", { className: "ti-empty-icon" }, "\uD83D\uDD0D"),
+          "Loading threat intelligence data..."
+        )
+      );
+    }
+
+    const attackers = data.attackers || [];
+    const summary = data.summary || {};
+
+    if (attackers.length === 0) {
+      return h(
+        "section",
+        { className: "panel ti-panel", id: "ti-panel" },
+        h(
+          "div",
+          { className: "section-heading" },
+          h("div", null,
+            h("h2", null, "Threat Intelligence"),
+            h("p", null, "Enrichment data for top attacker IPs (last 24h).")
+          )
+        ),
+        h("div", { className: "ti-empty" },
+          h("div", { className: "ti-empty-icon" }, "\uD83D\uDEE1\uFE0F"),
+          "No external attacker IPs detected in the last 24 hours."
+        )
+      );
+    }
+
+    return h(
+      "section",
+      { className: "panel ti-panel", id: "ti-panel" },
+      h(
+        "div",
+        { className: "section-heading" },
+        h("div", null,
+          h("h2", null, "Threat Intelligence"),
+          h("p", null, "Enrichment data for top attacker IPs (last 24h).")
+        ),
+        h("span", { className: "status-counter" }, `${attackers.length} IPs enriched`)
+      ),
+      // Summary pills
+      h(
+        "div",
+        { className: "ti-summary-pills" },
+        h(
+          "div",
+          { className: "ti-pill" },
+          h("div", { className: "ti-pill-icon tor" }, "\uD83E\uDDC5"),
+          h(
+            "div",
+            { className: "ti-pill-info" },
+            h("span", { className: "ti-pill-label" }, "Tor Exit Nodes"),
+            h("span", { className: "ti-pill-value" }, String(summary.tor_count || 0))
+          )
+        ),
+        h(
+          "div",
+          { className: "ti-pill" },
+          h("div", { className: "ti-pill-icon cloud" }, "\u2601\uFE0F"),
+          h(
+            "div",
+            { className: "ti-pill-info" },
+            h("span", { className: "ti-pill-label" }, "Cloud Providers"),
+            h("span", { className: "ti-pill-value" }, String(summary.cloud_count || 0))
+          )
+        ),
+        h(
+          "div",
+          { className: "ti-pill" },
+          h("div", { className: "ti-pill-icon abuse" }, "\u26A0\uFE0F"),
+          h(
+            "div",
+            { className: "ti-pill-info" },
+            h("span", { className: "ti-pill-label" }, "Avg Abuse Score"),
+            h("span", { className: "ti-pill-value" },
+              typeof summary.avg_abuse_score === "number"
+                ? String(summary.avg_abuse_score)
+                : "N/A"
+            )
+          )
+        )
+      ),
+      // Top 10 attacker table
+      h(
+        "div",
+        { className: "ti-table-wrap" },
+        h(
+          "table",
+          { className: "ti-table" },
+          h(
+            "thead",
+            null,
+            h(
+              "tr",
+              null,
+              h("th", null, "IP"),
+              h("th", null, "Location"),
+              h("th", null, "rDNS"),
+              h("th", null, "ASN"),
+              h("th", null, "Tor"),
+              h("th", null, "Cloud"),
+              h("th", null, "Abuse Score"),
+              h("th", null, "GreyNoise"),
+              h("th", null, "Events")
+            )
+          ),
+          h(
+            "tbody",
+            null,
+            attackers.map(function (attacker, idx) {
+              var abuseScore = attacker.abuse_score;
+              var isNumericAbuse = typeof abuseScore === "number";
+              var location = [attacker.city, attacker.country].filter(Boolean).join(", ") || "Unknown";
+              var gnClass = String(attacker.greynoise_class || "n/a").toLowerCase();
+
+              return h(
+                "tr",
+                { key: attacker.ip || idx },
+                h("td", { className: "ti-ip-cell" }, attacker.ip),
+                h("td", null, location),
+                h("td", { className: "ti-rdns-cell", title: attacker.rdns || "" },
+                  attacker.rdns && attacker.rdns !== attacker.ip ? attacker.rdns : "\u2014"
+                ),
+                h("td", { className: "ti-asn-cell" },
+                  attacker.asn
+                    ? [attacker.asn, attacker.org ? h("span", { key: "org", style: { color: "var(--muted)", marginLeft: "6px" } }, attacker.org) : null]
+                    : "\u2014"
+                ),
+                h("td", null,
+                  h("span", { className: "tor-indicator" + (attacker.is_tor ? " active" : "") },
+                    "\uD83E\uDDC5",
+                    attacker.is_tor ? h("span", { className: "tor-label" }, "Yes") : null
+                  )
+                ),
+                h("td", null,
+                  h("span", { className: "cloud-cell" + (attacker.cloud_provider ? "" : " none") },
+                    attacker.cloud_provider || "\u2014"
+                  )
+                ),
+                h("td", null,
+                  isNumericAbuse
+                    ? h(
+                        "div",
+                        { className: "abuse-bar-wrap" },
+                        h(
+                          "div",
+                          { className: "abuse-bar" },
+                          h("div", {
+                            className: "abuse-bar-fill",
+                            "data-level": abuseScoreLevel(abuseScore),
+                            style: { width: Math.min(100, abuseScore) + "%" },
+                          })
+                        ),
+                        h("span", { className: "abuse-score-text" }, String(abuseScore))
+                      )
+                    : h("span", { className: "abuse-score-na" }, "N/A")
+                ),
+                h("td", null,
+                  h("span", { className: "greynoise-badge", "data-class": gnClass }, gnClass)
+                ),
+                h("td", null,
+                  h("span", { className: "event-count-badge" }, String(attacker.event_count || 0))
+                )
+              );
+            })
+          )
+        )
+      )
+    );
+  }
+
   function DashboardPage(props) {
     const [payload, setPayload] = useState(null);
     const [loading, setLoading] = useState(true);
     const [timelineRangeKey, setTimelineRangeKey] = useState("day");
     const [selectedEvent, setSelectedEvent] = useState(null);
+    const [tiData, setTiData] = useState(null);
 
     async function loadOverview() {
       const next = await window.requestJson("/api/overview?limit=2000");
@@ -842,7 +1038,17 @@
       setLoading(false);
     }
 
+    async function loadThreatIntel() {
+      try {
+        const data = await window.requestJson("/api/threat-intel");
+        setTiData(data);
+      } catch (e) {
+        // silently ignore TI errors
+      }
+    }
+
     usePolling(loadOverview, 5000, []);
+    usePolling(loadThreatIntel, 30000, []);
 
     if (loading && !payload) {
       return h(PageSkeleton, null);
@@ -938,6 +1144,7 @@
         ),
         h(GeoWorldMap, { markers: payload.geo_markers || [] })
       ),
+      h(ThreatIntelPanel, { data: tiData }),
       h(
         "section",
         { className: "overview-section", "data-risk-tone": risk.band.tone },

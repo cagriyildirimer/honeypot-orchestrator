@@ -358,6 +358,9 @@ class WebDashboard:
                 status=HTTPStatus.NOT_FOUND,
             )
 
+        if path == "/api/threat-intel" and method == "GET":
+            return await self._handle_threat_intel()
+
         if path.startswith("/api/"):
             return self._json_response(
                 {"error": "Not found."},
@@ -708,6 +711,50 @@ class WebDashboard:
                 "Content-Disposition": 'attachment; filename="honeypot-events.jsonl"',
             },
         )
+
+    async def _handle_threat_intel(self) -> dict[str, Any]:
+        records = read_recent_events(self.orchestrator.config.logging.path, 2000)
+        now_ts = time.time()
+        start_ts = now_ts - 24 * 60 * 60
+        ip_counts: dict[str, int] = {}
+        for record in records:
+            ts_str = record.get("timestamp", "")
+            src_ip = record.get("src_ip", "")
+            if not ts_str or not src_ip:
+                continue
+            try:
+                dt = datetime.strptime(ts_str.replace(" UTC", ""), "%Y-%m-%d %H:%M:%S")
+                dt = dt.replace(tzinfo=UTC)
+                if start_ts <= dt.timestamp() <= now_ts:
+                    ip_counts[src_ip] = ip_counts.get(src_ip, 0) + 1
+            except Exception:
+                continue
+
+        ti_config = self.orchestrator.config.threat_intel
+        from threat_intel import enrich_top_ips
+        attackers = await asyncio.to_thread(
+            enrich_top_ips,
+            ip_counts,
+            honeypot_host=self.orchestrator.config.host,
+            abuseipdb_key=ti_config.abuseipdb_key,
+            greynoise_key=ti_config.greynoise_key,
+            limit=10,
+        )
+
+        # Build summary
+        tor_count = sum(1 for a in attackers if a.get("is_tor"))
+        cloud_count = sum(1 for a in attackers if a.get("cloud_provider"))
+        abuse_scores = [a["abuse_score"] for a in attackers if isinstance(a.get("abuse_score"), (int, float))]
+        avg_abuse = round(sum(abuse_scores) / len(abuse_scores), 1) if abuse_scores else "N/A"
+
+        return self._json_response({
+            "attackers": attackers,
+            "summary": {
+                "tor_count": tor_count,
+                "cloud_count": cloud_count,
+                "avg_abuse_score": avg_abuse,
+            },
+        })
 
     def _user_payload(self) -> list[dict[str, str]]:
         return [

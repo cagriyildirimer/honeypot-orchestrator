@@ -38,12 +38,20 @@ class LoggingConfig:
 
 
 @dataclass(frozen=True)
+class ThreatIntelConfig:
+    # Opsiyonel API anahtarlari; bos string verilirse ilgili kaynak "N/A" doner.
+    abuseipdb_key: str
+    greynoise_key: str
+
+
+@dataclass(frozen=True)
 class AppConfig:
     host: str
     profile: str
     logging: LoggingConfig
     web: WebConfig
     auth: AuthConfig
+    threat_intel: ThreatIntelConfig
     services: dict[str, ServiceConfig]
 
 
@@ -57,6 +65,7 @@ def load_config(path: str | Path) -> AppConfig:
     logging_raw = _as_dict(raw.get("logging"))
     web_raw = _as_dict(raw.get("web"))
     auth_raw = _as_dict(raw.get("auth"))
+    ti_raw = _as_dict(raw.get("threat_intel"))
     services_raw = _as_dict(raw.get("services"))
 
     services = {
@@ -83,6 +92,10 @@ def load_config(path: str | Path) -> AppConfig:
         auth=AuthConfig(
             username=_env_str("HONEYPOT_AUTH_USERNAME", str(auth_raw.get("username", "admin"))),
             password=_env_str("HONEYPOT_AUTH_PASSWORD", str(auth_raw.get("password", "admin"))),
+        ),
+        threat_intel=ThreatIntelConfig(
+            abuseipdb_key=_env_str("HONEYPOT_TI_ABUSEIPDB_KEY", str(ti_raw.get("abuseipdb_key", ""))),
+            greynoise_key=_env_str("HONEYPOT_TI_GREYNOISE_KEY", str(ti_raw.get("greynoise_key", ""))),
         ),
         services=services,
     )
