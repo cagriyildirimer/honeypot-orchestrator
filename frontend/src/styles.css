@@ -1038,7 +1038,7 @@ th,
 
 .overview-split {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 0.85fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: 14px;
   align-items: stretch;
 }
@@ -1099,6 +1099,8 @@ th,
   align-content: start;
   padding: 16px;
   height: 100%;
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid rgba(226, 232, 240, 0.16);
   border-radius: 12px;
   background: var(--chart-gradient);
@@ -1306,7 +1308,7 @@ th,
 }
 
 .donut-layout.compact {
-  grid-template-columns: minmax(150px, 190px) minmax(0, 1fr);
+  grid-template-columns: 140px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   height: 100%;
@@ -1331,24 +1333,26 @@ th,
 .donut-track,
 .donut-empty {
   fill: none;
-  stroke: var(--surface-subtle);
-  stroke-width: 18;
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 14;
 }
 
 .donut-segment {
   fill: none;
-  stroke-width: 18;
-  stroke-linecap: butt;
-  transition: opacity 0.16s ease, stroke-width 0.16s ease;
+  stroke-width: 14;
+  stroke-linecap: round;
+  transition: opacity 0.16s ease, stroke-width 0.16s ease, filter 0.16s ease;
   cursor: crosshair;
   outline: none;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.3));
 }
 
 .donut-segment:hover,
 .donut-segment.active,
 .donut-segment:focus-visible {
-  opacity: 0.82;
-  stroke-width: 20;
+  opacity: 1;
+  stroke-width: 17;
+  filter: drop-shadow(0 0 10px currentColor);
 }
 
 .donut-tooltip {
@@ -1419,8 +1423,9 @@ th,
 }
 
 .donut-legend.compact li {
-  padding: 7px 9px;
-  font-size: 13px;
+  padding: 6px 8px;
+  font-size: 12px;
+  gap: 8px;
 }
 
 .donut-legend-label {
