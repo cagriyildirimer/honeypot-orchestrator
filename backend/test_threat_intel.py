@@ -236,9 +236,15 @@ def _tcp_probe(host: str, port: int, payload: bytes, timeout: float = 3.0) -> st
         sock.connect((host, port))
         if payload:
             sock.sendall(payload)
-        resp = sock.recv(4096)
+        chunks = []
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        resp = b"".join(chunks)
         sock.close()
-        return resp.decode("utf-8", errors="replace")[:200]
+        return resp.decode("utf-8", errors="replace")
     except Exception as exc:
         return f"[error: {type(exc).__name__}: {exc}]"
 

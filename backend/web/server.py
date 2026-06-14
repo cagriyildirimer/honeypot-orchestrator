@@ -13,6 +13,14 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
 from config import __version__
+from defense import (
+    add_to_blacklist,
+    add_to_whitelist,
+    delete_from_blacklist,
+    delete_from_whitelist,
+    get_blacklist,
+    get_whitelist,
+)
 
 if TYPE_CHECKING:
     from orchestrator import Orchestrator
@@ -33,15 +41,24 @@ class WebDashboard:
         # Basit oturumlar bellek icinde, kullanicilar yerel JSON dosyasinda tutulur.
         self._users_path = self.orchestrator.config.logging.path.parent / "web_users.json"
         self._sessions_path = self.orchestrator.config.logging.path.parent / "web_sessions.json"
-        self._sessions: dict[str, str] = self._load_sessions()
+        self._sessions: dict[str, dict[str, Any]] = self._load_sessions()
         self._reload_users()
         self._started_at = time.monotonic()
+        self._login_attempts: dict[str, list[float]] = {}
+        self._csrf_tokens: dict[str, float] = {}
 
-    def _load_sessions(self) -> dict[str, str]:
+    def _load_sessions(self) -> dict[str, dict[str, Any]]:
         try:
             if self._sessions_path.exists():
                 with open(self._sessions_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    sessions = {}
+                    for k, v in data.items():
+                        if isinstance(v, str):
+                            sessions[k] = {"username": v, "created_at": time.time()}
+                        else:
+                            sessions[k] = v
+                    return sessions
         except Exception:
             pass
         return {}
@@ -83,7 +100,12 @@ class WebDashboard:
         writer: asyncio.StreamWriter,
     ) -> None:
         try:
+            client_ip = ""
+            peername = writer.get_extra_info("peername")
+            if peername:
+                client_ip = peername[0]
             request = await self._read_request(reader)
+            request["client_ip"] = client_ip
             response = await self._route_request(request)
             await self._send_response(writer, response)
         except EOFError:
@@ -117,10 +139,29 @@ class WebDashboard:
         method = request["method"]
         path = request["path"]
         cookies = request["cookies"]
+        headers = request["headers"]
         authenticated = self._is_authenticated(cookies)
 
         if path == "/healthz" and method == "GET":
             return self._json_response({"ok": True, "service": "web"})
+
+        if path == "/api/csrf" and method == "GET":
+            token = secrets.token_hex(16)
+            now = time.time()
+            self._csrf_tokens[token] = now
+            # Clean up old CSRF tokens (older than 24h)
+            self._csrf_tokens = {k: v for k, v in self._csrf_tokens.items() if now - v < 86400}
+            return self._json_response({"csrf_token": token})
+
+        # CSRF check for POST requests (except login which establishes the session)
+        if method == "POST" and path != "/api/login":
+            client_token = headers.get("x-csrf-token", "")
+            if not client_token or client_token not in self._csrf_tokens:
+                return self._json_response(
+                    {"error": "Invalid or missing CSRF token."},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+
 
 
         if path == "/api/services/toggle" and method == "POST":
@@ -140,7 +181,7 @@ class WebDashboard:
 
         if path == "/api/login" and method == "POST":
             payload = _decode_json_body(request["body"])
-            return await self._handle_login(payload)
+            return await self._handle_login(payload, request)
 
         if path == "/api/logout" and method == "POST":
             return await self._handle_logout(cookies)
@@ -273,7 +314,6 @@ class WebDashboard:
                 )
 
         if path == "/api/whitelist" and method == "GET":
-            from defense import get_whitelist
             return self._json_response({"whitelist": get_whitelist()})
 
         if path == "/api/whitelist" and method == "POST":
@@ -287,9 +327,7 @@ class WebDashboard:
                     {"error": "IP and description are required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            from defense import add_to_whitelist
             if add_to_whitelist(ip, description):
-                from defense import get_whitelist
                 return self._json_response({"ok": True, "whitelist": get_whitelist()})
             return self._json_response(
                 {"error": "Failed to add or already exists."},
@@ -306,9 +344,7 @@ class WebDashboard:
                     {"error": "IP is required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            from defense import delete_from_whitelist
             if delete_from_whitelist(ip):
-                from defense import get_whitelist
                 return self._json_response({"ok": True, "whitelist": get_whitelist()})
             return self._json_response(
                 {"error": "Not found in whitelist."},
@@ -316,7 +352,6 @@ class WebDashboard:
             )
 
         if path == "/api/blacklist" and method == "GET":
-            from defense import get_blacklist
             return self._json_response({"blacklist": get_blacklist()})
 
         if path == "/api/blacklist" and method == "POST":
@@ -330,9 +365,7 @@ class WebDashboard:
                     {"error": "IP/MAC and description are required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            from defense import add_to_blacklist
             if add_to_blacklist(ip, description):
-                from defense import get_blacklist
                 return self._json_response({"ok": True, "blacklist": get_blacklist()})
             return self._json_response(
                 {"error": "Failed to add or already exists."},
@@ -349,9 +382,7 @@ class WebDashboard:
                     {"error": "IP/MAC is required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            from defense import delete_from_blacklist
             if delete_from_blacklist(ip):
-                from defense import get_blacklist
                 return self._json_response({"ok": True, "blacklist": get_blacklist()})
             return self._json_response(
                 {"error": "Not found in blacklist."},
@@ -369,10 +400,23 @@ class WebDashboard:
 
         return _response(HTTPStatus.NOT_FOUND, "text/plain; charset=utf-8", b"Not found")
 
-    async def _handle_login(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def _handle_login(self, payload: dict[str, Any], request: dict[str, Any]) -> dict[str, Any]:
+        client_ip = request.get("client_ip", "")
+        now = time.time()
+        
+        if client_ip:
+            self._login_attempts[client_ip] = [t for t in self._login_attempts.get(client_ip, []) if now - t < 300]
+            if len(self._login_attempts[client_ip]) >= 5:
+                return self._json_response(
+                    {"ok": False, "error": "Too many failed attempts. Try again in 5 minutes."},
+                    status=HTTPStatus.TOO_MANY_REQUESTS,
+                )
+
         username = str(payload.get("username", ""))
         password = str(payload.get("password", ""))
         if not _verify_password(password, self._user_password(username)):
+            if client_ip:
+                self._login_attempts.setdefault(client_ip, []).append(now)
             await self.orchestrator.logger.log(
                 {
                     "service": "web",
@@ -385,8 +429,11 @@ class WebDashboard:
                 status=HTTPStatus.UNAUTHORIZED,
             )
 
+        if client_ip in self._login_attempts:
+            del self._login_attempts[client_ip]
+
         token = secrets.token_hex(32)
-        self._sessions[token] = username
+        self._sessions[token] = {"username": username, "created_at": time.time()}
         self._save_sessions()
         await self.orchestrator.logger.log(
             {
@@ -397,7 +444,7 @@ class WebDashboard:
         )
         return self._json_response(
             {"ok": True, "username": username, "role": self._user_role(username)},
-            cookies=[_build_cookie("session", token)],
+            cookies=[_build_cookie("session", token, max_age=86400)],
         )
 
     async def _handle_logout(self, cookies: dict[str, str]) -> dict[str, Any]:
@@ -473,9 +520,9 @@ class WebDashboard:
             )
         del self._users[username]
         self._sessions = {
-            token: session_username
-            for token, session_username in self._sessions.items()
-            if session_username in self._users
+            token: session_data
+            for token, session_data in self._sessions.items()
+            if session_data.get("username") in self._users
         }
         await asyncio.to_thread(_save_users, self._users_path, self._users)
         self._save_sessions()
@@ -591,6 +638,9 @@ class WebDashboard:
             "Content-Type": response["content_type"],
             "Content-Length": str(len(body)),
             "Connection": "close",
+            "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'",
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
         }
         headers.update(response.get("headers", {}))
         header_lines = [f"HTTP/1.1 {status.value} {status.phrase}"]
@@ -606,11 +656,18 @@ class WebDashboard:
 
     def _is_authenticated(self, cookies: dict[str, str]) -> bool:
         token = cookies.get("session", "")
-        return token in self._sessions
+        session_data = self._sessions.get(token)
+        if not session_data:
+            return False
+        if time.time() - session_data.get("created_at", 0) > 86400:
+            self._sessions.pop(token, None)
+            return False
+        return True
 
     def _current_username(self, cookies: dict[str, str]) -> str:
         token = cookies.get("session", "")
-        return self._sessions.get(token, "")
+        session_data = self._sessions.get(token)
+        return str(session_data.get("username", "")) if session_data else ""
 
     def _current_role(self, cookies: dict[str, str]) -> str:
         return self._user_role(self._current_username(cookies))

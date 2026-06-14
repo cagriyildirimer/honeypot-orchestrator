@@ -5,23 +5,108 @@
 - **Phase 1 & 2:** GeoIP integration (batching, caching), 3D Interactive World Map (globe.gl), Real-time Events Counter (events/min), Dashboard Event Detail Drawer (Slide-out JSON view).
 - **Phase 3:** IP Rate Limiting (Sliding Window, 10 events/sec), Log Rotation (events.jsonl 50MB limit), Session Persistence (survives Docker restarts).
 - **Phase 4:** Password Hashing (Backend) - PBKDF2-HMAC-SHA256 password hashing with auto-migration of plain-text passwords on startup/login.
+- **Phase 5:** Threat Intelligence Enrichment — `threat_intel.py` modülü (rDNS, ASN/Org, Tor Exit Node, Cloud Provider CIDR, AbuseIPDB, GreyNoise), TI Dashboard Panel (summary pills + top 10 attacker tablosu), `config.yaml` TI key desteği, kapsamlı `test_threat_intel.py` test suite.
 
-## To-Do: Phase 5 — Threat Intelligence + IOC Export
-1. **Threat Intelligence Enrichment (Backend):** Yeni `threat_intel.py` modülü — sadece top 10 harici IP enrichment'a tabi tutulur. Local/private IP'ler + honeypot'un kendi subnet'i (ilk 2 oktet'ten otomatik algılanır) API'ye gönderilmez.
-   - Reverse DNS (`socket.getfqdn()`) — ücretsiz, local
-   - ASN/Org (ip-api.com'dan `as`+`org` alanları) — ücretsiz, zaten kullanıyoruz
-   - Tor Exit Node (torproject.org açık listesi, günde 1 indirme) — ücretsiz, local
-   - Cloud Provider (AWS/GCP/Azure/DO/OVH/Linode CIDR listesi) — ücretsiz, gömülü
-   - AbuseIPDB skoru (opsiyonel, key gerekli, 1000/gün limit) — key yoksa "N/A"
-   - GreyNoise sınıfı (opsiyonel, key gerekli, 50/gün limit) — key yoksa "N/A"
-   - Tüm sonuçlar 1 saat in-memory cache'lenir
-2. **TI Dashboard Panel (Frontend):** Globe'un hemen altına ayrı panel — summary pills (Tor/Cloud/Avg Abuse) + top 10 attacker tablosu (IP, Location, rDNS, ASN, Tor🧅, Cloud, Abuse Score bar, GreyNoise badge, Event Count). Globe'a dokunulmaz.
-3. **IOC Export (Backend + Frontend):** Settings/System sayfasına 2 buton eklenir (mevcut Export JSONL yanına):
-   - Export IOC (CSV) → `honeypot-iocs.csv`
-   - Export IOC (STIX 2.1) → `honeypot-iocs.stix.json`
-4. **Config:** `config.yaml`'a opsiyonel `threat_intel.abuseipdb_key` ve `greynoise_key` alanları.
+---
 
-## To-Do: Phase 6 (Sonraki Session)
-1. **Webhook / Notification System (Backend):** Discord/Telegram/Slack alert sistemi.
-2. **Light Mode (Frontend):** Modern light theme.
-3. **Analyze Sayfası (Frontend):** TI verisi yoğunlaşırsa ayrı sayfaya taşıma (Threat Heatmap, Country Breakdown, MITRE ATT&CK mapping).
+## To-Do: Phase 6 — Güvenlik Hardening & Teknik Borç
+
+**Amaç:** Mevcut güvenlik açıklarını kapatmak ve kod kalitesini artırmak.
+
+1. **Secret Management:** `config.yaml`'daki API key'leri (AbuseIPDB, GreyNoise) `.env` dosyasına taşı. `config.yaml`'dan hardcoded key'leri kaldır. `.env.example` dosyası oluştur (boş placeholder'lar ile).
+2. **Session TTL & Otomatik Logout:** Session token'a `created_at` timestamp ekle. 24 saat sonra otomatik expire. Frontend'de session süresi dolduğunda login'e yönlendirme.
+3. **Memory Leak Fix — defense.py:** `_suspicious_counters` ve `_rate_limits` dict'lerine TTL veya max-size sınırı ekle. Periyodik cleanup mekanizması kur (ör: her 10 dakikada 1 saatten eski kayıtları temizle).
+4. **GeoIP Kod Duplikasyonu:** `geo.py` ve `threat_intel.py` arasındaki `PRIVATE_PREFIXES` ve ip-api.com batch logic'ini birleştir. `geo.py`'yi single source of truth yap.
+5. **Lazy Import Temizliği:** `web/server.py`'deki fonksiyon-içi `from defense import ...` çağrılarını dosya başına taşı.
+
+---
+
+## Tamamlanan: Phase 7 — Kontrol Paneli Güvenlik Güncellemeleri
+
+- Brute Force (kaba kuvvet) koruması (5 hata / 5 dk) eklendi.
+- Yalnızca POST isteklerini koruyan CSRF Token mekanizması kuruldu.
+- `Content-Security-Policy` ve `X-Frame-Options` gibi HTTP güvenlik başlıkları eklendi.
+
+---
+
+## To-Do: Phase 8 — PostgreSQL Veritabanı Migrasyonu & Mikroservis İzolasyonu
+
+**Amaç:** Sistemin ölçeklenebilirliğini artırmak, dosya tabanlı mimariden kurtulmak ve Macvlan ağ problemlerini çözmek için web arayüzünü tuzaklardan fiziksel olarak ayırmak.
+
+1. **Docker Compose Güncellemesi:** Sisteme `postgres` servisinin eklenmesi. Mevcut `backend` servisinin ikiye bölünmesi:
+   - `honeypot-daemon`: Sadece tuzakları çalıştırır, Macvlan IP'sine (veya harici ağa) bağlanır.
+   - `honeypot-web`: Sadece Dashboard API'sini çalıştırır, Host makinede (Bridge ağında) çalışarak Macvlan IP'sini ifşa etmez.
+2. **Backend ORM Entegrasyonu:** `SQLAlchemy` (veya `asyncpg`) ile veritabanı tablolarının (Events, Sessions, Users, ThreatIntelCache) modellenmesi.
+3. **Dosya Tabanlı Mimarinin Terk Edilmesi:** Mevcut JSONL tabanlı log okuma/yazma, oturum yönetimi ve hafızada tutulan sayaç sistemlerinin SQL sorgularına dönüştürülmesi.
+4. **Veri Taşıma (Migration):** Eski JSON ve JSONL verilerini PostgreSQL'e aktaracak bir başlangıç betiği (script) yazılması.
+
+---
+
+## To-Do: Phase 9 — IOC Export (CSV + STIX 2.1)
+
+**Amaç:** Toplanan tehdit istihbaratını endüstri-standart formatlarda dışa aktarabilmek.
+
+1. **IOC Export Backend (`web/server.py`):** `/api/ioc/csv` ve `/api/ioc/stix` endpoint'leri. TI verisinden top attacker IP'leri, ASN, ülke, Tor/Cloud bilgisi, abuse skoru içeren dışa aktarım.
+2. **CSV Format:** Sütunlar: `ip, country, city, asn, org, rdns, is_tor, cloud_provider, abuse_score, greynoise_class, event_count, first_seen, last_seen`.
+3. **STIX 2.1 Format:** Her IP için `indicator` (pattern: `[ipv4-addr:value = 'x.x.x.x']`), `observed-data`, ve `relationship` nesneleri. Bundle olarak export.
+4. **Frontend:** Settings/System sayfasına mevcut "Export JSONL" butonunun yanına "Export IOC (CSV)" ve "Export IOC (STIX)" butonları.
+
+---
+
+## To-Do: Phase 10 — Webhook / Notification System
+
+**Amaç:** Kritik olaylarda anında bildirim alabilmek.
+
+1. **Config:** `config.yaml`'a `notifications` bölümü ekle:
+   ```yaml
+   notifications:
+     discord_webhook: ""
+     telegram_bot_token: ""
+     telegram_chat_id: ""
+     slack_webhook: ""
+     enabled_events:
+       - login_attempt
+       - auto_ban
+       - profile_changed
+       - rate_limit_exceeded
+   ```
+2. **Notification Engine (Backend):** Yeni `notifications.py` modülü. Async HTTP POST ile webhook'lara mesaj gönderimi. Rate limiting (aynı event tipi için min 30 sn aralık). Retry mekanizması (max 2 deneme).
+3. **Event Hook Entegrasyonu:** `event_logger.py`'ye hook sistemi ekle. Log yazıldığında `enabled_events` listesindeki event type'lar için notification tetikleme.
+4. **Frontend:** Settings'e yeni "Notifications" sayfası. Webhook URL'lerini girme, test butonu ("Send Test Notification"), event filtresi toggle'ları.
+
+---
+
+## To-Do: Phase 11 — MITRE ATT&CK Mapping + Analyze Sayfası
+
+**Amaç:** Honeypot verilerini profesyonel güvenlik çerçevesinde analiz edebilmek.
+
+1. **MITRE ATT&CK Mapping (Backend):** Yeni `mitre.py` modülü. Event type → ATT&CK taktik/teknik eşlemesi.
+2. **Analyze Sayfası (Frontend):** Yeni `/analyze` route (Threat Heatmap, MITRE ATT&CK Matrix, Country Breakdown).
+3. **API Endpoint:** `/api/analyze` — MITRE mapping, ülke breakdown, servis dağılımı verilerini döner.
+
+---
+
+## To-Do: Phase 12 — Credential Harvest & Attack Timeline Replay
+
+**Amaç:** Saldırgan davranışlarını detaylı izleyebilmek.
+
+1. **Credential Harvest Raporu (Backend + Frontend):** Tüm login denemelerinden `username/password` çiftlerini toplayan liste ve Dashboard paneli.
+2. **Attack Timeline Replay (Frontend):** Belirli bir IP seçildiğinde o IP'nin tüm aktivitelerinin kronolojik zaman çizelgesi.
+3. **API Endpoint:** `/api/attacker/<ip>` — Tek IP'nin tüm event'leri + TI enrichment + timeline verileri.
+
+---
+
+## To-Do: Phase 13 — Custom Profile Builder & Honeypot File Traps
+
+**Amaç:** Kullanılabilirliği artırmak ve daha sofistike tuzak mekanizmaları eklemek.
+
+1. **Custom Profile Builder (Frontend + Backend):** Dashboard üzerinden yeni profil oluşturma GUI'si.
+2. **Honeypot File Traps (FTP + SMB):** FTP ve SMB servislerine sahte ama gerçekçi görünen dosya/dizin yapısı ekleme (`passwords.xlsx` vb.). Canary token mantığı.
+3. **Light Mode (Frontend):** CSS variable tabanlı modern light theme.
+
+---
+
+## Teknik Borç (Her Phase Arasında Çözülebilir)
+- [ ] `web/server.py` (1053 satır) modüler parçalama: `handlers/`, `utils.py` ayrıştırması.
+- [ ] `frontend/src/app-react.js` (2951 satır / 117KB) dosya bölünmesi veya Vite+React migration.
+- [ ] Unit test kapsamı artırma: services, orchestrator, config parsing, defense modülü testleri.

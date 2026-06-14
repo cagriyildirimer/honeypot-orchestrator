@@ -23,7 +23,7 @@ def lookup(ip: str) -> dict[str, Any]:
             return _cache[ip]
     try:
         req = urllib.request.Request(
-            f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,city,lat,lon,isp",
+            f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,city,lat,lon,isp,as,org",
             headers={"User-Agent": "HoneypotOrchestrator/1.0"},
         )
         with urllib.request.urlopen(req, timeout=3) as resp:
@@ -36,11 +36,13 @@ def lookup(ip: str) -> dict[str, Any]:
                 "lon": data.get("lon", 0),
                 "city": data.get("city", ""),
                 "isp": data.get("isp", ""),
+                "asn": str(data.get("as", "")).split(" ")[0] if data.get("as") else "",
+                "org": data.get("org", ""),
             }
         else:
-            result = {"country": "Unknown", "countryCode": "XX", "lat": 0, "lon": 0, "city": "", "isp": ""}
+            result = {"country": "Unknown", "countryCode": "XX", "lat": 0, "lon": 0, "city": "", "isp": "", "asn": "", "org": ""}
     except Exception:
-        result = {"country": "Unknown", "countryCode": "XX", "lat": 0, "lon": 0, "city": "", "isp": ""}
+        result = {"country": "Unknown", "countryCode": "XX", "lat": 0, "lon": 0, "city": "", "isp": "", "asn": "", "org": ""}
     with _lock:
         if len(_cache) < 5000:
             _cache[ip] = result
@@ -52,7 +54,7 @@ def bulk_lookup(ips: list[str]) -> dict[str, dict[str, Any]]:
     to_fetch: list[str] = []
     for ip in ips:
         if not ip or ip in {"unknown", "localhost"} or ip.startswith(PRIVATE_PREFIXES):
-            results[ip] = {"country": "Private", "countryCode": "XX", "lat": 0, "lon": 0, "city": "", "isp": ""}
+            results[ip] = {"country": "Private", "countryCode": "XX", "lat": 0, "lon": 0, "city": "", "isp": "", "asn": "", "org": ""}
         elif ip in _cache:
             results[ip] = _cache[ip]
         else:
@@ -61,7 +63,7 @@ def bulk_lookup(ips: list[str]) -> dict[str, dict[str, Any]]:
     for i in range(0, len(to_fetch), 100):
         batch = to_fetch[i:i + 100]
         try:
-            payload = json.dumps([{"query": ip, "fields": "status,query,country,countryCode,city,lat,lon,isp"} for ip in batch]).encode()
+            payload = json.dumps([{"query": ip, "fields": "status,query,country,countryCode,city,lat,lon,isp,as,org"} for ip in batch]).encode()
             req = urllib.request.Request(
                 "http://ip-api.com/batch",
                 data=payload,
@@ -79,14 +81,16 @@ def bulk_lookup(ips: list[str]) -> dict[str, dict[str, Any]]:
                         "lon": entry.get("lon", 0),
                         "city": entry.get("city", ""),
                         "isp": entry.get("isp", ""),
+                        "asn": str(entry.get("as", "")).split(" ")[0] if entry.get("as") else "",
+                        "org": entry.get("org", ""),
                     }
                 else:
-                    result = {"country": "Unknown", "countryCode": "XX", "lat": 0, "lon": 0, "city": "", "isp": ""}
+                    result = {"country": "Unknown", "countryCode": "XX", "lat": 0, "lon": 0, "city": "", "isp": "", "asn": "", "org": ""}
                 results[ip] = result
                 with _lock:
                     if len(_cache) < 5000:
                         _cache[ip] = result
         except Exception:
             for ip in batch:
-                results[ip] = {"country": "Unknown", "countryCode": "XX", "lat": 0, "lon": 0, "city": "", "isp": ""}
+                results[ip] = {"country": "Unknown", "countryCode": "XX", "lat": 0, "lon": 0, "city": "", "isp": "", "asn": "", "org": ""}
     return results

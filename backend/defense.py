@@ -13,6 +13,7 @@ from typing import Any
 _lock = threading.Lock()
 # In-memory counter for security-relevant suspicious events per IP
 _suspicious_counters: dict[str, int] = {}
+_last_cleanup: float = 0.0
 
 WHITELIST_PATH = Path("logs/whitelist.json")
 BLACKLIST_PATH = Path("logs/blacklist.json")
@@ -158,7 +159,27 @@ import time
 
 _rate_limits: dict[str, list[float]] = {}
 
+def _cleanup_memory_structs() -> None:
+    global _last_cleanup
+    now = time.time()
+    if now - _last_cleanup < 600:  # Every 10 minutes
+        return
+    _last_cleanup = now
+
+    # Cleanup rate limits older than 1 second
+    for ip in list(_rate_limits.keys()):
+        history = [ts for ts in _rate_limits[ip] if now - ts < 1.0]
+        if not history:
+            del _rate_limits[ip]
+        else:
+            _rate_limits[ip] = history
+            
+    # Cap suspicious counters to prevent infinite memory growth
+    if len(_suspicious_counters) > 10000:
+        _suspicious_counters.clear()
+
 def record_suspicious_event(ip: str) -> None:
+    _cleanup_memory_structs()
     if not ip or ip in {"127.0.0.1", "::1", "localhost", "unknown"}:
         return
     if is_whitelisted(ip):

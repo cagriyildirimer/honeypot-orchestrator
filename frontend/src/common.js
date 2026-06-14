@@ -1,7 +1,27 @@
+let csrfToken = null;
+
 async function requestJson(url, options = {}) {
   const headers = {
     ...(options.headers || {}),
   };
+
+  if (options.method && options.method.toUpperCase() === "POST" && url !== "/api/login") {
+    if (!csrfToken) {
+      try {
+        const res = await fetch("/api/csrf");
+        const data = await res.json();
+        if (data.csrf_token) {
+          csrfToken = data.csrf_token;
+        }
+      } catch (e) {
+        console.error("Failed to fetch CSRF token");
+      }
+    }
+    if (csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
+  }
+
   if (options.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }

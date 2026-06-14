@@ -16,15 +16,7 @@ import time
 import urllib.request
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Private / reserved prefixes (reused from geo.py for consistency)
-# ---------------------------------------------------------------------------
-PRIVATE_PREFIXES = (
-    "10.", "172.16.", "172.17.", "172.18.", "172.19.",
-    "172.20.", "172.21.", "172.22.", "172.23.", "172.24.",
-    "172.25.", "172.26.", "172.27.", "172.28.", "172.29.",
-    "172.30.", "172.31.", "192.168.", "127.", "0.", "::1",
-)
+from geo import PRIVATE_PREFIXES, bulk_lookup
 
 # ---------------------------------------------------------------------------
 # Cloud provider CIDR blocks (major ranges, embedded)
@@ -276,51 +268,8 @@ def _query_greynoise(ip_str: str, api_key: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# ASN / Org / GeoIP enrichment (reuses ip-api.com batch)
+# ASN / Org / GeoIP enrichment (delegated to geo.bulk_lookup)
 # ---------------------------------------------------------------------------
-
-def _batch_ip_api(ips: list[str]) -> dict[str, dict[str, Any]]:
-    """Fetch geo + ASN data from ip-api.com batch endpoint (max 100 per call)."""
-    results: dict[str, dict[str, Any]] = {}
-    for i in range(0, len(ips), 100):
-        batch = ips[i:i + 100]
-        try:
-            payload = json.dumps([
-                {"query": ip, "fields": "status,query,country,countryCode,city,lat,lon,isp,as,org"}
-                for ip in batch
-            ]).encode()
-            req = urllib.request.Request(
-                "http://ip-api.com/batch",
-                data=payload,
-                headers={"Content-Type": "application/json", "User-Agent": "HoneypotOrchestrator/1.0"},
-            )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                batch_data = json.loads(resp.read().decode("utf-8"))
-            for entry in batch_data:
-                ip = entry.get("query", "")
-                if entry.get("status") == "success":
-                    results[ip] = {
-                        "country": entry.get("country", ""),
-                        "countryCode": entry.get("countryCode", ""),
-                        "city": entry.get("city", ""),
-                        "lat": entry.get("lat", 0),
-                        "lon": entry.get("lon", 0),
-                        "isp": entry.get("isp", ""),
-                        "asn": str(entry.get("as", "")).split(" ")[0] if entry.get("as") else "",
-                        "org": entry.get("org", ""),
-                    }
-                else:
-                    results[ip] = {
-                        "country": "Unknown", "countryCode": "XX", "city": "",
-                        "lat": 0, "lon": 0, "isp": "", "asn": "", "org": "",
-                    }
-        except Exception:
-            for ip in batch:
-                results[ip] = {
-                    "country": "Unknown", "countryCode": "XX", "city": "",
-                    "lat": 0, "lon": 0, "isp": "", "asn": "", "org": "",
-                }
-    return results
 
 
 # ---------------------------------------------------------------------------
@@ -392,7 +341,7 @@ def enrich_top_ips(
     # Batch GeoIP / ASN for cache misses
     geo_data: dict[str, dict[str, Any]] = {}
     if to_enrich:
-        geo_data = _batch_ip_api(to_enrich)
+        geo_data = bulk_lookup(to_enrich)
 
     # Enrich each IP that wasn't cached
     for ip in to_enrich:
