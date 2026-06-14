@@ -35,7 +35,7 @@
 
 1. **Docker Compose Güncellemesi:** Sisteme `postgres` servisinin eklenmesi. Mevcut `backend` servisinin ikiye bölünmesi:
    - `honeypot-daemon`: Sadece tuzakları çalıştırır, Macvlan IP'sine (veya harici ağa) bağlanır.
-   - `honeypot-web`: Sadece Dashboard API'sini çalıştırır, Host makinede (Bridge ağında) çalışarak Macvlan IP'sini ifşa etmez.
+   - `honeypot-web`: Sadece Dashboard API'sini çalıştırır, Host makinede (Bridge ağında) çalışarak Macvlan IP'sini ifşa etmez. Web arayüzü (`frontend`) de izole olacağı için portu `3000` yerine doğrudan `80` olarak ayarlanacak; böylece Host IP'si üzerinden panele portsuz girilebilecek.
 2. **Backend ORM Entegrasyonu:** `SQLAlchemy` (veya `asyncpg`) ile veritabanı tablolarının (Events, Sessions, Users, ThreatIntelCache) modellenmesi.
 3. **Dosya Tabanlı Mimarinin Terk Edilmesi:** Mevcut JSONL tabanlı log okuma/yazma, oturum yönetimi ve hafızada tutulan sayaç sistemlerinin SQL sorgularına dönüştürülmesi.
 4. **Veri Taşıma (Migration):** Eski JSON ve JSONL verilerini PostgreSQL'e aktaracak bir başlangıç betiği (script) yazılması.
