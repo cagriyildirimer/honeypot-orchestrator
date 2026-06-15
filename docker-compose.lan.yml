@@ -67,9 +67,9 @@ services:
     volumes:
       - honeypot_logs:/app/logs
     networks:
-      default:
-      honeypot_lan:
+      a_macvlan:
         ipv4_address: "${HONEYPOT_LAN_IP:?Set HONEYPOT_LAN_IP to the reserved LAN IP for the container}"
+      default:
     restart: unless-stopped
 
   honeypot-web:
@@ -110,6 +110,6 @@ volumes:
   pgdata:
 
 networks:
-  honeypot_lan:
+  a_macvlan:
     external: true
     name: "${HONEYPOT_LAN_NETWORK:-honeypot_lan_net}"
