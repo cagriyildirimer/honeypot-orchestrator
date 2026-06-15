@@ -174,39 +174,7 @@ def _is_tor_exit(ip_str: str) -> bool:
     return ip_str in _tor_exit_nodes
 
 
-# ---------------------------------------------------------------------------
-# In-memory TI cache (1 hour TTL, thread-safe)
-# ---------------------------------------------------------------------------
-class _TICache:
-    def __init__(self, ttl: int = 3600) -> None:
-        self._store: dict[str, tuple[float, dict[str, Any]]] = {}
-        self._lock = threading.Lock()
-        self._ttl = ttl
 
-    def get(self, ip: str) -> dict[str, Any] | None:
-        with self._lock:
-            entry = self._store.get(ip)
-            if entry is None:
-                return None
-            ts, data = entry
-            if time.time() - ts > self._ttl:
-                del self._store[ip]
-                return None
-            return data
-
-    def put(self, ip: str, data: dict[str, Any]) -> None:
-        with self._lock:
-            self._store[ip] = (time.time(), data)
-
-    def clear_expired(self) -> None:
-        now = time.time()
-        with self._lock:
-            expired = [k for k, (ts, _) in self._store.items() if now - ts > self._ttl]
-            for k in expired:
-                del self._store[k]
-
-
-_cache = _TICache(ttl=3600)
 
 # ---------------------------------------------------------------------------
 # Reverse DNS
@@ -300,7 +268,24 @@ def _is_private_or_local(ip_str: str, honeypot_prefix: str) -> bool:
 # Main enrichment function
 # ---------------------------------------------------------------------------
 
-def enrich_top_ips(
+def _enrich_ip_sync(ip: str, geo: dict[str, Any], abuseipdb_key: str, greynoise_key: str) -> dict[str, Any]:
+    return {
+        "ip": ip,
+        "rdns": _reverse_dns(ip),
+        "asn": geo.get("asn", ""),
+        "org": geo.get("org", ""),
+        "country": geo.get("country", "Unknown"),
+        "countryCode": geo.get("countryCode", "XX"),
+        "city": geo.get("city", ""),
+        "lat": geo.get("lat", 0),
+        "lon": geo.get("lon", 0),
+        "is_tor": _is_tor_exit(ip),
+        "cloud_provider": _match_cloud_provider(ip),
+        "abuse_score": _query_abuseipdb(ip, abuseipdb_key),
+        "greynoise_class": _query_greynoise(ip, greynoise_key),
+    }
+
+async def enrich_top_ips(
     ip_counts: dict[str, int],
     *,
     honeypot_host: str = "",
@@ -328,41 +313,68 @@ def enrich_top_ips(
 
     ip_list = [ip for ip, _ in top_ips]
 
-    # Check cache first, collect misses
+    import asyncio
+    from database import async_session
+    from models import ThreatIntelCache
+    from sqlalchemy import select
+    from datetime import datetime, UTC
+
+    # Check cache first
     cached: dict[str, dict[str, Any]] = {}
     to_enrich: list[str] = []
-    for ip in ip_list:
-        hit = _cache.get(ip)
-        if hit is not None:
-            cached[ip] = hit
-        else:
-            to_enrich.append(ip)
+
+    try:
+        async with async_session() as session:
+            stmt = select(ThreatIntelCache).where(ThreatIntelCache.ip.in_(ip_list))
+            result = await session.execute(stmt)
+            records = result.scalars().all()
+            now = datetime.now(UTC)
+            db_cached = {}
+            for r in records:
+                updated_at = r.updated_at.replace(tzinfo=UTC) if r.updated_at.tzinfo is None else r.updated_at
+                if (now - updated_at).total_seconds() <= 3600:
+                    db_cached[r.ip] = r.data
+                    
+            for ip in ip_list:
+                if ip in db_cached:
+                    cached[ip] = db_cached[ip]
+                else:
+                    to_enrich.append(ip)
+    except Exception as e:
+        print(f"Error accessing DB for TI cache: {e}")
+        to_enrich = ip_list
 
     # Batch GeoIP / ASN for cache misses
     geo_data: dict[str, dict[str, Any]] = {}
     if to_enrich:
-        geo_data = bulk_lookup(to_enrich)
+        geo_data = await asyncio.to_thread(bulk_lookup, to_enrich)
 
     # Enrich each IP that wasn't cached
-    for ip in to_enrich:
-        geo = geo_data.get(ip, {})
-        entry = {
-            "ip": ip,
-            "rdns": _reverse_dns(ip),
-            "asn": geo.get("asn", ""),
-            "org": geo.get("org", ""),
-            "country": geo.get("country", "Unknown"),
-            "countryCode": geo.get("countryCode", "XX"),
-            "city": geo.get("city", ""),
-            "lat": geo.get("lat", 0),
-            "lon": geo.get("lon", 0),
-            "is_tor": _is_tor_exit(ip),
-            "cloud_provider": _match_cloud_provider(ip),
-            "abuse_score": _query_abuseipdb(ip, abuseipdb_key),
-            "greynoise_class": _query_greynoise(ip, greynoise_key),
-        }
-        _cache.put(ip, entry)
-        cached[ip] = entry
+    if to_enrich:
+        try:
+            async with async_session() as session:
+                now = datetime.now(UTC)
+                for ip in to_enrich:
+                    geo = geo_data.get(ip, {})
+                    entry = await asyncio.to_thread(
+                        _enrich_ip_sync, ip, geo, abuseipdb_key, greynoise_key
+                    )
+                    cached[ip] = entry
+                    
+                    cache_entry = await session.get(ThreatIntelCache, ip)
+                    if cache_entry:
+                        cache_entry.data = entry
+                        cache_entry.updated_at = now
+                    else:
+                        session.add(ThreatIntelCache(ip=ip, data=entry, updated_at=now))
+                
+                await session.commit()
+        except Exception as e:
+            print(f"Error writing to DB for TI cache: {e}")
+            for ip in to_enrich:
+                geo = geo_data.get(ip, {})
+                entry = await asyncio.to_thread(_enrich_ip_sync, ip, geo, abuseipdb_key, greynoise_key)
+                cached[ip] = entry
 
     # Build final result list, sorted by event count
     results: list[dict[str, Any]] = []

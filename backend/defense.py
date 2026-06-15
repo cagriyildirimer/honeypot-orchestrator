@@ -1,68 +1,19 @@
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 import platform
-import threading
+import time
 from datetime import datetime, UTC
-from pathlib import Path
 from typing import Any
 
-# Global thread-safety lock for files
-_lock = threading.Lock()
-# In-memory counter for security-relevant suspicious events per IP
+from sqlalchemy import select, delete
+from database import async_session
+from models import Whitelist, Blacklist
+
 _suspicious_counters: dict[str, int] = {}
+_rate_limits: dict[str, list[float]] = {}
 _last_cleanup: float = 0.0
-
-WHITELIST_PATH = Path("logs/whitelist.json")
-BLACKLIST_PATH = Path("logs/blacklist.json")
-
-
-def _ensure_files() -> None:
-    for path in (WHITELIST_PATH, BLACKLIST_PATH):
-        if not path.parent.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists():
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump({"entries": []}, f, indent=2, sort_keys=True)
-
-
-def get_whitelist() -> list[dict[str, Any]]:
-    _ensure_files()
-    with _lock:
-        try:
-            with open(WHITELIST_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("entries", [])
-        except Exception:
-            return []
-
-
-def get_blacklist() -> list[dict[str, Any]]:
-    _ensure_files()
-    with _lock:
-        try:
-            with open(BLACKLIST_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("entries", [])
-        except Exception:
-            return []
-
-
-def save_whitelist(entries: list[dict[str, Any]]) -> None:
-    _ensure_files()
-    with _lock:
-        with open(WHITELIST_PATH, "w", encoding="utf-8") as f:
-            json.dump({"entries": entries}, f, indent=2, sort_keys=True)
-
-
-def save_blacklist(entries: list[dict[str, Any]]) -> None:
-    _ensure_files()
-    with _lock:
-        with open(BLACKLIST_PATH, "w", encoding="utf-8") as f:
-            json.dump({"entries": entries}, f, indent=2, sort_keys=True)
-
 
 def resolve_mac(ip: str) -> str:
     if ip in {"127.0.0.1", "::1", "localhost", "unknown"}:
@@ -89,84 +40,137 @@ def resolve_mac(ip: str) -> str:
     return "unknown"
 
 
-def is_whitelisted(ip: str) -> bool:
-    entries = get_whitelist()
-    return any(item.get("ip") == ip for item in entries)
+async def get_whitelist() -> list[dict[str, Any]]:
+    try:
+        async with async_session() as session:
+            stmt = select(Whitelist)
+            result = await session.execute(stmt)
+            return [
+                {
+                    "ip": r.ip,
+                    "description": r.description,
+                    "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC") if r.timestamp else "",
+                }
+                for r in result.scalars().all()
+            ]
+    except Exception:
+        return []
 
 
-def is_blacklisted(ip: str) -> bool:
-    entries = get_blacklist()
-    # 1. IP matches directly
-    if any(item.get("ip") == ip for item in entries):
-        return True
-    # 2. Check if peer MAC matches a banned MAC entry
-    mac = resolve_mac(ip)
-    if mac not in {"unknown", "N/A"}:
-        if any(item.get("ip") == mac for item in entries):
-            return True
-    return False
+async def get_blacklist() -> list[dict[str, Any]]:
+    try:
+        async with async_session() as session:
+            stmt = select(Blacklist)
+            result = await session.execute(stmt)
+            return [
+                {
+                    "ip": r.ip,
+                    "description": r.description,
+                    "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC") if r.timestamp else "",
+                }
+                for r in result.scalars().all()
+            ]
+    except Exception:
+        return []
 
 
-def add_to_whitelist(ip: str, description: str) -> bool:
+async def is_whitelisted(ip: str) -> bool:
+    try:
+        async with async_session() as session:
+            result = await session.execute(select(Whitelist).where(Whitelist.ip == ip))
+            return result.scalars().first() is not None
+    except Exception:
+        return False
+
+
+async def is_blacklisted(ip: str) -> bool:
+    try:
+        async with async_session() as session:
+            res = await session.execute(select(Blacklist).where(Blacklist.ip == ip))
+            if res.scalars().first() is not None:
+                return True
+            
+            mac = resolve_mac(ip)
+            if mac not in {"unknown", "N/A"}:
+                res_mac = await session.execute(select(Blacklist).where(Blacklist.ip == mac))
+                if res_mac.scalars().first() is not None:
+                    return True
+            return False
+    except Exception:
+        return False
+
+
+async def add_to_whitelist(ip: str, description: str) -> bool:
     if not ip or not description:
         return False
-    entries = get_whitelist()
-    if any(item.get("ip") == ip for item in entries):
+    try:
+        async with async_session() as session:
+            exists = await session.execute(select(Whitelist).where(Whitelist.ip == ip))
+            if exists.scalars().first() is not None:
+                return False
+                
+            session.add(Whitelist(ip=ip, description=description, timestamp=datetime.now(UTC)))
+            await session.commit()
+            return True
+    except Exception:
         return False
-    entries.append({
-        "ip": ip,
-        "description": description,
-        "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
-    })
-    save_whitelist(entries)
-    return True
 
 
-def add_to_blacklist(ip_or_mac: str, description: str) -> bool:
+async def add_to_blacklist(ip_or_mac: str, description: str) -> bool:
     if not ip_or_mac or not description:
         return False
-    entries = get_blacklist()
-    if any(item.get("ip") == ip_or_mac for item in entries):
+    try:
+        async with async_session() as session:
+            exists = await session.execute(select(Blacklist).where(Blacklist.ip == ip_or_mac))
+            if exists.scalars().first() is not None:
+                return False
+                
+            session.add(Blacklist(ip=ip_or_mac, description=description, timestamp=datetime.now(UTC)))
+            await session.commit()
+            
+            try:
+                from net_tuner import apply_firewall_rule
+                apply_firewall_rule(ip_or_mac)
+            except Exception:
+                pass
+            return True
+    except Exception:
         return False
-    entries.append({
-        "ip": ip_or_mac,
-        "description": description,
-        "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
-    })
-    save_blacklist(entries)
-    return True
 
 
-def delete_from_whitelist(ip: str) -> bool:
-    entries = get_whitelist()
-    filtered = [item for item in entries if item.get("ip") != ip]
-    if len(filtered) == len(entries):
+async def delete_from_whitelist(ip: str) -> bool:
+    try:
+        async with async_session() as session:
+            res = await session.execute(delete(Whitelist).where(Whitelist.ip == ip))
+            await session.commit()
+            return res.rowcount > 0
+    except Exception:
         return False
-    save_whitelist(filtered)
-    return True
 
 
-def delete_from_blacklist(ip_or_mac: str) -> bool:
-    entries = get_blacklist()
-    filtered = [item for item in entries if item.get("ip") != ip_or_mac]
-    if len(filtered) == len(entries):
+async def delete_from_blacklist(ip_or_mac: str) -> bool:
+    try:
+        async with async_session() as session:
+            res = await session.execute(delete(Blacklist).where(Blacklist.ip == ip_or_mac))
+            await session.commit()
+            
+            try:
+                from net_tuner import remove_firewall_rule
+                remove_firewall_rule(ip_or_mac)
+            except Exception:
+                pass
+            return res.rowcount > 0
+    except Exception:
         return False
-    save_blacklist(filtered)
-    return True
 
-
-import time
-
-_rate_limits: dict[str, list[float]] = {}
 
 def _cleanup_memory_structs() -> None:
     global _last_cleanup
     now = time.time()
-    if now - _last_cleanup < 600:  # Every 10 minutes
+    if now - _last_cleanup < 600:
         return
     _last_cleanup = now
 
-    # Cleanup rate limits older than 1 second
     for ip in list(_rate_limits.keys()):
         history = [ts for ts in _rate_limits[ip] if now - ts < 1.0]
         if not history:
@@ -174,28 +178,27 @@ def _cleanup_memory_structs() -> None:
         else:
             _rate_limits[ip] = history
             
-    # Cap suspicious counters to prevent infinite memory growth
     if len(_suspicious_counters) > 10000:
         _suspicious_counters.clear()
 
-def record_suspicious_event(ip: str) -> None:
+
+async def record_suspicious_event(ip: str) -> None:
     _cleanup_memory_structs()
     if not ip or ip in {"127.0.0.1", "::1", "localhost", "unknown"}:
         return
-    if is_whitelisted(ip):
+    if await is_whitelisted(ip):
         return
     
     current = _suspicious_counters.get(ip, 0) + 1
     _suspicious_counters[ip] = current
     if current >= 100:
-        add_to_blacklist(ip, "Automated ban: reached 100 suspicious events")
+        await add_to_blacklist(ip, "Automated ban: reached 100 suspicious events")
         return
     
-    # Sliding window rate limiting: 10 events / second
     now = time.time()
     history = _rate_limits.get(ip, [])
     history = [ts for ts in history if now - ts < 1.0]
     history.append(now)
     _rate_limits[ip] = history
     if len(history) >= 10:
-        add_to_blacklist(ip, "Automated ban: rate limit exceeded (10 events/sec)")
+        await add_to_blacklist(ip, "Automated ban: rate limit exceeded (10 events/sec)")

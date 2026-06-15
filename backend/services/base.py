@@ -107,7 +107,7 @@ class BaseHoneypotService(ABC):
         from defense import is_blacklisted, record_suspicious_event
 
         peer_ip, peer_port = self.peer(writer)
-        if is_blacklisted(peer_ip):
+        if await is_blacklisted(peer_ip):
             writer.close()
             try:
                 await writer.wait_closed()
@@ -115,7 +115,7 @@ class BaseHoneypotService(ABC):
                 pass
             return
 
-        record_suspicious_event(peer_ip)
+        await record_suspicious_event(peer_ip)
 
         try:
             await self.handle_client(reader, writer)

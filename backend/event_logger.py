@@ -1,47 +1,65 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
+from database import async_session
+from models import Event
 
-class JSONLEventLogger:
-    def __init__(self, path: Path) -> None:
-        self.path = path
-        # Ayni anda gelen baglanti olaylarinin dosyaya karismadan yazilmasi icin kilit.
-        self._lock = asyncio.Lock()
+class DBEventLogger:
+    def __init__(self, path: Any = None) -> None:
+        self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self._task = asyncio.create_task(self._process_queue())
 
     async def log(self, event: dict[str, Any]) -> None:
-        # Log klasoru yoksa ilk olay yazilirken olusturulur.
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        # Her olaya okunabilir bir UTC zaman damgasi eklenir; gelen alanlar bunun yanina eklenir.
-        record = {
-            "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
-            **event,
-        }
-        # JSONL formati: her satir ayri bir JSON kaydidir.
-        line = json.dumps(record, ensure_ascii=True, sort_keys=True)
-        async with self._lock:
-            # Dosya yazma islemi bloklayici oldugu icin ayri thread'e alinir.
-            await asyncio.to_thread(self._append_line, line)
+        await self.queue.put(event)
 
-    def _append_line(self, line: str) -> None:
-        # Check size for rotation (50MB)
-        if self.path.exists() and self.path.stat().st_size > 50 * 1024 * 1024:
-            self._rotate()
-        # append modu eski kayitlari korur ve yeni olayi dosyanin sonuna ekler.
-        with self.path.open("a", encoding="utf-8") as file:
-            file.write(line + "\n")
+    async def _process_queue(self) -> None:
+        batch: list[dict[str, Any]] = []
+        while True:
+            try:
+                if not batch:
+                    item = await self.queue.get()
+                    batch.append(item)
+                
+                while not self.queue.empty() and len(batch) < 100:
+                    batch.append(self.queue.get_nowait())
+                
+                async with async_session() as session:
+                    events = []
+                    for event in batch:
+                        service = event.get("service", "unknown")
+                        event_type = event.get("event_type", "unknown")
+                        src_ip = event.get("src_ip")
+                        src_port = event.get("src_port")
+                        summary = event.get("summary")
+                        details = {
+                            k: v for k, v in event.items() 
+                            if k not in ("service", "event_type", "src_ip", "src_port", "summary", "timestamp")
+                        }
+                        
+                        events.append(Event(
+                            timestamp=datetime.now(UTC),
+                            service=service,
+                            event_type=event_type,
+                            src_ip=src_ip,
+                            src_port=src_port,
+                            summary=summary,
+                            details=details
+                        ))
+                    
+                    session.add_all(events)
+                    await session.commit()
+                
+                for _ in range(len(batch)):
+                    self.queue.task_done()
+                batch.clear()
 
-    def _rotate(self) -> None:
-        try:
-            for i in range(4, 0, -1):
-                old = Path(str(self.path) + f".{i}")
-                new = Path(str(self.path) + f".{i+1}")
-                if old.exists():
-                    old.replace(new)
-            self.path.replace(Path(str(self.path) + ".1"))
-        except Exception:
-            pass
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"Error in DBEventLogger queue: {e}")
+                await asyncio.sleep(1)
+
+JSONLEventLogger = DBEventLogger  # Geriye donuk uyumluluk icin alias

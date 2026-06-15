@@ -11,20 +11,9 @@
 - **Phase 9:** IOC Export (CSV + STIX 2.1) — Tehdit istihbarat verilerinin dışa aktarımı eklendi.
 - **Phase 8 (Adım 1):** Mikroservis İzolasyonu — Backend servisi `honeypot-daemon` (tuzaklar) ve `honeypot-web` (API) olarak ikiye bölündü. Frontend portu 80'e alındı. Docker compose ağ yapılandırmaları ayrıldı.
 
----
-
-## To-Do: Phase 8 (Adım 2) — PostgreSQL Veritabanı Migrasyonu
-
-**Amaç:** Dosya tabanlı mimariden kurtulmak ve sistemin ölçeklenebilirliğini artırmak.
-
-1. **Docker Compose Güncellemesi:** Sisteme `postgres` servisinin eklenmesi.
-2. **Backend ORM Entegrasyonu:** `SQLAlchemy` (veya `asyncpg`) ile veritabanı tablolarının (Events, Sessions, Users, ThreatIntelCache) modellenmesi.
-3. **Dosya Tabanlı Mimarinin Terk Edilmesi:** Mevcut JSONL tabanlı log okuma/yazma, oturum yönetimi ve hafızada tutulan sayaç sistemlerinin SQL sorgularına dönüştürülmesi.
-4. **Veri Taşıma (Migration):** Eski JSON ve JSONL verilerini PostgreSQL'e aktaracak bir başlangıç betiği (script) yazılması.
+- **Phase 8 (Adım 2):** PostgreSQL Veritabanı Migrasyonu — Dosya tabanlı mimariden PostgreSQL'e geçiş, SQL tablolarının oluşturulması (Events, Sessions, Users, ThreatIntelCache) ve veri taşıma betiği.
 
 ---
-
-
 
 ## To-Do: Phase 10 — Webhook / Notification System
 

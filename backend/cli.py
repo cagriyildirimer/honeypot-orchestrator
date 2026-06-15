@@ -8,9 +8,12 @@ from collections.abc import Callable
 
 from config import load_config
 from orchestrator import Orchestrator
+from database import init_db
 
 
 async def run(config_path: str, mode: str = "all") -> None:
+    # Veritabani tablolarini asenkron olarak olusturur.
+    await init_db()
     # YAML ayar dosyasini okuyup uygulamanin calisma ayarlarina donusturur.
     config = load_config(config_path)
     # Tum honeypot servislerini ve web panelini yonetecek ana sinifi hazirlar.

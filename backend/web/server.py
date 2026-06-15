@@ -8,6 +8,9 @@ import hashlib
 import secrets
 import time
 import uuid
+from database import async_session
+from models import Event, User, Session as DBSession
+from sqlalchemy import select, delete, desc
 from collections import Counter
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -48,30 +51,30 @@ class WebDashboard:
         # Basit oturumlar bellek icinde, kullanicilar yerel JSON dosyasinda tutulur.
         self._users_path = self.orchestrator.config.logging.path.parent / "web_users.json"
         self._sessions_path = self.orchestrator.config.logging.path.parent / "web_sessions.json"
-        self._sessions: dict[str, dict[str, Any]] = self._load_sessions()
-        self._reload_users()
+        self._sessions: dict[str, dict[str, Any]] = {}
+        # self._reload_users() moved to start()
         self._started_at = time.monotonic()
         self._login_attempts: dict[str, list[float]] = {}
         self._csrf_tokens: dict[str, float] = {}
 
-    def _load_sessions(self) -> dict[str, dict[str, Any]]:
+    async def _load_sessions(self) -> dict[str, dict[str, Any]]:
         try:
-            if self._sessions_path.exists():
-                with open(self._sessions_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    sessions = {}
-                    for k, v in data.items():
-                        if isinstance(v, str):
-                            sessions[k] = {"username": v, "created_at": time.time()}
-                        else:
-                            sessions[k] = v
-                    return sessions
-        except Exception:
-            pass
-        return {}
+            async with async_session() as session:
+                result = await session.execute(select(DBSession))
+                sessions = {}
+                for r in result.scalars().all():
+                    sessions[r.session_id] = {
+                        "username": r.username,
+                        "role": r.role,
+                        "created_at": r.created_at.timestamp() if r.created_at else time.time()
+                    }
+                return sessions
+        except Exception as e:
+            print(f"DB load sessions error: {e}")
+            return {}
 
-    def _reload_users(self) -> None:
-        self._users = _load_users(
+    async def _reload_users(self) -> None:
+        self._users = await _load_users(
             self._users_path,
             {
                 self.orchestrator.config.auth.username: {
@@ -81,15 +84,17 @@ class WebDashboard:
             },
         )
 
-    def _save_sessions(self) -> None:
+    async def _save_sessions(self) -> None:
         try:
             with open(self._sessions_path, "w", encoding="utf-8") as f:
                 json.dump(self._sessions, f)
         except Exception:
             pass
-        self._reload_users()
+        # self._reload_users() moved to start()
 
     async def start(self) -> None:
+        self._sessions = await self._load_sessions()
+        await self._reload_users()
         # Tarayici istekleri handle_client metoduna yonlendirilir.
         self._server = await asyncio.start_server(self.handle_client, self.host, self.port)
 
@@ -224,14 +229,14 @@ class WebDashboard:
             )
 
         if path == "/api/overview" and method == "GET":
-            return self._json_response(self._build_overview_payload(request))
+            return self._json_response(await self._build_overview_payload(request))
 
         if path == "/api/events" and method == "GET":
             query = request["query"]
             limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=200)
             service_filter = query.get("service", [""])[0].strip().lower()
             event_filter = query.get("event_type", [""])[0].strip().lower()
-            events = read_recent_events(self.orchestrator.config.logging.path, limit * 4)
+            events = await read_recent_events(self.orchestrator.config.logging.path, limit * 4)
             filtered = [
                 event
                 for event in events
@@ -241,7 +246,7 @@ class WebDashboard:
             return self._json_response({"events": filtered[:limit]})
 
         if path == "/api/stats" and method == "GET":
-            records = read_recent_events(self.orchestrator.config.logging.path, 1000)
+            records = await read_recent_events(self.orchestrator.config.logging.path, 1000)
             by_service = Counter(record.get("service", "unknown") for record in records)
             by_type = Counter(record.get("event_type", "unknown") for record in records)
             return self._json_response(
@@ -451,7 +456,7 @@ class WebDashboard:
 
         token = secrets.token_hex(32)
         self._sessions[token] = {"username": username, "created_at": time.time()}
-        self._save_sessions()
+        await self._save_sessions()
         await self.orchestrator.logger.log(
             {
                 "service": "web",
@@ -468,7 +473,7 @@ class WebDashboard:
         token = cookies.get("session", "")
         if token:
             self._sessions.pop(token, None)
-            self._save_sessions()
+            await self._save_sessions()
         return self._json_response(
             {"ok": True},
             cookies=[_build_cookie("session", "", max_age=0)],
@@ -542,7 +547,7 @@ class WebDashboard:
             if session_data.get("username") in self._users
         }
         await asyncio.to_thread(_save_users, self._users_path, self._users)
-        self._save_sessions()
+        await self._save_sessions()
         await self.orchestrator.logger.log(
             {
                 "service": "web",
@@ -787,7 +792,7 @@ class WebDashboard:
         )
 
     async def _handle_threat_intel(self) -> dict[str, Any]:
-        records = read_recent_events(self.orchestrator.config.logging.path, 2000)
+        records = await read_recent_events(self.orchestrator.config.logging.path, 2000)
         now_ts = time.time()
         start_ts = now_ts - 24 * 60 * 60
         ip_counts: dict[str, int] = {}
@@ -805,8 +810,7 @@ class WebDashboard:
                 continue
 
         ti_config = self.orchestrator.config.threat_intel
-        attackers = await asyncio.to_thread(
-            enrich_top_ips,
+        attackers = await enrich_top_ips(
             ip_counts,
             honeypot_host=self.orchestrator.config.host,
             abuseipdb_key=ti_config.abuseipdb_key,
@@ -835,13 +839,13 @@ class WebDashboard:
             for username in sorted(self._users)
         ]
 
-    def _build_overview_payload(self, request: dict[str, Any]) -> dict[str, Any]:
+    async def _build_overview_payload(self, request: dict[str, Any]) -> dict[str, Any]:
         display_host = _request_display_host(request)
         query = request["query"]
         limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=2000)
         service_filter = query.get("service", [""])[0].strip().lower()
         event_filter = query.get("event_type", [""])[0].strip().lower()
-        records = read_recent_events(self.orchestrator.config.logging.path, max(1000, limit))
+        records = await read_recent_events(self.orchestrator.config.logging.path, max(1000, limit))
         filtered = [
             event
             for event in records
@@ -921,7 +925,7 @@ class WebDashboard:
 
 
     async def _gather_ioc_data(self) -> list[dict[str, Any]]:
-        records = read_recent_events(self.orchestrator.config.logging.path, 10000)
+        records = await read_recent_events(self.orchestrator.config.logging.path, 10000)
         
         stats: dict[str, dict[str, Any]] = {}
         for record in records:
@@ -1065,19 +1069,29 @@ class WebDashboard:
         )
 
 
-def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
-    # Log dosyasi henuz olusmadiysa panel bos liste gosterir.
-    if not path.exists():
+async def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
+    try:
+        async with async_session() as session:
+            stmt = select(Event).order_by(desc(Event.timestamp)).limit(max(1, min(limit, 10000)))
+            result = await session.execute(stmt)
+            records = []
+            for r in result.scalars().all():
+                event_data = {
+                    "id": r.id,
+                    "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC") if r.timestamp else "",
+                    "service": r.service,
+                    "event_type": r.event_type,
+                    "src_ip": r.src_ip,
+                    "src_port": r.src_port,
+                    "summary": r.summary,
+                }
+                if r.details:
+                    event_data.update(r.details)
+                records.append(event_data)
+            return list(reversed(records))
+    except Exception as e:
+        print(f"DB read events error: {e}")
         return []
-    lines = _tail_lines(path, max(1, min(limit, 2000)))
-    records = []
-    for line in lines:
-        try:
-            # Bozuk JSON satirlari paneli kirmasin diye atlanir.
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return list(reversed(records))
 
 
 def _response(
@@ -1133,54 +1147,49 @@ def _verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-def _load_users(path: Path, default_users: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+async def _load_users(path: Path, default_users: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
     cleaned: dict[str, dict[str, str]] = {}
     needs_save = False
 
-    if path.exists():
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(payload, dict):
-                users_data = payload.get("users", {})
-                if isinstance(users_data, dict):
-                    for username, value in users_data.items():
-                        normalized_username = str(username).strip()
-                        if not normalized_username:
-                            continue
-                        if isinstance(value, dict):
-                            password = str(value.get("password", ""))
-                            role = _normalize_role(str(value.get("role", ROLE_VIEWER)))
-                        else:
-                            password = str(value)
-                            role = ROLE_ADMIN if normalized_username in default_users else ROLE_VIEWER
-                        if password:
-                            cleaned[normalized_username] = {"password": password, "role": role}
-        except Exception:
-            pass
+    try:
+        async with async_session() as session:
+            result = await session.execute(select(User))
+            records = result.scalars().all()
+            for r in records:
+                cleaned[r.username] = {"password": r.password_hash, "role": r.role}
+    except Exception as e:
+        print(f"DB load users error: {e}")
 
-    # Ensure all default_users exist in cleaned
     for username, user in default_users.items():
         if username not in cleaned:
             cleaned[username] = dict(user)
             needs_save = True
 
-    # Hash any unhashed passwords
     for username, user_info in cleaned.items():
         password = user_info["password"]
         if not password.startswith("pbkdf2_sha256$"):
             user_info["password"] = _hash_password(password)
             needs_save = True
 
-    if needs_save or not path.exists():
-        _save_users(path, cleaned)
+    if needs_save:
+        await _save_users(path, cleaned)
 
     return cleaned
 
 
-def _save_users(path: Path, users: dict[str, dict[str, str]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"users": users}
-    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True), encoding="utf-8")
+async def _save_users(path: Path, users: dict[str, dict[str, str]]) -> None:
+    try:
+        async with async_session() as session:
+            await session.execute(delete(User))
+            for username, data in users.items():
+                session.add(User(
+                    username=username,
+                    password_hash=data["password"],
+                    role=data["role"]
+                ))
+            await session.commit()
+    except Exception as e:
+        print(f"DB save users error: {e}")
 
 
 def _normalize_role(role: str) -> str:

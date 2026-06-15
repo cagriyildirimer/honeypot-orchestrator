@@ -4,3 +4,6 @@ scapy
 cryptography
 pycparser
 cffi
+sqlalchemy
+asyncpg
+alembic

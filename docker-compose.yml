@@ -23,11 +23,24 @@ x-backend-env: &backend-env
   HONEYPOT_TI_ABUSEIPDB_KEY: "${HONEYPOT_TI_ABUSEIPDB_KEY:-}"
   HONEYPOT_TI_GREYNOISE_KEY: "${HONEYPOT_TI_GREYNOISE_KEY:-}"
   HONEYPOT_LOG_PATH: "/app/logs/events.jsonl"
+  HONEYPOT_DB_URL: "postgresql+asyncpg://honeypot:honeypot_password@postgres:5432/honeypot"
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: honeypot-postgres
+    environment:
+      POSTGRES_USER: honeypot
+      POSTGRES_PASSWORD: honeypot_password
+      POSTGRES_DB: honeypot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
   honeypot-daemon:
     build: ./backend
     container_name: honeypot-daemon
+    depends_on:
+      - postgres
     command: ["python", "cli.py", "--config", "config.yaml", "--mode", "daemon"]
     cap_add:
       - NET_ADMIN
@@ -57,9 +70,11 @@ services:
   honeypot-web:
     build: ./backend
     container_name: honeypot-web
+    depends_on:
+      - postgres
     command: ["python", "cli.py", "--config", "config.yaml", "--mode", "web"]
     ports:
-      - "8080:8080"
+      - "8080:8000"
     environment:
       <<: *backend-env
     volumes:
@@ -70,10 +85,11 @@ services:
     build: ./frontend
     container_name: honeypot-frontend
     ports:
-      - "80:80"
+      - "8000:80"
     depends_on:
       - honeypot-web
     restart: unless-stopped
 
 volumes:
   honeypot_logs:
+  pgdata:
