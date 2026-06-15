@@ -342,7 +342,7 @@ class WebDashboard:
                 )
 
         if path == "/api/whitelist" and method == "GET":
-            return self._json_response({"whitelist": get_whitelist()})
+            return self._json_response({"whitelist": await get_whitelist()})
 
         if path == "/api/whitelist" and method == "POST":
             if not self._is_admin(cookies):
@@ -355,8 +355,8 @@ class WebDashboard:
                     {"error": "IP and description are required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            if add_to_whitelist(ip, description):
-                return self._json_response({"ok": True, "whitelist": get_whitelist()})
+            if await add_to_whitelist(ip, description):
+                return self._json_response({"ok": True, "whitelist": await get_whitelist()})
             return self._json_response(
                 {"error": "Failed to add or already exists."},
                 status=HTTPStatus.CONFLICT,
@@ -372,15 +372,15 @@ class WebDashboard:
                     {"error": "IP is required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            if delete_from_whitelist(ip):
-                return self._json_response({"ok": True, "whitelist": get_whitelist()})
+            if await delete_from_whitelist(ip):
+                return self._json_response({"ok": True, "whitelist": await get_whitelist()})
             return self._json_response(
                 {"error": "Not found in whitelist."},
                 status=HTTPStatus.NOT_FOUND,
             )
 
         if path == "/api/blacklist" and method == "GET":
-            return self._json_response({"blacklist": get_blacklist()})
+            return self._json_response({"blacklist": await get_blacklist()})
 
         if path == "/api/blacklist" and method == "POST":
             if not self._is_admin(cookies):
@@ -393,8 +393,8 @@ class WebDashboard:
                     {"error": "IP/MAC and description are required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            if add_to_blacklist(ip, description):
-                return self._json_response({"ok": True, "blacklist": get_blacklist()})
+            if await add_to_blacklist(ip, description):
+                return self._json_response({"ok": True, "blacklist": await get_blacklist()})
             return self._json_response(
                 {"error": "Failed to add or already exists."},
                 status=HTTPStatus.CONFLICT,
@@ -410,8 +410,8 @@ class WebDashboard:
                     {"error": "IP/MAC is required."},
                     status=HTTPStatus.BAD_REQUEST,
                 )
-            if delete_from_blacklist(ip):
-                return self._json_response({"ok": True, "blacklist": get_blacklist()})
+            if await delete_from_blacklist(ip):
+                return self._json_response({"ok": True, "blacklist": await get_blacklist()})
             return self._json_response(
                 {"error": "Not found in blacklist."},
                 status=HTTPStatus.NOT_FOUND,
@@ -1241,6 +1241,11 @@ def _build_cookie(name: str, value: str, *, max_age: int | None = None) -> str:
 
 
 def _request_display_host(request: dict[str, Any]) -> str:
+    import os
+    lan_ip = os.environ.get("HONEYPOT_LAN_IP")
+    if lan_ip:
+        return lan_ip.strip()
+        
     host_header = str(request.get("headers", {}).get("host", "")).strip()
     if not host_header:
         return "127.0.0.1"
