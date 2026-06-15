@@ -244,16 +244,16 @@ echo "  Interface : $HONEYPOT_LAN_PARENT"
 echo "  Subnet    : $HONEYPOT_LAN_SUBNET"
 echo "  Gateway   : $HONEYPOT_LAN_GATEWAY"
 echo "  Network   : $HONEYPOT_LAN_NETWORK"
-echo "  IP        : $HONEYPOT_LAN_IP"
-echo "  Dashboard : http://$HONEYPOT_LAN_IP:8000"
+echo "  Honeypot  : $HONEYPOT_LAN_IP"
+echo "  Dashboard : http://$IFACE_IP (Ana makinenizin IP'si)"
 
 if (( DETACHED )); then
   docker compose -f docker-compose.lan.yml up --build -d
   echo "Container network details:"
-  docker inspect honeypot-orchestrator-lan \
+  docker inspect honeypot-daemon-lan \
     --format '  IP={{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} Gateway={{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}'
-  echo "Published host ports:"
-  docker inspect honeypot-orchestrator-lan \
+  echo "Published host ports (Frontend):"
+  docker inspect honeypot-frontend-lan \
     --format '  {{json .NetworkSettings.Ports}}'
 else
   docker compose -f docker-compose.lan.yml up --build
