@@ -30,7 +30,7 @@ from defense import (
     is_blacklisted,
 )
 from geo import bulk_lookup
-from threat_intel import enrich_top_ips
+from threat_intel import get_cached_top_ips
 
 if TYPE_CHECKING:
     from orchestrator import Orchestrator
@@ -49,8 +49,6 @@ class WebDashboard:
         # Panel de kucuk bir asyncio HTTP sunucusu olarak calisir.
         self._server: asyncio.AbstractServer | None = None
         # Basit oturumlar bellek icinde, kullanicilar yerel JSON dosyasinda tutulur.
-        self._users_path = self.orchestrator.config.logging.path.parent / "web_users.json"
-        self._sessions_path = self.orchestrator.config.logging.path.parent / "web_sessions.json"
         self._sessions: dict[str, dict[str, Any]] = {}
         # self._reload_users() moved to start()
         self._started_at = time.monotonic()
@@ -75,7 +73,7 @@ class WebDashboard:
 
     async def _reload_users(self) -> None:
         self._users = await _load_users(
-            self._users_path,
+            None,
             {
                 self.orchestrator.config.auth.username: {
                     "password": self.orchestrator.config.auth.password,
@@ -86,11 +84,19 @@ class WebDashboard:
 
     async def _save_sessions(self) -> None:
         try:
-            with open(self._sessions_path, "w", encoding="utf-8") as f:
-                json.dump(self._sessions, f)
-        except Exception:
-            pass
-        # self._reload_users() moved to start()
+            async with async_session() as session:
+                await session.execute(delete(DBSession))
+                now = datetime.now(UTC)
+                for sid, data in self._sessions.items():
+                    session.add(DBSession(
+                        session_id=sid, 
+                        username=data.get("username", "unknown"),
+                        role=data.get("role", ROLE_VIEWER),
+                        created_at=now
+                    ))
+                await session.commit()
+        except Exception as e:
+            print(f"DB save sessions error: {e}")
 
     async def start(self) -> None:
         self._sessions = await self._load_sessions()
@@ -263,7 +269,7 @@ class WebDashboard:
         if path == "/api/logs/export" and method == "GET":
             if not self._is_admin(cookies):
                 return self._forbidden_response()
-            return self._export_logs_response()
+            return await self._export_logs_response()
 
         if path == "/api/ioc/csv" and method == "GET":
             if not self._is_admin(cookies):
@@ -499,7 +505,7 @@ class WebDashboard:
                 status=HTTPStatus.CONFLICT,
             )
         self._users[username] = {"password": _hash_password(password), "role": role}
-        await asyncio.to_thread(_save_users, self._users_path, self._users)
+        await _save_users(None, self._users)
         await self.orchestrator.logger.log(
             {
                 "service": "web",
@@ -546,7 +552,7 @@ class WebDashboard:
             for token, session_data in self._sessions.items()
             if session_data.get("username") in self._users
         }
-        await asyncio.to_thread(_save_users, self._users_path, self._users)
+        await _save_users(None, self._users)
         await self._save_sessions()
         await self.orchestrator.logger.log(
             {
@@ -571,7 +577,7 @@ class WebDashboard:
                 status=HTTPStatus.NOT_FOUND,
             )
         self._users[username]["password"] = _hash_password(password)
-        await asyncio.to_thread(_save_users, self._users_path, self._users)
+        await _save_users(None, self._users)
         await self.orchestrator.logger.log(
             {
                 "service": "web",
@@ -609,7 +615,7 @@ class WebDashboard:
                 status=HTTPStatus.CONFLICT,
             )
         self._users[username]["role"] = role
-        await asyncio.to_thread(_save_users, self._users_path, self._users)
+        await _save_users(None, self._users)
         await self.orchestrator.logger.log(
             {
                 "service": "web",
@@ -779,9 +785,10 @@ class WebDashboard:
             "users": self._user_payload(),
         }
 
-    def _export_logs_response(self) -> dict[str, Any]:
-        path = self.orchestrator.config.logging.path
-        body = path.read_bytes() if path.exists() else b""
+    async def _export_logs_response(self) -> dict[str, Any]:
+        records = await read_recent_events(self.orchestrator.config.logging.path, 10000)
+        lines = [json.dumps(r) for r in reversed(records)]
+        body = "\n".join(lines).encode("utf-8")
         return _response(
             HTTPStatus.OK,
             "application/x-ndjson; charset=utf-8",
@@ -810,11 +817,9 @@ class WebDashboard:
                 continue
 
         ti_config = self.orchestrator.config.threat_intel
-        attackers = await enrich_top_ips(
+        attackers = await get_cached_top_ips(
             ip_counts,
             honeypot_host=self.orchestrator.config.host,
-            abuseipdb_key=ti_config.abuseipdb_key,
-            greynoise_key=ti_config.greynoise_key,
             limit=10,
         )
 
@@ -1256,22 +1261,3 @@ def _safe_int(value: str, *, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(parsed, maximum))
 
 
-def _tail_lines(path: Path, limit: int) -> list[str]:
-    if limit <= 0:
-        return []
-    with path.open("rb") as file:
-        file.seek(0, 2)
-        position = file.tell()
-        buffer = bytearray()
-        newline_count = 0
-        chunk_size = 4096
-
-        while position > 0 and newline_count <= limit:
-            read_size = min(chunk_size, position)
-            position -= read_size
-            file.seek(position)
-            chunk = file.read(read_size)
-            buffer[:0] = chunk
-            newline_count = buffer.count(b"\n")
-
-    return buffer.decode("utf-8", errors="replace").splitlines()[-limit:]

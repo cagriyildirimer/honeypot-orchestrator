@@ -84,6 +84,16 @@ services:
       - honeypot_logs:/app/logs
     restart: unless-stopped
 
+  honeypot-ti:
+    build: ./backend
+    container_name: honeypot-ti-lan
+    depends_on:
+      - postgres
+    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "ti"]
+    environment:
+      <<: *backend-env
+    restart: unless-stopped
+
   frontend:
     build: ./frontend
     container_name: honeypot-frontend-lan

@@ -52,3 +52,10 @@ class ThreatIntelCache(Base):
     ip = Column(String, primary_key=True, index=True)
     data = Column(JSON, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+class SystemSettings(Base):
+    __tablename__ = "system_settings"
+
+    setting_key = Column(String, primary_key=True, index=True)
+    setting_value = Column(String, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)

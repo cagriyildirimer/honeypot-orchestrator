@@ -11,11 +11,48 @@ from orchestrator import Orchestrator
 from database import init_db
 
 
+
+from sqlalchemy import select
+from database import async_session
+from models import SystemSettings
+from crypto_utils import encrypt_value
+
+async def sync_api_keys(config) -> None:
+    # Migrate TI keys from config to DB if they exist and DB is empty
+    try:
+        async with async_session() as session:
+            for key_name, plain_val in [
+                ("ti_abuseipdb_key", config.threat_intel.abuseipdb_key),
+                ("ti_greynoise_key", config.threat_intel.greynoise_key)
+            ]:
+                if not plain_val:
+                    continue
+                
+                # Check if it already exists in DB
+                result = await session.execute(select(SystemSettings).where(SystemSettings.setting_key == key_name))
+                existing = result.scalars().first()
+                if not existing:
+                    print(f"Migrating {key_name} to encrypted DB storage...")
+                    encrypted = encrypt_value(plain_val)
+                    session.add(SystemSettings(setting_key=key_name, setting_value=encrypted))
+            await session.commit()
+    except Exception as e:
+        print(f"Failed to sync API keys: {e}")
+
 async def run(config_path: str, mode: str = "all") -> None:
     # Veritabani tablolarini asenkron olarak olusturur.
     await init_db()
+    
+    if mode == "ti":
+        config = load_config(config_path)
+        await sync_api_keys(config)
+        from ti_worker import run_ti_worker
+        await run_ti_worker(config_path)
+        return
+
     # YAML ayar dosyasini okuyup uygulamanin calisma ayarlarina donusturur.
     config = load_config(config_path)
+    await sync_api_keys(config)
     # Tum honeypot servislerini ve web panelini yonetecek ana sinifi hazirlar.
     orchestrator = Orchestrator(config, mode=mode)
     # Program kapanana kadar beklemek icin kullanilan asenkron durdurma sinyali.
@@ -52,9 +89,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["all", "daemon", "web"],
+        choices=["all", "daemon", "web", "ti"],
         default="all",
-        help="Run mode: 'all' (default), 'daemon' (only traps), or 'web' (only API).",
+        help="Run mode: 'all' (default), 'daemon' (only traps), 'web' (only API), or 'ti' (threat intel worker).",
     )
     args = parser.parse_args()
     # Asenkron run fonksiyonunu Python'un event loop'u icinde calistirir.

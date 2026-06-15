@@ -350,6 +350,12 @@ async def enrich_top_ips(
         geo_data = await asyncio.to_thread(bulk_lookup, to_enrich)
 
     # Enrich each IP that wasn't cached
+
+    # Fetch API keys from DB
+    db_abuse_key, db_grey_key = await _get_api_keys_from_db()
+    abuseipdb_key = db_abuse_key or abuseipdb_key
+    greynoise_key = db_grey_key or greynoise_key
+
     if to_enrich:
         try:
             async with async_session() as session:
@@ -384,3 +390,63 @@ async def enrich_top_ips(
         results.append(entry)
 
     return results
+
+async def get_cached_top_ips(ip_counts: dict[str, int], honeypot_host: str = "", limit: int = 10) -> list[dict[str, Any]]:
+    honeypot_prefix = _detect_honeypot_prefix(honeypot_host)
+    external: dict[str, int] = {
+        ip: count
+        for ip, count in ip_counts.items()
+        if not _is_private_or_local(ip, honeypot_prefix)
+    }
+    top_ips = sorted(external.items(), key=lambda x: x[1], reverse=True)[:limit]
+    if not top_ips:
+        return []
+    ip_list = [ip for ip, _ in top_ips]
+
+    from database import async_session
+    from models import ThreatIntelCache
+    from sqlalchemy import select
+    
+    cached: dict[str, dict[str, Any]] = {}
+    try:
+        async with async_session() as session:
+            stmt = select(ThreatIntelCache).where(ThreatIntelCache.ip.in_(ip_list))
+            result = await session.execute(stmt)
+            for r in result.scalars().all():
+                cached[r.ip] = r.data
+    except Exception as e:
+        print(f"Error accessing DB for TI cache: {e}")
+
+    results: list[dict[str, Any]] = []
+    for ip, count in top_ips:
+        if ip in cached:
+            entry = dict(cached[ip])
+        else:
+            entry = {"ip": ip, "status": "Pending Analysis"}
+        entry["event_count"] = count
+        results.append(entry)
+
+    return results
+
+
+
+from crypto_utils import decrypt_value
+from models import SystemSettings
+
+async def _get_api_keys_from_db():
+    abuse_key = ""
+    grey_key = ""
+    try:
+        from database import async_session
+        async with async_session() as session:
+            from sqlalchemy import select
+            res = await session.execute(select(SystemSettings).where(SystemSettings.setting_key.in_(["ti_abuseipdb_key", "ti_greynoise_key"])))
+            for row in res.scalars().all():
+                if row.setting_key == "ti_abuseipdb_key":
+                    abuse_key = decrypt_value(row.setting_value)
+                elif row.setting_key == "ti_greynoise_key":
+                    grey_key = decrypt_value(row.setting_value)
+    except Exception as e:
+        print(f"Error reading keys from DB: {e}")
+    return abuse_key, grey_key
+
