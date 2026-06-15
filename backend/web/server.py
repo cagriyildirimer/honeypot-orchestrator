@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import json
 import hashlib
 import secrets
 import time
+import uuid
 from collections import Counter
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -20,7 +23,11 @@ from defense import (
     delete_from_whitelist,
     get_blacklist,
     get_whitelist,
+    resolve_mac,
+    is_blacklisted,
 )
+from geo import bulk_lookup
+from threat_intel import enrich_top_ips
 
 if TYPE_CHECKING:
     from orchestrator import Orchestrator
@@ -252,6 +259,16 @@ class WebDashboard:
             if not self._is_admin(cookies):
                 return self._forbidden_response()
             return self._export_logs_response()
+
+        if path == "/api/ioc/csv" and method == "GET":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
+            return await self._export_ioc_csv_response()
+
+        if path == "/api/ioc/stix" and method == "GET":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
+            return await self._export_ioc_stix_response()
 
         if path == "/api/logs/clear" and method == "POST":
             if not self._is_admin(cookies):
@@ -788,7 +805,6 @@ class WebDashboard:
                 continue
 
         ti_config = self.orchestrator.config.threat_intel
-        from threat_intel import enrich_top_ips
         attackers = await asyncio.to_thread(
             enrich_top_ips,
             ip_counts,
@@ -856,13 +872,11 @@ class WebDashboard:
         top_ip_blocked = False
         geo_markers = []
         if ip_totals:
-            from defense import resolve_mac, is_blacklisted
             top_ip = max(ip_totals, key=ip_totals.get)
             top_mac = resolve_mac(top_ip)
             top_ip_blocked = is_blacklisted(top_ip)
             # GeoIP lookup for map markers
             try:
-                from geo import bulk_lookup
                 geo_data = bulk_lookup(list(ip_totals.keys())[:200])
                 seen_coords: set[tuple[float, float]] = set()
                 for ip, count in sorted(ip_totals.items(), key=lambda x: x[1], reverse=True):
@@ -904,6 +918,151 @@ class WebDashboard:
             "events": filtered[:limit],
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
         }
+
+
+    async def _gather_ioc_data(self) -> list[dict[str, Any]]:
+        records = read_recent_events(self.orchestrator.config.logging.path, 10000)
+        
+        stats: dict[str, dict[str, Any]] = {}
+        for record in records:
+            ts_str = record.get("timestamp", "")
+            ip = record.get("src_ip", "")
+            if not ts_str or not ip:
+                continue
+            try:
+                dt = datetime.strptime(ts_str.replace(" UTC", ""), "%Y-%m-%d %H:%M:%S")
+                dt = dt.replace(tzinfo=UTC)
+                ts = dt.timestamp()
+            except Exception:
+                continue
+            
+            if ip not in stats:
+                stats[ip] = {"count": 0, "first": ts, "last": ts}
+            stats[ip]["count"] += 1
+            if ts < stats[ip]["first"]:
+                stats[ip]["first"] = ts
+            if ts > stats[ip]["last"]:
+                stats[ip]["last"] = ts
+
+        ip_counts = {ip: data["count"] for ip, data in stats.items()}
+        
+        ti_config = self.orchestrator.config.threat_intel
+        attackers = await asyncio.to_thread(
+            enrich_top_ips,
+            ip_counts,
+            honeypot_host=self.orchestrator.config.host,
+            abuseipdb_key=ti_config.abuseipdb_key,
+            greynoise_key=ti_config.greynoise_key,
+            limit=500,
+        )
+        
+        for attacker in attackers:
+            ip = attacker["ip"]
+            attacker["first_seen"] = datetime.fromtimestamp(stats[ip]["first"], UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+            attacker["last_seen"] = datetime.fromtimestamp(stats[ip]["last"], UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+            
+        return attackers
+
+    async def _export_ioc_csv_response(self) -> dict[str, Any]:
+        attackers = await self._gather_ioc_data()
+        
+        output = io.StringIO()
+        fieldnames = [
+            "ip", "country", "city", "asn", "org", "rdns", "is_tor",
+            "cloud_provider", "abuse_score", "greynoise_class", "event_count",
+            "first_seen", "last_seen"
+        ]
+        writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(attackers)
+        
+        body = output.getvalue().encode("utf-8")
+        return _response(
+            HTTPStatus.OK,
+            "text/csv; charset=utf-8",
+            body,
+            headers={
+                "Content-Disposition": 'attachment; filename="ioc_export.csv"',
+            },
+        )
+
+    async def _export_ioc_stix_response(self) -> dict[str, Any]:
+        attackers = await self._gather_ioc_data()
+        
+        objects = []
+        now_str = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        for a in attackers:
+            ip = a["ip"]
+            ipv4_id = f"ipv4-addr--{uuid.uuid4()}"
+            ipv4_obj = {
+                "type": "ipv4-addr",
+                "spec_version": "2.1",
+                "id": ipv4_id,
+                "value": ip
+            }
+            objects.append(ipv4_obj)
+            
+            indicator_id = f"indicator--{uuid.uuid4()}"
+            indicator_obj = {
+                "type": "indicator",
+                "spec_version": "2.1",
+                "id": indicator_id,
+                "created": now_str,
+                "modified": now_str,
+                "name": f"Malicious IP: {ip}",
+                "description": f"Honeypot attacker. Abuse score: {a.get('abuse_score', 'N/A')}",
+                "indicator_types": ["malicious-activity"],
+                "pattern": f"[ipv4-addr:value = '{ip}']",
+                "pattern_type": "stix",
+                "valid_from": now_str
+            }
+            objects.append(indicator_obj)
+            
+            obs_id = f"observed-data--{uuid.uuid4()}"
+            first_dt = datetime.strptime(a["first_seen"].replace(" UTC", ""), "%Y-%m-%d %H:%M:%S")
+            last_dt = datetime.strptime(a["last_seen"].replace(" UTC", ""), "%Y-%m-%d %H:%M:%S")
+            obs_obj = {
+                "type": "observed-data",
+                "spec_version": "2.1",
+                "id": obs_id,
+                "created": now_str,
+                "modified": now_str,
+                "first_observed": first_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "last_observed": last_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "number_observed": a.get("event_count", 1),
+                "object_refs": [ipv4_id]
+            }
+            objects.append(obs_obj)
+            
+            rel_id = f"relationship--{uuid.uuid4()}"
+            rel_obj = {
+                "type": "relationship",
+                "spec_version": "2.1",
+                "id": rel_id,
+                "created": now_str,
+                "modified": now_str,
+                "relationship_type": "based-on",
+                "source_ref": indicator_id,
+                "target_ref": obs_id
+            }
+            objects.append(rel_obj)
+            
+        bundle = {
+            "type": "bundle",
+            "id": f"bundle--{uuid.uuid4()}",
+            "objects": objects
+        }
+        
+        body = json.dumps(bundle, indent=2).encode("utf-8")
+        return _response(
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            body,
+            headers={
+                "Content-Disposition": 'attachment; filename="ioc_export.stix.json"',
+            },
+        )
 
 
 def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:

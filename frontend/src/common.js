@@ -39,6 +39,10 @@ async function requestJson(url, options = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 401 && window.location.pathname !== "/login") {
+      window.location.replace("/login");
+      throw new Error("Session expired. Please log in again.");
+    }
     const message = payload.error || `Request failed: ${response.status}`;
     throw new Error(message);
   }

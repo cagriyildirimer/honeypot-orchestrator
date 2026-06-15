@@ -2574,6 +2574,36 @@
               },
               "Export JSONL"
             ),
+            h(
+              "a",
+              {
+                className: `button secondary${isAdmin ? "" : " disabled"}`,
+                href: "/api/ioc/csv",
+                download: "ioc_export.csv",
+                onClick: (event) => {
+                  if (!isAdmin) {
+                    event.preventDefault();
+                    window.showToast("Admin access required.", "error");
+                  }
+                },
+              },
+              "Export IOC (CSV)"
+            ),
+            h(
+              "a",
+              {
+                className: `button secondary${isAdmin ? "" : " disabled"}`,
+                href: "/api/ioc/stix",
+                download: "ioc_export.stix.json",
+                onClick: (event) => {
+                  if (!isAdmin) {
+                    event.preventDefault();
+                    window.showToast("Admin access required.", "error");
+                  }
+                },
+              },
+              "Export IOC (STIX)"
+            ),
             h("button", { type: "button", className: "button secondary", disabled: !isAdmin, onClick: copyLogs }, "Copy Logs"),
             h("button", { type: "button", className: "button danger", disabled: !isAdmin || busy, onClick: clearLogs }, busy ? "Clearing..." : "Clear Logs")
           )

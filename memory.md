@@ -6,26 +6,8 @@
 - **Phase 3:** IP Rate Limiting (Sliding Window, 10 events/sec), Log Rotation (events.jsonl 50MB limit), Session Persistence (survives Docker restarts).
 - **Phase 4:** Password Hashing (Backend) - PBKDF2-HMAC-SHA256 password hashing with auto-migration of plain-text passwords on startup/login.
 - **Phase 5:** Threat Intelligence Enrichment — `threat_intel.py` modülü (rDNS, ASN/Org, Tor Exit Node, Cloud Provider CIDR, AbuseIPDB, GreyNoise), TI Dashboard Panel (summary pills + top 10 attacker tablosu), `config.yaml` TI key desteği, kapsamlı `test_threat_intel.py` test suite.
-
----
-
-## To-Do: Phase 6 — Güvenlik Hardening & Teknik Borç
-
-**Amaç:** Mevcut güvenlik açıklarını kapatmak ve kod kalitesini artırmak.
-
-1. **Secret Management:** `config.yaml`'daki API key'leri (AbuseIPDB, GreyNoise) `.env` dosyasına taşı. `config.yaml`'dan hardcoded key'leri kaldır. `.env.example` dosyası oluştur (boş placeholder'lar ile).
-2. **Session TTL & Otomatik Logout:** Session token'a `created_at` timestamp ekle. 24 saat sonra otomatik expire. Frontend'de session süresi dolduğunda login'e yönlendirme.
-3. **Memory Leak Fix — defense.py:** `_suspicious_counters` ve `_rate_limits` dict'lerine TTL veya max-size sınırı ekle. Periyodik cleanup mekanizması kur (ör: her 10 dakikada 1 saatten eski kayıtları temizle).
-4. **GeoIP Kod Duplikasyonu:** `geo.py` ve `threat_intel.py` arasındaki `PRIVATE_PREFIXES` ve ip-api.com batch logic'ini birleştir. `geo.py`'yi single source of truth yap.
-5. **Lazy Import Temizliği:** `web/server.py`'deki fonksiyon-içi `from defense import ...` çağrılarını dosya başına taşı.
-
----
-
-## Tamamlanan: Phase 7 — Kontrol Paneli Güvenlik Güncellemeleri
-
-- Brute Force (kaba kuvvet) koruması (5 hata / 5 dk) eklendi.
-- Yalnızca POST isteklerini koruyan CSRF Token mekanizması kuruldu.
-- `Content-Security-Policy` ve `X-Frame-Options` gibi HTTP güvenlik başlıkları eklendi.
+- **Phase 6:** Güvenlik Hardening & Teknik Borç — Secret management (`.env`), session TTL & frontend oto-logout, memory leak fix (`defense.py` cleanup), GeoIP kod duplikasyonu çözümü, lazy import temizliği.
+- **Phase 7:** Kontrol Paneli Güvenlik Güncellemeleri — Brute Force koruması (5 hata/5 dk), POST istekleri için CSRF Token, HTTP güvenlik başlıkları eklendi.
 
 ---
 
