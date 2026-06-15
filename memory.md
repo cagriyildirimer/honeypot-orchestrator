@@ -1,6 +1,6 @@
 # Honeypot Orchestrator - Memory & Next Steps
 
-## Completed So Far
+## Completed
 - **Phase 0:** `start_service` / `stop_service` signature bugs fixed. Toggle buttons working.
 - **Phase 1 & 2:** GeoIP integration (batching, caching), 3D Interactive World Map (globe.gl), Real-time Events Counter (events/min), Dashboard Event Detail Drawer (Slide-out JSON view).
 - **Phase 3:** IP Rate Limiting (Sliding Window, 10 events/sec), Log Rotation (events.jsonl 50MB limit), Session Persistence (survives Docker restarts).
@@ -8,32 +8,23 @@
 - **Phase 5:** Threat Intelligence Enrichment — `threat_intel.py` modülü (rDNS, ASN/Org, Tor Exit Node, Cloud Provider CIDR, AbuseIPDB, GreyNoise), TI Dashboard Panel (summary pills + top 10 attacker tablosu), `config.yaml` TI key desteği, kapsamlı `test_threat_intel.py` test suite.
 - **Phase 6:** Güvenlik Hardening & Teknik Borç — Secret management (`.env`), session TTL & frontend oto-logout, memory leak fix (`defense.py` cleanup), GeoIP kod duplikasyonu çözümü, lazy import temizliği.
 - **Phase 7:** Kontrol Paneli Güvenlik Güncellemeleri — Brute Force koruması (5 hata/5 dk), POST istekleri için CSRF Token, HTTP güvenlik başlıkları eklendi.
+- **Phase 9:** IOC Export (CSV + STIX 2.1) — Tehdit istihbarat verilerinin dışa aktarımı eklendi.
+- **Phase 8 (Adım 1):** Mikroservis İzolasyonu — Backend servisi `honeypot-daemon` (tuzaklar) ve `honeypot-web` (API) olarak ikiye bölündü. Frontend portu 80'e alındı. Docker compose ağ yapılandırmaları ayrıldı.
 
 ---
 
-## To-Do: Phase 8 — PostgreSQL Veritabanı Migrasyonu & Mikroservis İzolasyonu
+## To-Do: Phase 8 (Adım 2) — PostgreSQL Veritabanı Migrasyonu
 
-**Amaç:** Sistemin ölçeklenebilirliğini artırmak, dosya tabanlı mimariden kurtulmak ve Macvlan ağ problemlerini çözmek için web arayüzünü tuzaklardan fiziksel olarak ayırmak.
+**Amaç:** Dosya tabanlı mimariden kurtulmak ve sistemin ölçeklenebilirliğini artırmak.
 
-1. **Docker Compose Güncellemesi:** Sisteme `postgres` servisinin eklenmesi. Mevcut `backend` servisinin ikiye bölünmesi:
-   - `honeypot-daemon`: Sadece tuzakları çalıştırır, Macvlan IP'sine (veya harici ağa) bağlanır.
-   - `honeypot-web`: Sadece Dashboard API'sini çalıştırır, Host makinede (Bridge ağında) çalışarak Macvlan IP'sini ifşa etmez. Web arayüzü (`frontend`) de izole olacağı için portu `3000` yerine doğrudan `80` olarak ayarlanacak; böylece Host IP'si üzerinden panele portsuz girilebilecek.
+1. **Docker Compose Güncellemesi:** Sisteme `postgres` servisinin eklenmesi.
 2. **Backend ORM Entegrasyonu:** `SQLAlchemy` (veya `asyncpg`) ile veritabanı tablolarının (Events, Sessions, Users, ThreatIntelCache) modellenmesi.
 3. **Dosya Tabanlı Mimarinin Terk Edilmesi:** Mevcut JSONL tabanlı log okuma/yazma, oturum yönetimi ve hafızada tutulan sayaç sistemlerinin SQL sorgularına dönüştürülmesi.
 4. **Veri Taşıma (Migration):** Eski JSON ve JSONL verilerini PostgreSQL'e aktaracak bir başlangıç betiği (script) yazılması.
 
 ---
 
-## To-Do: Phase 9 — IOC Export (CSV + STIX 2.1)
 
-**Amaç:** Toplanan tehdit istihbaratını endüstri-standart formatlarda dışa aktarabilmek.
-
-1. **IOC Export Backend (`web/server.py`):** `/api/ioc/csv` ve `/api/ioc/stix` endpoint'leri. TI verisinden top attacker IP'leri, ASN, ülke, Tor/Cloud bilgisi, abuse skoru içeren dışa aktarım.
-2. **CSV Format:** Sütunlar: `ip, country, city, asn, org, rdns, is_tor, cloud_provider, abuse_score, greynoise_class, event_count, first_seen, last_seen`.
-3. **STIX 2.1 Format:** Her IP için `indicator` (pattern: `[ipv4-addr:value = 'x.x.x.x']`), `observed-data`, ve `relationship` nesneleri. Bundle olarak export.
-4. **Frontend:** Settings/System sayfasına mevcut "Export JSONL" butonunun yanına "Export IOC (CSV)" ve "Export IOC (STIX)" butonları.
-
----
 
 ## To-Do: Phase 10 — Webhook / Notification System
 

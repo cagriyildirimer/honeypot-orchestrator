@@ -12,7 +12,8 @@ from net_tuner import apply_profile_network_settings
 from packet_mangler import PacketMangler
 
 class Orchestrator:
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, mode: str = "all") -> None:
+        self.mode = mode
         self.config = config
         self.profile = load_profile(config.profile)
         # Butun servisler ayni JSONL logger'i kullanir; olaylar tek dosyada toplanir.
@@ -27,11 +28,12 @@ class Orchestrator:
 
     async def start(self) -> None:
         # Bu yeni akista uygulama acilisinda yalnizca web paneli dinlemeye baslar.
-        if self.config.web.enabled:
+        if self.mode in ("all", "web") and self.config.web.enabled:
             await self.web_dashboard.start()
 
-        self.packet_mangler.start()
-        await self._apply_profile(self.profile, emit_log=False)
+        if self.mode in ("all", "daemon"):
+            self.packet_mangler.start()
+            await self._apply_profile(self.profile, emit_log=False)
 
         # Baslangic olayi log dosyasina yazilir; panelde de gorulebilir.
         await self.logger.log(
@@ -45,10 +47,10 @@ class Orchestrator:
 
     async def stop(self) -> None:
         # Güvenlik duvarı kurallarını temizler.
-        from net_tuner import cleanup_firewall
-        cleanup_firewall()
-        
-        self.packet_mangler.stop()
+        if self.mode in ("all", "daemon"):
+            from net_tuner import cleanup_firewall
+            cleanup_firewall()
+            self.packet_mangler.stop()
 
         # Kapanisin basladigini loglayarak sonradan inceleme icin iz birakir.
         await self.logger.log(
@@ -60,12 +62,13 @@ class Orchestrator:
         )
 
         # Panel aciksa once onu kapatir.
-        if self.config.web.enabled:
+        if self.mode in ("all", "web") and self.config.web.enabled:
             await self.web_dashboard.stop()
 
         # Calisan servisler ters sirada kapatilir.
-        for service in reversed(list(self.services.values())):
-            await service.stop()
+        if self.mode in ("all", "daemon"):
+            for service in reversed(list(self.services.values())):
+                await service.stop()
 
     def service_status(self, display_host: str | None = None) -> list[dict[str, object]]:
         # Web API'nin dondurdugu sade servis durum listesini uretir.
@@ -105,11 +108,12 @@ class Orchestrator:
 
     def print_startup_summary(self) -> None:
         # Terminalde kullanicinin web panelin hangi adreste acildigini hizlica gormesini saglar.
-        print("Honeypot Orchestrator started")
-        if self.config.web.enabled:
+        print(f"Honeypot Orchestrator started in {self.mode} mode")
+        if self.mode in ("all", "web") and self.config.web.enabled:
             print(f"Dashboard: http://{self.config.web.host}:{self.config.web.port}")
-        print(f"Active profile: {self.profile.display_name}")
-        print("Profile listeners are applied automatically.")
+        if self.mode in ("all", "daemon"):
+            print(f"Active profile: {self.profile.display_name}")
+            print("Profile listeners are applied automatically.")
 
     def _build_services(self) -> dict[str, ServiceInstance]:
         services: dict[str, ServiceInstance] = {}

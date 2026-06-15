@@ -10,11 +10,11 @@ from config import load_config
 from orchestrator import Orchestrator
 
 
-async def run(config_path: str) -> None:
+async def run(config_path: str, mode: str = "all") -> None:
     # YAML ayar dosyasini okuyup uygulamanin calisma ayarlarina donusturur.
     config = load_config(config_path)
     # Tum honeypot servislerini ve web panelini yonetecek ana sinifi hazirlar.
-    orchestrator = Orchestrator(config)
+    orchestrator = Orchestrator(config, mode=mode)
     # Program kapanana kadar beklemek icin kullanilan asenkron durdurma sinyali.
     stop_event = asyncio.Event()
 
@@ -47,10 +47,16 @@ def main() -> None:
         default="config.yaml",
         help="Path to the YAML config file. Defaults to config.yaml.",
     )
+    parser.add_argument(
+        "--mode",
+        choices=["all", "daemon", "web"],
+        default="all",
+        help="Run mode: 'all' (default), 'daemon' (only traps), or 'web' (only API).",
+    )
     args = parser.parse_args()
     # Asenkron run fonksiyonunu Python'un event loop'u icinde calistirir.
     try:
-        asyncio.run(run(args.config))
+        asyncio.run(run(args.config, mode=args.mode))
     except KeyboardInterrupt:
         # Ctrl+C artik temiz kapanis istedigi icin burada sessizce cikilir.
         pass
