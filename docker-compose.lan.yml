@@ -67,6 +67,7 @@ services:
     volumes:
       - honeypot_logs:/app/logs
     networks:
+      default:
       honeypot_lan:
         ipv4_address: "${HONEYPOT_LAN_IP:?Set HONEYPOT_LAN_IP to the reserved LAN IP for the container}"
     restart: unless-stopped
