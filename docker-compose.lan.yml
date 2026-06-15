@@ -99,7 +99,7 @@ services:
     build: ./frontend
     container_name: honeypot-frontend-lan
     ports:
-      - "8000:80"
+      - "80:80"
     depends_on:
       - honeypot-web
     restart: unless-stopped
