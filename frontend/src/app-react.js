@@ -790,15 +790,20 @@
     const globeRef = React.useRef(null);
     const markers = props.markers || [];
 
+    // Initialize the globe and window resize listener
     React.useEffect(() => {
       if (!containerRef.current) return;
       if (!globeRef.current && window.Globe) {
+        const parent = containerRef.current.parentElement;
+        const initialWidth = parent ? Math.min(800, parent.clientWidth) : 800;
+        const initialHeight = Math.min(400, Math.max(250, initialWidth * 0.5));
+
         globeRef.current = window.Globe()(containerRef.current)
           .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
           .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
           .backgroundColor('rgba(0,0,0,0)')
-          .width(800)
-          .height(400)
+          .width(initialWidth)
+          .height(initialHeight)
           .pointOfView({ altitude: 2.0 });
 
         globeRef.current.controls().autoRotate = true;
@@ -806,6 +811,26 @@
         globeRef.current.controls().enableZoom = false;
       }
 
+      const handleResize = () => {
+        if (containerRef.current && containerRef.current.parentElement && globeRef.current) {
+          const w = Math.min(800, containerRef.current.parentElement.clientWidth);
+          const h = Math.min(400, Math.max(250, w * 0.5));
+          globeRef.current.width(w).height(h);
+        }
+      };
+
+      window.addEventListener('resize', handleResize);
+      // Ensure size is correct after layout settles
+      const timer = setTimeout(handleResize, 100);
+
+      return () => {
+        window.removeEventListener('resize', handleResize);
+        clearTimeout(timer);
+      };
+    }, []);
+
+    // Update marker points when data changes
+    React.useEffect(() => {
       const globe = globeRef.current;
       if (globe) {
         const points = markers.map(m => ({
