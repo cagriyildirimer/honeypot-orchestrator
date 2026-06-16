@@ -9,11 +9,51 @@ from typing import Any
 
 from sqlalchemy import select, delete
 from database import async_session
-from models import Whitelist, Blacklist
+from models import Whitelist, Blacklist, SystemSettings
 
 _suspicious_counters: dict[str, int] = {}
 _rate_limits: dict[str, list[float]] = {}
 _last_cleanup: float = 0.0
+_auto_blacklist_enabled_cached: bool | None = None
+_last_setting_check: float = 0.0
+
+async def is_auto_blacklist_enabled() -> bool:
+    global _auto_blacklist_enabled_cached, _last_setting_check
+    now = time.time()
+    if _auto_blacklist_enabled_cached is not None and now - _last_setting_check < 5.0:
+        return _auto_blacklist_enabled_cached
+    try:
+        async with async_session() as session:
+            res = await session.execute(select(SystemSettings).where(SystemSettings.setting_key == "auto_blacklist_enabled"))
+            row = res.scalars().first()
+            if row:
+                _auto_blacklist_enabled_cached = row.setting_value == "true"
+            else:
+                _auto_blacklist_enabled_cached = True
+            _last_setting_check = now
+            return _auto_blacklist_enabled_cached
+    except Exception:
+        return True
+
+async def set_auto_blacklist_enabled(enabled: bool) -> None:
+    global _auto_blacklist_enabled_cached, _last_setting_check
+    try:
+        async with async_session() as session:
+            res = await session.execute(select(SystemSettings).where(SystemSettings.setting_key == "auto_blacklist_enabled"))
+            row = res.scalars().first()
+            val_str = "true" if enabled else "false"
+            now = datetime.now(UTC)
+            if row:
+                row.setting_value = val_str
+                row.updated_at = now
+            else:
+                session.add(SystemSettings(setting_key="auto_blacklist_enabled", setting_value=val_str, updated_at=now))
+            await session.commit()
+            
+            _auto_blacklist_enabled_cached = enabled
+            _last_setting_check = time.time()
+    except Exception as e:
+        print(f"Error writing auto_blacklist_enabled to DB: {e}")
 
 def resolve_mac(ip: str) -> str:
     if ip in {"127.0.0.1", "::1", "localhost", "unknown"}:
@@ -185,6 +225,8 @@ def _cleanup_memory_structs() -> None:
 async def record_suspicious_event(ip: str) -> None:
     _cleanup_memory_structs()
     if not ip or ip in {"127.0.0.1", "::1", "localhost", "unknown"}:
+        return
+    if not await is_auto_blacklist_enabled():
         return
     if await is_whitelisted(ip):
         return

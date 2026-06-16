@@ -2283,6 +2283,7 @@
     const [ip, setIp] = useState("");
     const [description, setDescription] = useState("");
     const [submitting, setSubmitting] = useState(false);
+    const [autoBlacklist, setAutoBlacklist] = useState(true);
 
     async function loadBlacklist() {
       const next = await window.requestJson("/api/blacklist");
@@ -2292,9 +2293,39 @@
       setLoading(false);
     }
 
+    async function loadSettings() {
+      try {
+        const res = await window.requestJson("/api/settings/auto-blacklist");
+        if (res && typeof res.auto_blacklist_enabled === "boolean") {
+          setAutoBlacklist(res.auto_blacklist_enabled);
+        }
+      } catch (err) {
+        console.error("Failed to load settings", err);
+      }
+    }
+
     useEffect(() => {
       loadBlacklist().catch((error) => window.showToast(error.message, "error"));
+      loadSettings();
     }, []);
+
+    async function handleToggleAutoBlacklist(e) {
+      if (props.session.role !== "admin") {
+        window.showToast("Admin access required.", "error");
+        return;
+      }
+      const nextVal = e.target.checked;
+      try {
+        await window.requestJson("/api/settings/auto-blacklist", {
+          method: "POST",
+          body: JSON.stringify({ enabled: nextVal })
+        });
+        setAutoBlacklist(nextVal);
+        window.showToast(nextVal ? "Automated blocklist enabled" : "Automated blocklist disabled", "success");
+      } catch (err) {
+        window.showToast(err.message || "Failed to update setting", "error");
+      }
+    }
 
     async function handleAdd(event) {
       event.preventDefault();
@@ -2364,6 +2395,31 @@
           h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
           h("button", { type: "button", className: "button secondary", onClick: loadBlacklist }, "Refresh"),
           h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
+        )
+      ),
+      h(
+        "section",
+        { className: "panel", style: { marginBottom: "20px" } },
+        h(
+          "div",
+          { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
+          h(
+            "div",
+            null,
+            h("h2", { style: { margin: 0, fontSize: "16px" } }, "Automated Ban Settings"),
+            h("p", { style: { margin: "4px 0 0 0", fontSize: "13px", color: "var(--muted)" } }, "Enable or disable automatic banning of IP addresses that exceed activity limits.")
+          ),
+          h(
+            "label",
+            { className: "toggle-switch", title: autoBlacklist ? "Disable Automated Bans" : "Enable Automated Bans" },
+            h("input", {
+              type: "checkbox",
+              checked: autoBlacklist,
+              disabled: !isAdmin,
+              onChange: handleToggleAutoBlacklist
+            }),
+            h("span", { className: "toggle-slider" })
+          )
         )
       ),
       isAdmin

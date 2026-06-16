@@ -28,6 +28,8 @@ from defense import (
     get_whitelist,
     resolve_mac,
     is_blacklisted,
+    is_auto_blacklist_enabled,
+    set_auto_blacklist_enabled,
 )
 from geo import bulk_lookup
 from threat_intel import get_cached_top_ips, enrich_top_ips
@@ -416,6 +418,18 @@ class WebDashboard:
                 {"error": "Not found in blacklist."},
                 status=HTTPStatus.NOT_FOUND,
             )
+
+        if path == "/api/settings/auto-blacklist" and method == "GET":
+            enabled = await is_auto_blacklist_enabled()
+            return self._json_response({"auto_blacklist_enabled": enabled})
+
+        if path == "/api/settings/auto-blacklist" and method == "POST":
+            if not self._is_admin(cookies):
+                return self._forbidden_response()
+            payload = _decode_json_body(request["body"])
+            enabled = bool(payload.get("enabled", True))
+            await set_auto_blacklist_enabled(enabled)
+            return self._json_response({"ok": True, "auto_blacklist_enabled": enabled})
 
         if path == "/api/threat-intel" and method == "GET":
             return await self._handle_threat_intel()

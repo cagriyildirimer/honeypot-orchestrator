@@ -243,6 +243,75 @@ def phase1_unit_tests() -> tuple[int, int]:
             failed += 1
     except Exception as exc:
         _fail(f"enrich_top_ips raised {type(exc).__name__}: {exc}")
+        failed += 1    # --- Test 7: Auto-Blacklist Toggle settings ---
+    print(f"\n  {DIM}Testing Auto-Blacklist Toggle and record_suspicious_event ...{RESET}")
+    try:
+        from defense import (
+            is_auto_blacklist_enabled,
+            set_auto_blacklist_enabled,
+            record_suspicious_event,
+            is_blacklisted,
+            delete_from_blacklist,
+            _suspicious_counters,
+        )
+        test_ip = "199.199.199.199"
+        
+        # Clean up first
+        asyncio.run(delete_from_blacklist(test_ip))
+        if test_ip in _suspicious_counters:
+            del _suspicious_counters[test_ip]
+
+        # 1. Enable and verify
+        asyncio.run(set_auto_blacklist_enabled(True))
+        if asyncio.run(is_auto_blacklist_enabled()) is True:
+            _ok("Auto-blacklist toggle: Enabled successfully")
+            passed += 1
+        else:
+            _fail("Auto-blacklist toggle: Failed to enable")
+            failed += 1
+
+        # 2. Disable and verify
+        asyncio.run(set_auto_blacklist_enabled(False))
+        if asyncio.run(is_auto_blacklist_enabled()) is False:
+            _ok("Auto-blacklist toggle: Disabled successfully")
+            passed += 1
+        else:
+            _fail("Auto-blacklist toggle: Failed to disable")
+            failed += 1
+
+        # 3. With it disabled, trigger >100 suspicious events, verify IP is NOT blocked
+        _suspicious_counters[test_ip] = 99
+        asyncio.run(record_suspicious_event(test_ip))
+        if not asyncio.run(is_blacklisted(test_ip)):
+            _ok("With auto-blacklist disabled, IP was NOT banned after 100 events")
+            passed += 1
+        else:
+            _fail("IP was banned even though auto-blacklist was disabled!")
+            failed += 1
+
+        # Clean up
+        asyncio.run(delete_from_blacklist(test_ip))
+        if test_ip in _suspicious_counters:
+            del _suspicious_counters[test_ip]
+
+        # 4. Enable again, trigger >100 suspicious events, verify IP IS blocked
+        asyncio.run(set_auto_blacklist_enabled(True))
+        _suspicious_counters[test_ip] = 99
+        asyncio.run(record_suspicious_event(test_ip))
+        if asyncio.run(is_blacklisted(test_ip)):
+            _ok("With auto-blacklist enabled, IP was successfully banned after 100 events")
+            passed += 1
+        else:
+            _fail("IP was NOT banned even though auto-blacklist was enabled!")
+            failed += 1
+
+        # Clean up finally
+        asyncio.run(delete_from_blacklist(test_ip))
+        if test_ip in _suspicious_counters:
+            del _suspicious_counters[test_ip]
+
+    except Exception as exc:
+        _fail(f"Auto-blacklist unit test raised {type(exc).__name__}: {exc}")
         failed += 1
 
 
