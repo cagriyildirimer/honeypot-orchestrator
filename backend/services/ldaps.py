@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from profiles import HoneypotProfile
+from system.profiles import HoneypotProfile
 from services.base import BaseHoneypotService
 
 

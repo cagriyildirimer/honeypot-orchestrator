@@ -12,10 +12,28 @@
 - **Phase 8 (Adım 1):** Mikroservis İzolasyonu — Backend servisi `honeypot-daemon` (tuzaklar) ve `honeypot-web` (API) olarak ikiye bölündü. Frontend portu 80'e alındı. Docker compose ağ yapılandırmaları ayrıldı.
 
 - **Phase 8 (Adım 2):** PostgreSQL Veritabanı Migrasyonu — Dosya tabanlı mimariden PostgreSQL'e geçiş, SQL tablolarının oluşturulması (Events, Sessions, Users, ThreatIntelCache) ve veri taşıma betiği.
+- **Phase 10 (Part 1):** Mimari Sadeleştirme ve Router-Handler Refactoring — Arka plan dizin yapısı katmanlara (`api/`, `core/`, `database/`, `services/`, `system/`) ayrıldı. Veritabanı sorguları `database/repository.py` katmanında toplandı. Sıfır bağımlılıklı HTTP sunucusu asenkron `router.py` ve modüler `api/handlers/*` (auth, blacklist, services, overview) yapısına geçirilerek `server.py` temizlendi.
 
 ---
 
-## To-Do: Phase 10 — Webhook / Notification System
+## To-Do: Phase 10 — Mikroservis Mimarisine Geçiş & Mimari Sadeleştirme (ÖNCELİKLİ)
+
+> [!IMPORTANT]
+> **En Kritik Nokta:** Bu geçiş aşamasında sistemdeki hiçbir özelliğin (tuzaklar, web paneli, loglama, engelleme, veritabanı akışı vb.) bozulmaması, her şeyin tamamen kesintisiz ve kararlı çalışmaya devam etmesi en önemli önceliğimizdir!
+
+1. **Decoy'ların (Tuzakların) Modüler Hale Gelmesi:**
+   - Bal küpü servislerinin (SMB, LDAP, HTTP vb.) `orchestrator.py` bağımlılıklarını gevşetmek.
+   - Her bir decoy servisini bağımsız çalışan (Plug & Play) eklenti veya bağımsız süreç modülü haline getirmek.
+
+3. **Mikroservis Mimarisine Geçiş (Konteyner Seviyesinde İzolasyon):**
+   - Tüm decoy servislerini (SSH, SMB, FTP, HTTP vb.) tek tek ayrı konteynerlerde çalıştırmak yerine, tamamını barındıran tek bir **`decoy-services`** konteyneri tasarlamak.
+   - Sistem seviyesinde ağ ve güvenlik duvarı işlemlerini yöneten `net_tuner` / `packet_mangler` kodlarını, bu decoy servislerinden tamamen ayırıp yetkili bir **`system-controller`** (`privileged: true` / `NET_ADMIN`) mikroservisinde çalıştırmak.
+   - `honeypot-web` (Dashboard & API) servisini tamamen yetkisiz (non-root) şekilde çalıştırmak.
+   - Konteynerler arası emir ve durum senkronizasyonunu veritabanı veya mesaj kuyruğu üzerinden güvenli hale getirmek.
+
+---
+
+## To-Do: Phase 11 — Webhook / Notification System
 
 **Amaç:** Kritik olaylarda anında bildirim alabilmek.
 
@@ -38,7 +56,7 @@
 
 ---
 
-## To-Do: Phase 11 — MITRE ATT&CK Mapping + Analyze Sayfası
+## To-Do: Phase 12 — MITRE ATT&CK Mapping + Analyze Sayfası
 
 **Amaç:** Honeypot verilerini profesyonel güvenlik çerçevesinde analiz edebilmek.
 
@@ -48,7 +66,7 @@
 
 ---
 
-## To-Do: Phase 12 — Credential Harvest & Attack Timeline Replay
+## To-Do: Phase 13 — Credential Harvest & Attack Timeline Replay
 
 **Amaç:** Saldırgan davranışlarını detaylı izleyebilmek.
 
@@ -58,7 +76,7 @@
 
 ---
 
-## To-Do: Phase 13 — Custom Profile Builder & Honeypot File Traps
+## To-Do: Phase 14 — Custom Profile Builder & Honeypot File Traps
 
 **Amaç:** Kullanılabilirliği artırmak ve daha sofistike tuzak mekanizmaları eklemek.
 
@@ -69,6 +87,6 @@
 ---
 
 ## Teknik Borç (Her Phase Arasında Çözülebilir)
-- [ ] `web/server.py` (1053 satır) modüler parçalama: `handlers/`, `utils.py` ayrıştırması.
-- [ ] `frontend/src/app-react.js` (2951 satır / 117KB) dosya bölünmesi veya Vite+React migration.
+- [ ] `web/server.py` (1282 satır) modüler parçalama: `handlers/`, `utils.py` ayrıştırması.
+- [ ] `frontend/src/app-react.js` (3037 satır / 119KB) dosya bölünmesi veya Vite+React migration.
 - [ ] Unit test kapsamı artırma: services, orchestrator, config parsing, defense modülü testleri.

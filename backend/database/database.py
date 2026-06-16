@@ -31,7 +31,7 @@ async def init_db() -> None:
     # Optional: creates all tables based on Base metadata
     # Useful for simple deployments without Alembic migrations
     import asyncio
-    import models  # Register models to Base.metadata to prevent circular imports
+    import database.models as models  # Register models to Base.metadata to prevent circular imports
     
     max_retries = 15
     retry_delay = 2

@@ -86,7 +86,7 @@ def phase1_unit_tests() -> tuple[int, int]:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
     import asyncio
-    from database import init_db
+    from database.database import init_db
     try:
         asyncio.run(init_db())
         _ok("Database initialized successfully")
@@ -170,8 +170,8 @@ def phase1_unit_tests() -> tuple[int, int]:
 
     # --- Test 4: Database Threat Intel Cache integration ---
     print(f"\n  {DIM}Testing ThreatIntelCache Database Integration ...{RESET}")
-    from database import async_session
-    from models import ThreatIntelCache
+    from database.database import async_session
+    from database.models import ThreatIntelCache
 
     async def _test_cache():
         async with async_session() as session:

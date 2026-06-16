@@ -4,8 +4,8 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
-from database import async_session
-from models import Event
+from database.database import async_session
+from database.models import Event
 
 class DBEventLogger:
     def __init__(self, path: Any = None) -> None:

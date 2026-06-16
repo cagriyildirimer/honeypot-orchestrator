@@ -4,17 +4,17 @@ import asyncio
 import json
 from datetime import datetime, UTC
 from sqlalchemy import select
-from models import SystemSettings
-from database import async_session
+from database.models import SystemSettings
+from database.database import async_session
 
-from config import AppConfig
-from event_logger import JSONLEventLogger
-from profiles import HoneypotProfile, get_profile, list_profiles, load_profile
+from core.config import AppConfig
+from core.event_logger import JSONLEventLogger
+from system.profiles import HoneypotProfile, get_profile, list_profiles, load_profile
 from services import PROFILE_AWARE_SERVICE_TYPES, SERVICE_REGISTRY, ServiceInstance, ServiceType
 from services.base import BaseHoneypotService
 from web.server import WebDashboard
-from net_tuner import apply_profile_network_settings
-from packet_mangler import PacketMangler
+from system.net_tuner import apply_profile_network_settings
+from system.packet_mangler import PacketMangler
 
 async def _get_db_state(session) -> dict:
     try:

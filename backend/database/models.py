@@ -1,6 +1,6 @@
 import datetime
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Boolean
-from database import Base
+from database.database import Base
 
 class Event(Base):
     __tablename__ = "events"

@@ -4,7 +4,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Any
 
-from event_logger import JSONLEventLogger
+from core.event_logger import JSONLEventLogger
 
 
 class BaseHoneypotService(ABC):

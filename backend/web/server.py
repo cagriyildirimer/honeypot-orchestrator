@@ -8,8 +8,8 @@ import hashlib
 import secrets
 import time
 import uuid
-from database import async_session
-from models import Event, User, Session as DBSession
+from database.database import async_session
+from database.models import Event, User, Session as DBSession
 from sqlalchemy import select, delete, desc  # type: ignore
 from collections import Counter
 from datetime import UTC, datetime
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
-from config import __version__
+from core.config import __version__
 from defense import (
     add_to_blacklist,
     add_to_whitelist,
@@ -31,8 +31,9 @@ from defense import (
     is_auto_blacklist_enabled,
     set_auto_blacklist_enabled,
 )
-from geo import bulk_lookup
+from core.geo import bulk_lookup
 from threat_intel import get_cached_top_ips, enrich_top_ips
+from api.router import router
 
 if TYPE_CHECKING:
     from orchestrator import Orchestrator
@@ -162,17 +163,6 @@ class WebDashboard:
         headers = request["headers"]
         authenticated = self._is_authenticated(cookies)
 
-        if path == "/healthz" and method == "GET":
-            return self._json_response({"ok": True, "service": "web"})
-
-        if path == "/api/csrf" and method == "GET":
-            token = secrets.token_hex(16)
-            now = time.time()
-            self._csrf_tokens[token] = now
-            # Clean up old CSRF tokens (older than 24h)
-            self._csrf_tokens = {k: v for k, v in self._csrf_tokens.items() if now - v < 86400}
-            return self._json_response({"csrf_token": token})
-
         # CSRF check for POST requests (except login which establishes the session)
         if method == "POST" and path != "/api/login":
             client_token = headers.get("x-csrf-token", "")
@@ -182,258 +172,19 @@ class WebDashboard:
                     status=HTTPStatus.FORBIDDEN,
                 )
 
-
-
-        if path == "/api/services/toggle" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._json_response(
-                    {"error": "Admin access required."},
-                    status=HTTPStatus.FORBIDDEN,
-                )
-            payload = _decode_json_body(request["body"])
-            service_name = str(payload.get("service", ""))
-            enabled = bool(payload.get("enabled", False))
-            if enabled:
-                success = await self.orchestrator.start_service(service_name)
-            else:
-                success = await self.orchestrator.stop_service(service_name)
-            return self._json_response({"ok": success})
-
-        if path == "/api/login" and method == "POST":
-            payload = _decode_json_body(request["body"])
-            return await self._handle_login(payload, request)
-
-        if path == "/api/logout" and method == "POST":
-            return await self._handle_logout(cookies)
-
-        if path == "/api/session" and method == "GET":
-            return self._json_response(
-                {
-                    "authenticated": authenticated,
-                    "username": self._current_username(cookies) if authenticated else "",
-                    "role": self._current_role(cookies) if authenticated else "",
-                }
-            )
-
-        if path.startswith("/api/") and not authenticated:
+        # Authentication check for API routes (except auth/CSRF endpoints)
+        if path.startswith("/api/") and not authenticated and path not in {"/api/login", "/api/session", "/api/csrf"}:
             return self._json_response(
                 {"error": "Authentication required."},
                 status=HTTPStatus.UNAUTHORIZED,
             )
 
-        if path == "/api/status" and method == "GET":
-            display_host = _request_display_host(request)
-            return self._json_response(
-                {
-                    "services": await self.orchestrator.service_status(display_host),
-                    "profile": await self.orchestrator.profile_status(),
-                    "log_path": str(self.orchestrator.config.logging.path),
-                    "web": {
-                        "host": self.orchestrator.config.web.host,
-                        "display_host": display_host,
-                        "port": self.orchestrator.config.web.port,
-                    },
-                }
-            )
+        # Delegate routing to the APIRouter instance
+        response = await router.route(method, path, self, request)
+        if response is not None:
+            return response
 
-        if path == "/api/overview" and method == "GET":
-            return self._json_response(await self._build_overview_payload(request))
-
-        if path == "/api/events" and method == "GET":
-            query = request["query"]
-            limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=200)
-            service_filter = query.get("service", [""])[0].strip().lower()
-            event_filter = query.get("event_type", [""])[0].strip().lower()
-            events = await read_recent_events(self.orchestrator.config.logging.path, limit * 4)
-            filtered = [
-                event
-                for event in events
-                if (not service_filter or str(event.get("service", "")).lower() == service_filter)
-                and (not event_filter or str(event.get("event_type", "")).lower() == event_filter)
-            ]
-            return self._json_response({"events": filtered[:limit]})
-
-        if path == "/api/stats" and method == "GET":
-            records = await read_recent_events(self.orchestrator.config.logging.path, 1000)
-            by_service = Counter(record.get("service", "unknown") for record in records)
-            by_type = Counter(record.get("event_type", "unknown") for record in records)
-            return self._json_response(
-                {
-                    "total_recent_events": len(records),
-                    "by_service": dict(by_service),
-                    "by_type": dict(by_type),
-                }
-            )
-
-        if path == "/api/settings" and method == "GET":
-            return self._json_response(self._build_settings_payload(request, cookies))
-
-        if path == "/api/logs/export" and method == "GET":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            return await self._export_logs_response()
-
-        if path == "/api/ioc/csv" and method == "GET":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            return await self._export_ioc_csv_response()
-
-        if path == "/api/ioc/stix" and method == "GET":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            return await self._export_ioc_stix_response()
-
-        if path == "/api/logs/clear" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            return await self._handle_clear_logs()
-
-        if path == "/api/users" and method == "GET":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            return self._json_response({"users": self._user_payload()})
-
-        if path == "/api/users" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            payload = _decode_json_body(request["body"])
-            return await self._handle_create_user(payload)
-
-        if path == "/api/users/delete" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            payload = _decode_json_body(request["body"])
-            return await self._handle_delete_user(payload, cookies)
-
-        if path == "/api/users/password" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            payload = _decode_json_body(request["body"])
-            return await self._handle_change_user_password(payload)
-
-        if path == "/api/users/role" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            payload = _decode_json_body(request["body"])
-            return await self._handle_change_user_role(payload, cookies)
-
-        if path == "/api/profile" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            payload = _decode_json_body(request["body"])
-            profile_name = str(payload.get("profile", "")).strip()
-            if not profile_name:
-                return self._json_response(
-                    {"error": "Profile name is required."},
-                    status=HTTPStatus.BAD_REQUEST,
-                )
-            try:
-                return self._json_response(await self.orchestrator.set_profile(profile_name))
-            except KeyError:
-                return self._json_response(
-                    {"error": f"Unknown profile: {profile_name}."},
-                    status=HTTPStatus.NOT_FOUND,
-                )
-            except OSError as exc:
-                return self._json_response(
-                    {
-                        "error": f"Could not apply profile: {profile_name}.",
-                        "detail": str(exc),
-                    },
-                    status=HTTPStatus.CONFLICT,
-                )
-
-        if path == "/api/whitelist" and method == "GET":
-            return self._json_response({"whitelist": await get_whitelist()})
-
-        if path == "/api/whitelist" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            payload = _decode_json_body(request["body"])
-            ip = str(payload.get("ip", "")).strip()
-            description = str(payload.get("description", "")).strip()
-            if not ip or not description:
-                return self._json_response(
-                    {"error": "IP and description are required."},
-                    status=HTTPStatus.BAD_REQUEST,
-                )
-            if await add_to_whitelist(ip, description):
-                return self._json_response({"ok": True, "whitelist": await get_whitelist()})
-            return self._json_response(
-                {"error": "Failed to add or already exists."},
-                status=HTTPStatus.CONFLICT,
-            )
-
-        if path == "/api/whitelist/delete" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            payload = _decode_json_body(request["body"])
-            ip = str(payload.get("ip", "")).strip()
-            if not ip:
-                return self._json_response(
-                    {"error": "IP is required."},
-                    status=HTTPStatus.BAD_REQUEST,
-                )
-            if await delete_from_whitelist(ip):
-                return self._json_response({"ok": True, "whitelist": await get_whitelist()})
-            return self._json_response(
-                {"error": "Not found in whitelist."},
-                status=HTTPStatus.NOT_FOUND,
-            )
-
-        if path == "/api/blacklist" and method == "GET":
-            return self._json_response({"blacklist": await get_blacklist()})
-
-        if path == "/api/blacklist" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            payload = _decode_json_body(request["body"])
-            ip = str(payload.get("ip", "")).strip()
-            description = str(payload.get("description", "")).strip()
-            if not ip or not description:
-                return self._json_response(
-                    {"error": "IP/MAC and description are required."},
-                    status=HTTPStatus.BAD_REQUEST,
-                )
-            if await add_to_blacklist(ip, description):
-                return self._json_response({"ok": True, "blacklist": await get_blacklist()})
-            return self._json_response(
-                {"error": "Failed to add or already exists."},
-                status=HTTPStatus.CONFLICT,
-            )
-
-        if path == "/api/blacklist/delete" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            payload = _decode_json_body(request["body"])
-            ip = str(payload.get("ip", "")).strip()
-            if not ip:
-                return self._json_response(
-                    {"error": "IP/MAC is required."},
-                    status=HTTPStatus.BAD_REQUEST,
-                )
-            if await delete_from_blacklist(ip):
-                return self._json_response({"ok": True, "blacklist": await get_blacklist()})
-            return self._json_response(
-                {"error": "Not found in blacklist."},
-                status=HTTPStatus.NOT_FOUND,
-            )
-
-        if path == "/api/settings/auto-blacklist" and method == "GET":
-            enabled = await is_auto_blacklist_enabled()
-            return self._json_response({"auto_blacklist_enabled": enabled})
-
-        if path == "/api/settings/auto-blacklist" and method == "POST":
-            if not self._is_admin(cookies):
-                return self._forbidden_response()
-            payload = _decode_json_body(request["body"])
-            enabled = bool(payload.get("enabled", True))
-            await set_auto_blacklist_enabled(enabled)
-            return self._json_response({"ok": True, "auto_blacklist_enabled": enabled})
-
-        if path == "/api/threat-intel" and method == "GET":
-            return await self._handle_threat_intel()
-
+        # Fallback if route not matched
         if path.startswith("/api/"):
             return self._json_response(
                 {"error": "Not found."},
@@ -442,202 +193,10 @@ class WebDashboard:
 
         return _response(HTTPStatus.NOT_FOUND, "text/plain; charset=utf-8", b"Not found")
 
-    async def _handle_login(self, payload: dict[str, Any], request: dict[str, Any]) -> dict[str, Any]:
-        client_ip = request.get("client_ip", "")
-        now = time.time()
-        
-        if client_ip:
-            self._login_attempts[client_ip] = [t for t in self._login_attempts.get(client_ip, []) if now - t < 300]
-            if len(self._login_attempts[client_ip]) >= 5:
-                return self._json_response(
-                    {"ok": False, "error": "Too many failed attempts. Try again in 5 minutes."},
-                    status=HTTPStatus.TOO_MANY_REQUESTS,
-                )
-
-        username = str(payload.get("username", ""))
-        password = str(payload.get("password", ""))
-        if not _verify_password(password, self._user_password(username)):
-            if client_ip:
-                self._login_attempts.setdefault(client_ip, []).append(now)
-            await self.orchestrator.logger.log(
-                {
-                    "service": "web",
-                    "event_type": "login_failed",
-                    "summary": f"Dashboard login failed for {username or 'unknown'}.",
-                }
-            )
-            return self._json_response(
-                {"ok": False, "error": "Invalid username or password."},
-                status=HTTPStatus.UNAUTHORIZED,
-            )
-
-        if client_ip in self._login_attempts:
-            del self._login_attempts[client_ip]
-
-        token = secrets.token_hex(32)
-        self._sessions[token] = {"username": username, "created_at": time.time()}
-        await self._save_sessions()
-        await self.orchestrator.logger.log(
-            {
-                "service": "web",
-                "event_type": "login_success",
-                "summary": f"Dashboard login success for {username}.",
-            }
-        )
-        return self._json_response(
-            {"ok": True, "username": username, "role": self._user_role(username)},
-            cookies=[_build_cookie("session", token, max_age=86400)],
-        )
-
-    async def _handle_logout(self, cookies: dict[str, str]) -> dict[str, Any]:
-        token = cookies.get("session", "")
-        if token:
-            self._sessions.pop(token, None)
-            await self._save_sessions()
-        return self._json_response(
-            {"ok": True},
-            cookies=[_build_cookie("session", "", max_age=0)],
-        )
-
     async def _handle_clear_logs(self) -> dict[str, Any]:
         path = self.orchestrator.config.logging.path
         await asyncio.to_thread(_clear_file, path)
         return self._json_response({"ok": True, "log_path": str(path)})
-
-    async def _handle_create_user(self, payload: dict[str, Any]) -> dict[str, Any]:
-        username = str(payload.get("username", "")).strip()
-        password = str(payload.get("password", ""))
-        role = _normalize_role(str(payload.get("role", ROLE_VIEWER)))
-        if not username or not password:
-            return self._json_response(
-                {"error": "Username and password are required."},
-                status=HTTPStatus.BAD_REQUEST,
-            )
-        if username in self._users:
-            return self._json_response(
-                {"error": f"User already exists: {username}."},
-                status=HTTPStatus.CONFLICT,
-            )
-        self._users[username] = {"password": _hash_password(password), "role": role}
-        await _save_users(None, self._users)
-        await self.orchestrator.logger.log(
-            {
-                "service": "web",
-                "event_type": "user_created",
-                "summary": f"Dashboard user {username} was created.",
-            }
-        )
-        return self._json_response({"ok": True, "users": self._user_payload()})
-
-    async def _handle_delete_user(
-        self,
-        payload: dict[str, Any],
-        cookies: dict[str, str],
-    ) -> dict[str, Any]:
-        username = str(payload.get("username", "")).strip()
-        if not username:
-            return self._json_response(
-                {"error": "Username is required."},
-                status=HTTPStatus.BAD_REQUEST,
-            )
-        if username not in self._users:
-            return self._json_response(
-                {"error": f"Unknown user: {username}."},
-                status=HTTPStatus.NOT_FOUND,
-            )
-        if username == self._current_username(cookies):
-            return self._json_response(
-                {"error": "You cannot delete the signed-in user."},
-                status=HTTPStatus.CONFLICT,
-            )
-        if len(self._users) <= 1:
-            return self._json_response(
-                {"error": "At least one user must remain."},
-                status=HTTPStatus.CONFLICT,
-            )
-        if self._user_role(username) == ROLE_ADMIN and self._admin_count() <= 1:
-            return self._json_response(
-                {"error": "At least one admin user must remain."},
-                status=HTTPStatus.CONFLICT,
-            )
-        del self._users[username]
-        self._sessions = {
-            token: session_data
-            for token, session_data in self._sessions.items()
-            if session_data.get("username") in self._users
-        }
-        await _save_users(None, self._users)
-        await self._save_sessions()
-        await self.orchestrator.logger.log(
-            {
-                "service": "web",
-                "event_type": "user_deleted",
-                "summary": f"Dashboard user {username} was deleted.",
-            }
-        )
-        return self._json_response({"ok": True, "users": self._user_payload()})
-
-    async def _handle_change_user_password(self, payload: dict[str, Any]) -> dict[str, Any]:
-        username = str(payload.get("username", "")).strip()
-        password = str(payload.get("password", ""))
-        if not username or not password:
-            return self._json_response(
-                {"error": "Username and new password are required."},
-                status=HTTPStatus.BAD_REQUEST,
-            )
-        if username not in self._users:
-            return self._json_response(
-                {"error": f"Unknown user: {username}."},
-                status=HTTPStatus.NOT_FOUND,
-            )
-        self._users[username]["password"] = _hash_password(password)
-        await _save_users(None, self._users)
-        await self.orchestrator.logger.log(
-            {
-                "service": "web",
-                "event_type": "user_password_changed",
-                "summary": f"Dashboard user {username} password was changed.",
-            }
-        )
-        return self._json_response({"ok": True, "users": self._user_payload()})
-
-    async def _handle_change_user_role(
-        self,
-        payload: dict[str, Any],
-        cookies: dict[str, str],
-    ) -> dict[str, Any]:
-        username = str(payload.get("username", "")).strip()
-        role = _normalize_role(str(payload.get("role", "")))
-        if not username:
-            return self._json_response(
-                {"error": "Username is required."},
-                status=HTTPStatus.BAD_REQUEST,
-            )
-        if username not in self._users:
-            return self._json_response(
-                {"error": f"Unknown user: {username}."},
-                status=HTTPStatus.NOT_FOUND,
-            )
-        if username == self._current_username(cookies) and role != ROLE_ADMIN:
-            return self._json_response(
-                {"error": "You cannot remove admin access from the signed-in user."},
-                status=HTTPStatus.CONFLICT,
-            )
-        if self._user_role(username) == ROLE_ADMIN and role != ROLE_ADMIN and self._admin_count() <= 1:
-            return self._json_response(
-                {"error": "At least one admin user must remain."},
-                status=HTTPStatus.CONFLICT,
-            )
-        self._users[username]["role"] = role
-        await _save_users(None, self._users)
-        await self.orchestrator.logger.log(
-            {
-                "service": "web",
-                "event_type": "user_role_changed",
-                "summary": f"Dashboard user {username} role was changed to {role}.",
-            }
-        )
-        return self._json_response({"ok": True, "users": self._user_payload()})
 
     async def _read_request(self, reader: asyncio.StreamReader) -> dict[str, Any]:
         request_line = await asyncio.wait_for(reader.readline(), timeout=10)
@@ -1277,5 +836,13 @@ def _safe_int(value: str, *, default: int, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(minimum, min(parsed, maximum))
+
+
+# Import all handler modules to register routes onto the global router
+import api.handlers.auth
+import api.handlers.blacklist
+import api.handlers.services
+import api.handlers.overview
+
 
 

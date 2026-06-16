@@ -16,7 +16,7 @@ import time
 import urllib.request
 from typing import Any
 
-from geo import PRIVATE_PREFIXES, bulk_lookup
+from core.geo import PRIVATE_PREFIXES, bulk_lookup
 
 # ---------------------------------------------------------------------------
 # Cloud provider CIDR blocks (major ranges, embedded)
@@ -314,8 +314,8 @@ async def enrich_top_ips(
     ip_list = [ip for ip, _ in top_ips]
 
     import asyncio
-    from database import async_session
-    from models import ThreatIntelCache
+    from database.database import async_session
+    from database.models import ThreatIntelCache
     from sqlalchemy import select
     from datetime import datetime, UTC
 
@@ -403,8 +403,8 @@ async def get_cached_top_ips(ip_counts: dict[str, int], honeypot_host: str = "",
         return []
     ip_list = [ip for ip, _ in top_ips]
 
-    from database import async_session
-    from models import ThreatIntelCache
+    from database.database import async_session
+    from database.models import ThreatIntelCache
     from sqlalchemy import select
     
     cached: dict[str, dict[str, Any]] = {}
@@ -430,14 +430,14 @@ async def get_cached_top_ips(ip_counts: dict[str, int], honeypot_host: str = "",
 
 
 
-from crypto_utils import decrypt_value
-from models import SystemSettings
+from core.crypto_utils import decrypt_value
+from database.models import SystemSettings
 
 async def _get_api_keys_from_db():
     abuse_key = ""
     grey_key = ""
     try:
-        from database import async_session
+        from database.database import async_session
         async with async_session() as session:
             from sqlalchemy import select
             res = await session.execute(select(SystemSettings).where(SystemSettings.setting_key.in_(["ti_abuseipdb_key", "ti_greynoise_key"])))

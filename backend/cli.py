@@ -6,16 +6,16 @@ import platform
 import signal
 from collections.abc import Callable
 
-from config import load_config
+from core.config import load_config
 from orchestrator import Orchestrator
-from database import init_db
+from database.database import init_db
 
 
 
 from sqlalchemy import select
-from database import async_session
-from models import SystemSettings
-from crypto_utils import encrypt_value
+from database.database import async_session
+from database.models import SystemSettings
+from core.crypto_utils import encrypt_value
 
 async def sync_api_keys(config) -> None:
     # Migrate TI keys from config to DB if they exist and DB is empty

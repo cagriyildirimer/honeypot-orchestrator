@@ -5,7 +5,7 @@ import subprocess
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from event_logger import JSONLEventLogger
+    from core.event_logger import JSONLEventLogger
 
 logger = logging.getLogger(__name__)
 
@@ -188,4 +188,3 @@ def remove_firewall_rule(ip_or_mac: str) -> None:
             subprocess.run(["iptables", "-D", "HONEYPOT_BLACKLIST", "-s", ip_or_mac, "-j", "DROP"], capture_output=True)
     except Exception as e:
         logger.warning(f"Could not remove firewall rule for {ip_or_mac}: {e}")
-

@@ -200,7 +200,7 @@ def _service_env_key(service_name: str, field: str) -> str:
 
 
 def _validate_config(config: AppConfig) -> None:
-    from profiles import PROFILES
+    from system.profiles import PROFILES
 
     if not (1 <= config.web.port <= 65535):
         raise ValueError(f"Invalid web port: {config.web.port}")

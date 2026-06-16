@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import asyncssh
 
-from event_logger import JSONLEventLogger
-from profiles import HoneypotProfile
+from core.event_logger import JSONLEventLogger
+from system.profiles import HoneypotProfile
 from services.base import BaseHoneypotService
 
 

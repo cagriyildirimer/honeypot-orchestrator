@@ -4,7 +4,7 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
-from profiles import HoneypotProfile
+from system.profiles import HoneypotProfile
 from services.base import BaseHoneypotService
 
 

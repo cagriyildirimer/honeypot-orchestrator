@@ -4,9 +4,9 @@ from typing import Any
 
 from sqlalchemy import select  # type: ignore
 from sqlalchemy.sql import func  # type: ignore
-from database import async_session
-from models import Event
-from config import load_config
+from database.database import async_session
+from database.models import Event
+from core.config import load_config
 from threat_intel import enrich_top_ips
 
 async def run_ti_worker(config_path: str = "config.yaml"):
