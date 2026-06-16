@@ -90,3 +90,4 @@
 - [ ] `web/server.py` (1282 satır) modüler parçalama: `handlers/`, `utils.py` ayrıştırması.
 - [ ] `frontend/src/app-react.js` (3037 satır / 119KB) dosya bölünmesi veya Vite+React migration.
 - [ ] Unit test kapsamı artırma: services, orchestrator, config parsing, defense modülü testleri.
+- [ ] Live Activity Monitor akış yönü düzeltmesi (En yeni log en üstte olacak şekilde tersine çevrilecek).
