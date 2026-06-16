@@ -12,9 +12,11 @@ logger = logging.getLogger(__name__)
 
 def setup_firewall(active_ports: list[tuple[int, str]], web_port: int | None) -> None:
     try:
-        # Create chain if not exists
+        # Create chains if not exist
         subprocess.run(["iptables", "-N", "HONEYPOT_INPUT"], capture_output=True)
-        # Flush the chain
+        subprocess.run(["iptables", "-N", "HONEYPOT_BLACKLIST"], capture_output=True)
+        
+        # Flush the main chain (but not blacklist to preserve dynamic entries)
         subprocess.run(["iptables", "-F", "HONEYPOT_INPUT"], capture_output=True)
         
         # Check if INPUT jumps to HONEYPOT_INPUT, if not insert it
@@ -31,6 +33,9 @@ def setup_firewall(active_ports: list[tuple[int, str]], web_port: int | None) ->
         if web_port:
             subprocess.run(["iptables", "-A", "HONEYPOT_INPUT", "-p", "tcp", "--dport", str(web_port), "-j", "ACCEPT"], capture_output=True)
             
+        # Jump to HONEYPOT_BLACKLIST to drop blacklisted IPs/MACs
+        subprocess.run(["iptables", "-A", "HONEYPOT_INPUT", "-j", "HONEYPOT_BLACKLIST"], capture_output=True)
+        
         # Allow active decoy ports
         for port, proto in active_ports:
             subprocess.run(["iptables", "-A", "HONEYPOT_INPUT", "-p", proto, "--dport", str(port), "-j", "ACCEPT"], capture_output=True)
@@ -63,6 +68,8 @@ def cleanup_firewall() -> None:
         subprocess.run(["iptables", "-D", "INPUT", "-j", "HONEYPOT_INPUT"], capture_output=True)
         subprocess.run(["iptables", "-F", "HONEYPOT_INPUT"], capture_output=True)
         subprocess.run(["iptables", "-X", "HONEYPOT_INPUT"], capture_output=True)
+        subprocess.run(["iptables", "-F", "HONEYPOT_BLACKLIST"], capture_output=True)
+        subprocess.run(["iptables", "-X", "HONEYPOT_BLACKLIST"], capture_output=True)
     except Exception as e:
         logger.warning(f"Could not cleanup firewall rules: {e}")
 
@@ -163,10 +170,10 @@ def apply_firewall_rule(ip_or_mac: str) -> None:
     try:
         if ":" in ip_or_mac:
             # Block by MAC address using iptables mac extension
-            subprocess.run(["iptables", "-I", "HONEYPOT_INPUT", "1", "-m", "mac", "--mac-source", ip_or_mac, "-j", "DROP"], capture_output=True)
+            subprocess.run(["iptables", "-A", "HONEYPOT_BLACKLIST", "-m", "mac", "--mac-source", ip_or_mac, "-j", "DROP"], capture_output=True)
         else:
             # Block by IP address
-            subprocess.run(["iptables", "-I", "HONEYPOT_INPUT", "1", "-s", ip_or_mac, "-j", "DROP"], capture_output=True)
+            subprocess.run(["iptables", "-A", "HONEYPOT_BLACKLIST", "-s", ip_or_mac, "-j", "DROP"], capture_output=True)
     except Exception as e:
         logger.warning(f"Could not apply firewall rule for {ip_or_mac}: {e}")
 
@@ -175,10 +182,10 @@ def remove_firewall_rule(ip_or_mac: str) -> None:
     try:
         if ":" in ip_or_mac:
             # Unblock MAC address
-            subprocess.run(["iptables", "-D", "HONEYPOT_INPUT", "-m", "mac", "--mac-source", ip_or_mac, "-j", "DROP"], capture_output=True)
+            subprocess.run(["iptables", "-D", "HONEYPOT_BLACKLIST", "-m", "mac", "--mac-source", ip_or_mac, "-j", "DROP"], capture_output=True)
         else:
             # Unblock IP address
-            subprocess.run(["iptables", "-D", "HONEYPOT_INPUT", "-s", ip_or_mac, "-j", "DROP"], capture_output=True)
+            subprocess.run(["iptables", "-D", "HONEYPOT_BLACKLIST", "-s", ip_or_mac, "-j", "DROP"], capture_output=True)
     except Exception as e:
         logger.warning(f"Could not remove firewall rule for {ip_or_mac}: {e}")
 
