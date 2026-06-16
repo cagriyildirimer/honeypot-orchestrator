@@ -2,7 +2,8 @@ import asyncio
 import time
 from typing import Any
 
-from sqlalchemy import select, func, text
+from sqlalchemy import select  # type: ignore
+from sqlalchemy.sql import func  # type: ignore
 from database import async_session
 from models import Event
 from config import load_config
@@ -19,17 +20,18 @@ async def run_ti_worker(config_path: str = "config.yaml"):
     while True:
         try:
             # 1. Son 24 saatteki loglari tara, top 50 IP'yi bul
+            from datetime import datetime, timedelta, timezone
+            
             async with async_session() as session:
-                query = text("""
-                    SELECT src_ip, COUNT(*) as c 
-                    FROM events 
-                    WHERE src_ip IS NOT NULL 
-                      AND timestamp >= NOW() - INTERVAL '24 HOURS'
-                    GROUP BY src_ip 
-                    ORDER BY c DESC 
-                    LIMIT 50
-                """)
-                result = await session.execute(query)
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+                stmt = (
+                    select(Event.src_ip, func.count(Event.id))
+                    .where(Event.src_ip.isnot(None), Event.timestamp >= cutoff)
+                    .group_by(Event.src_ip)
+                    .order_by(func.count(Event.id).desc())
+                    .limit(50)
+                )
+                result = await session.execute(stmt)
                 top_ips = {row[0]: row[1] for row in result.all() if row[0]}
 
             if top_ips:

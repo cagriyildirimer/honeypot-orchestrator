@@ -46,7 +46,7 @@ services:
       - NET_ADMIN
     privileged: true
     ports:
-      - "${HONEYPOT_HTTP_WINDOWS_PORT:-80}:80"
+      - "${HONEYPOT_HTTP_WINDOWS_PORT:-8080}:80"
       - "${HONEYPOT_SSH_WINDOWS_PORT:-2223}:2223"
       - "2222:2222"
       - "2121:2121"
@@ -74,7 +74,7 @@ services:
       - postgres
     command: ["python", "cli.py", "--config", "config.yaml", "--mode", "web"]
     ports:
-      - "8080:8000"
+      - "8082:8000"
     environment:
       <<: *backend-env
     volumes:
@@ -95,7 +95,7 @@ services:
     build: ./frontend
     container_name: honeypot-frontend
     ports:
-      - "80:80"
+      - "8000:80"
     depends_on:
       - honeypot-web
     restart: unless-stopped

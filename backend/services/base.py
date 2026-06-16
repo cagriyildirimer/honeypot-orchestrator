@@ -29,7 +29,7 @@ class BaseHoneypotService(ABC):
         if self.port == 636:
             import ssl
             import os
-            cert_path = os.path.join(os.path.dirname(__file__), "..", "..", "certs", "dummy.pem")
+            cert_path = os.path.join(os.path.dirname(__file__), "..", "certs", "dummy.pem")
             if os.path.exists(cert_path):
                 ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
                 ssl_ctx.load_cert_chain(certfile=cert_path)

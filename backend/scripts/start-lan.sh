@@ -170,14 +170,15 @@ if [[ -z "$LAN_GATEWAY" ]]; then
   LAN_GATEWAY="$(awk '{print $3}' <<< "$DEFAULT_ROUTE")"
 fi
 
+IFACE_ADDR="$(ip -o -4 addr show dev "$LAN_PARENT" scope global | awk '{print $4}' | head -n 1)"
+if [[ -z "$IFACE_ADDR" ]]; then
+  echo "Could not detect an IPv4 address on $LAN_PARENT." >&2
+  exit 1
+fi
+IFACE_IP="${IFACE_ADDR%/*}"
+IFACE_PREFIX="${IFACE_ADDR#*/}"
+
 if [[ -z "$LAN_SUBNET" ]]; then
-  IFACE_ADDR="$(ip -o -4 addr show dev "$LAN_PARENT" scope global | awk '{print $4}' | head -n 1)"
-  if [[ -z "$IFACE_ADDR" ]]; then
-    echo "Could not detect an IPv4 address on $LAN_PARENT. Pass --subnet explicitly." >&2
-    exit 1
-  fi
-  IFACE_IP="${IFACE_ADDR%/*}"
-  IFACE_PREFIX="${IFACE_ADDR#*/}"
   LAN_SUBNET="$(network_from_ip_prefix "$IFACE_IP" "$IFACE_PREFIX")"
 fi
 

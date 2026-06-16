@@ -85,11 +85,19 @@ def phase1_unit_tests() -> tuple[int, int]:
     import os
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+    import asyncio
+    from database import init_db
+    try:
+        asyncio.run(init_db())
+        _ok("Database initialized successfully")
+        passed += 1
+    except Exception as e:
+        _warn(f"Failed to initialize database: {e}")
+
     from threat_intel import (
         _is_private_or_local,
         _match_cloud_provider,
         _detect_honeypot_prefix,
-        _TICache,
         enrich_top_ips,
     )
 
@@ -160,35 +168,51 @@ def phase1_unit_tests() -> tuple[int, int]:
         _fail(f"8.8.8.8 -> expected '' but got '{result}'")
         failed += 1
 
-    # --- Test 4: TI Cache ---
-    print(f"\n  {DIM}Testing _TICache ...{RESET}")
-    cache = _TICache(ttl=2)
-    cache.put("1.2.3.4", {"test": True})
-    hit = cache.get("1.2.3.4")
-    if hit and hit.get("test") is True:
-        _ok("Cache put/get works correctly")
-        passed += 1
-    else:
-        _fail("Cache put/get failed!")
-        failed += 1
+    # --- Test 4: Database Threat Intel Cache integration ---
+    print(f"\n  {DIM}Testing ThreatIntelCache Database Integration ...{RESET}")
+    from database import async_session
+    from models import ThreatIntelCache
 
-    miss = cache.get("9.9.9.9")
-    if miss is None:
-        _ok("Cache miss returns None")
-        passed += 1
-    else:
-        _fail("Cache miss should return None!")
+    async def _test_cache():
+        async with async_session() as session:
+            cache_entry = await session.get(ThreatIntelCache, "99.99.99.99")
+            if cache_entry:
+                await session.delete(cache_entry)
+                await session.commit()
+            
+            test_data = {"ip": "99.99.99.99", "country": "TestCountry", "cloud_provider": "TestCloud"}
+            from datetime import datetime, UTC
+            session.add(ThreatIntelCache(ip="99.99.99.99", data=test_data, updated_at=datetime.now(UTC)))
+            await session.commit()
+            
+            cache_entry = await session.get(ThreatIntelCache, "99.99.99.99")
+            return cache_entry
+
+    try:
+        entry = asyncio.run(_test_cache())
+        if entry and entry.data.get("country") == "TestCountry":
+            _ok("Database Cache put/get works correctly")
+            passed += 1
+        else:
+            _fail("Database Cache put/get failed!")
+            failed += 1
+    except Exception as exc:
+        _fail(f"Database Cache test raised {type(exc).__name__}: {exc}")
         failed += 1
 
     # --- Test 5: enrich_top_ips with only private IPs (should return empty) ---
     print(f"\n  {DIM}Testing enrich_top_ips (private IPs only) ...{RESET}")
     private_counts = {"192.168.1.1": 100, "10.0.0.5": 50, "172.16.0.1": 30}
-    result = enrich_top_ips(private_counts, honeypot_host="192.168.12.240")
-    if result == []:
-        _ok("Private-only input correctly returns empty list")
-        passed += 1
-    else:
-        _fail(f"Expected empty list but got {len(result)} results")
+    try:
+        result = asyncio.run(enrich_top_ips(private_counts, honeypot_host="192.168.12.240"))
+        if result == []:
+            _ok("Private-only input correctly returns empty list")
+            passed += 1
+        else:
+            _fail(f"Expected empty list but got {len(result)} results")
+            failed += 1
+    except Exception as exc:
+        _fail(f"enrich_top_ips (private only) raised {type(exc).__name__}: {exc}")
         failed += 1
 
     # --- Test 6: enrich_top_ips with real public IPs ---
@@ -200,7 +224,7 @@ def phase1_unit_tests() -> tuple[int, int]:
         "8.8.8.8": 10,          # Google DNS
     }
     try:
-        result = enrich_top_ips(mixed_counts, honeypot_host="192.168.12.240", limit=5)
+        result = asyncio.run(enrich_top_ips(mixed_counts, honeypot_host="192.168.12.240", limit=5))
         if len(result) > 0:
             _ok(f"enrich_top_ips returned {len(result)} enriched IPs")
             passed += 1
@@ -220,6 +244,7 @@ def phase1_unit_tests() -> tuple[int, int]:
     except Exception as exc:
         _fail(f"enrich_top_ips raised {type(exc).__name__}: {exc}")
         failed += 1
+
 
     return passed, failed
 
@@ -598,6 +623,8 @@ def main() -> None:
                         help="Skip Phase 2 (service probes)")
     parser.add_argument("--skip-unit", action="store_true",
                         help="Skip Phase 1 (unit tests)")
+    parser.add_argument("--skip-api", action="store_true",
+                        help="Skip Phase 3 (API verification)")
     args = parser.parse_args()
 
     print(f"\n{BOLD}{CYAN}============================================================{RESET}")
@@ -623,15 +650,16 @@ def main() -> None:
         total_failed += f
 
     # Phase 3: API verification
-    p, f = phase3_api_check(args.host, args.web_port, args.username, args.password)
-    total_passed += p
-    total_failed += f
+    if not args.skip_api:
+        p, f = phase3_api_check(args.host, args.web_port, args.username, args.password)
+        total_passed += p
+        total_failed += f
 
     # Final report
     _header("Results")
     total = total_passed + total_failed
     if total_failed == 0:
-        print(f"\n  {GREEN}{BOLD}ALL {total_passed} CHECKS PASSED ✓{RESET}\n")
+        print(f"\n  {GREEN}{BOLD}ALL {total_passed} CHECKS PASSED [OK]{RESET}\n")
     else:
         print(f"\n  {RED}{BOLD}{total_failed} FAILED{RESET} / {total} total checks")
         print(f"  {GREEN}{total_passed} passed{RESET}\n")

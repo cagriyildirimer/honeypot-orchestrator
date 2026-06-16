@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from datetime import datetime, UTC
+from sqlalchemy import select
+from models import SystemSettings
+from database import async_session
 
 from config import AppConfig
 from event_logger import JSONLEventLogger
@@ -10,6 +15,35 @@ from services.base import BaseHoneypotService
 from web.server import WebDashboard
 from net_tuner import apply_profile_network_settings
 from packet_mangler import PacketMangler
+
+async def _get_db_state(session) -> dict:
+    try:
+        res = await session.execute(select(SystemSettings).where(SystemSettings.setting_key == "orchestrator_state"))
+        row = res.scalars().first()
+        if row:
+            return json.loads(row.setting_value)
+    except Exception as e:
+        print(f"Error reading orchestrator state from DB: {e}")
+    return {
+        "active_profile": "empty",
+        "service_overrides": {},
+        "running_services": []
+    }
+
+async def _write_db_state(session, state: dict) -> None:
+    try:
+        res = await session.execute(select(SystemSettings).where(SystemSettings.setting_key == "orchestrator_state"))
+        row = res.scalars().first()
+        now = datetime.now(UTC)
+        val_str = json.dumps(state)
+        if row:
+            row.setting_value = val_str
+            row.updated_at = now
+        else:
+            session.add(SystemSettings(setting_key="orchestrator_state", setting_value=val_str, updated_at=now))
+        await session.commit()
+    except Exception as e:
+        print(f"Error writing orchestrator state to DB: {e}")
 
 class Orchestrator:
     def __init__(self, config: AppConfig, mode: str = "all") -> None:
@@ -25,6 +59,7 @@ class Orchestrator:
         self.web_dashboard = WebDashboard(config.web.host, config.web.port, self)
         # OS obfuscation icin packet mangler servisi baslatilir
         self.packet_mangler = PacketMangler()
+        self._sync_task: asyncio.Task | None = None
 
     async def start(self) -> None:
         # Bu yeni akista uygulama acilisinda yalnizca web paneli dinlemeye baslar.
@@ -34,6 +69,7 @@ class Orchestrator:
         if self.mode in ("all", "daemon"):
             self.packet_mangler.start()
             await self._apply_profile(self.profile, emit_log=False)
+            self._sync_task = asyncio.create_task(self._db_sync_loop())
 
         # Baslangic olayi log dosyasina yazilir; panelde de gorulebilir.
         await self.logger.log(
@@ -46,6 +82,14 @@ class Orchestrator:
         self.print_startup_summary()
 
     async def stop(self) -> None:
+        if self._sync_task is not None:
+            self._sync_task.cancel()
+            try:
+                await self._sync_task
+            except asyncio.CancelledError:
+                pass
+            self._sync_task = None
+
         # Güvenlik duvarı kurallarını temizler.
         if self.mode in ("all", "daemon"):
             from net_tuner import cleanup_firewall
@@ -70,9 +114,20 @@ class Orchestrator:
             for service in reversed(list(self.services.values())):
                 await service.stop()
 
-    def service_status(self, display_host: str | None = None) -> list[dict[str, object]]:
-        # Web API'nin dondurdugu sade servis durum listesini uretir.
-        visible_services = set(self.profile.services)
+    async def service_status(self, display_host: str | None = None) -> list[dict[str, object]]:
+        # In web mode, read running services from DB
+        running_services = set()
+        active_profile_name = self.profile.name
+        if self.mode == "web":
+            async with async_session() as session:
+                state = await _get_db_state(session)
+                running_services = set(state.get("running_services", []))
+                active_profile_name = state.get("active_profile", "empty")
+        else:
+            running_services = {name for name, s in self.services.items() if s.running}
+
+        profile = get_profile(active_profile_name) or self.profile
+        visible_services = set(profile.services)
         return [
             {
                 "name": service.name,
@@ -80,31 +135,97 @@ class Orchestrator:
                 "display_host": self._display_host(service.host, display_host),
                 "template": self._service_template_name(service.name),
                 "port": service.port,
-                "running": service.running,
+                "running": service.name in running_services,
                 "enabled": True,
             }
             for service in self.services.values()
             if service.name in visible_services
         ]
 
-    def profile_status(self) -> dict[str, object]:
-        configured_services = self._configured_profile_services(self.profile)
+    async def profile_status(self) -> dict[str, object]:
+        active_profile_name = self.profile.name
+        if self.mode == "web":
+            async with async_session() as session:
+                state = await _get_db_state(session)
+                active_profile_name = state.get("active_profile", "empty")
+
+        profile = get_profile(active_profile_name) or self.profile
+        configured_services = [service_name for service_name in profile.services if service_name in self.services]
         return {
             "current": {
-                "name": self.profile.name,
-                "display_name": self.profile.display_name,
+                "name": profile.name,
+                "display_name": profile.display_name,
                 "services": configured_services,
             },
             "available": list_profiles(),
         }
 
     async def set_profile(self, name: str) -> dict[str, object]:
-        async with self._service_lock:
-            profile = get_profile(name)
-            if profile is None:
-                raise KeyError(name)
-            await self._apply_profile(profile, emit_log=True)
-            return self.profile_status()
+        profile = get_profile(name)
+        if profile is None:
+            raise KeyError(name)
+
+        async with async_session() as session:
+            state = await _get_db_state(session)
+            state["active_profile"] = name
+            state["service_overrides"] = {}  # Clear overrides when profile changes
+            await _write_db_state(session, state)
+
+        if self.mode in ("all", "daemon"):
+            async with self._service_lock:
+                await self._apply_profile(profile, emit_log=True)
+
+        return await self.profile_status()
+
+    async def start_service(self, name: str) -> bool:
+        if name not in self.services:
+            return False
+
+        async with async_session() as session:
+            state = await _get_db_state(session)
+            state.setdefault("service_overrides", {})[name] = True
+            await _write_db_state(session, state)
+
+        if self.mode in ("all", "daemon"):
+            service = self.services[name]
+            if not service.running:
+                await service.start()
+                running = {n for n, s in self.services.items() if s.running}
+                await apply_profile_network_settings(
+                    self.profile.name, self.logger, self.services,
+                    running, self.config.web.port, self.config.web.enabled,
+                )
+                await self.logger.log({
+                    "service": "orchestrator",
+                    "event_type": "service_started",
+                    "summary": f"Service {name} manually started.",
+                })
+        return True
+
+    async def stop_service(self, name: str) -> bool:
+        if name not in self.services:
+            return False
+
+        async with async_session() as session:
+            state = await _get_db_state(session)
+            state.setdefault("service_overrides", {})[name] = False
+            await _write_db_state(session, state)
+
+        if self.mode in ("all", "daemon"):
+            service = self.services[name]
+            if service.running:
+                await service.stop()
+                running = {n for n, s in self.services.items() if s.running}
+                await apply_profile_network_settings(
+                    self.profile.name, self.logger, self.services,
+                    running, self.config.web.port, self.config.web.enabled,
+                )
+                await self.logger.log({
+                    "service": "orchestrator",
+                    "event_type": "service_stopped",
+                    "summary": f"Service {name} manually stopped.",
+                })
+        return True
 
     def print_startup_summary(self) -> None:
         # Terminalde kullanicinin web panelin hangi adreste acildigini hizlica gormesini saglar.
@@ -314,3 +435,78 @@ class Orchestrator:
         if issubclass(service_cls, PROFILE_AWARE_SERVICE_TYPES):
             kwargs["profile"] = self.profile
         return service_cls(**kwargs)
+
+    async def _db_sync_loop(self) -> None:
+        # Wait a few seconds for DB to initialize
+        await asyncio.sleep(5)
+        last_profile_name = self.profile.name
+        last_overrides = {}
+
+        while True:
+            try:
+                async with async_session() as session:
+                    state = await _get_db_state(session)
+                    db_profile_name = state.get("active_profile", "empty")
+                    db_overrides = state.get("service_overrides", {})
+                    
+                    # Detect profile or override changes
+                    if db_profile_name != last_profile_name or db_overrides != last_overrides:
+                        print(f"Sync Loop: Detected profile/override change in DB (Profile: {db_profile_name}, Overrides: {db_overrides})")
+                        profile = get_profile(db_profile_name)
+                        if profile:
+                            async with self._service_lock:
+                                target_services = set(self._configured_profile_services(profile))
+                                
+                                # Apply manual overrides
+                                for svc_name, enabled in db_overrides.items():
+                                    if enabled:
+                                        target_services.add(svc_name)
+                                    else:
+                                        target_services.discard(svc_name)
+
+                                self.profile = profile
+                                self.packet_mangler.set_profile(profile.name)
+                                self._sync_service_profiles(profile)
+                                
+                                # Apply sysctl/iptables
+                                running = {n for n in target_services if n in self.services}
+                                await apply_profile_network_settings(
+                                    profile.name,
+                                    self.logger,
+                                    self.services,
+                                    running,
+                                    self.config.web.port,
+                                    self.config.web.enabled,
+                                )
+
+                                # Stop services that shouldn't run
+                                for s_name, service in self.services.items():
+                                    if service.running and s_name not in target_services:
+                                        await service.stop()
+
+                                # Start services that should run
+                                for s_name in target_services:
+                                    service = self.services.get(s_name)
+                                    if service and not service.running:
+                                        try:
+                                            await service.start()
+                                        except OSError as err:
+                                            print(f"Warning: Could not start {s_name}: {err}")
+
+                            last_profile_name = db_profile_name
+                            last_overrides = dict(db_overrides)
+                    
+                    # Update running services back to DB
+                    running_list = [name for name, s in self.services.items() if s.running]
+                    if state.get("running_services") != running_list:
+                        state["running_services"] = running_list
+                        await _write_db_state(session, state)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"Sync Loop Error: {e}")
+            
+            try:
+                await asyncio.sleep(3)
+            except asyncio.CancelledError:
+                break

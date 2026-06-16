@@ -97,8 +97,8 @@ class MSSQLHoneypot(BaseHoneypotService):
             else:
                 return
 
-            # Use the raw login payload directly since LOGIN7 does not contain an All Headers block
-            login7_payload = login_payload
+            # Skip All Headers block if present in LOGIN7 payload
+            login7_payload = _skip_all_headers(login_payload)
 
             # Extract TDS version from LOGIN7 payload (offset 4, 4 bytes)
             tds_version_bytes = login7_payload[4:8] if len(login7_payload) >= 8 else b"\x00\x00\x00\x71"

@@ -10,7 +10,7 @@ import time
 import uuid
 from database import async_session
 from models import Event, User, Session as DBSession
-from sqlalchemy import select, delete, desc
+from sqlalchemy import select, delete, desc  # type: ignore
 from collections import Counter
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -30,7 +30,7 @@ from defense import (
     is_blacklisted,
 )
 from geo import bulk_lookup
-from threat_intel import get_cached_top_ips
+from threat_intel import get_cached_top_ips, enrich_top_ips
 
 if TYPE_CHECKING:
     from orchestrator import Orchestrator
@@ -223,8 +223,8 @@ class WebDashboard:
             display_host = _request_display_host(request)
             return self._json_response(
                 {
-                    "services": self.orchestrator.service_status(display_host),
-                    "profile": self.orchestrator.profile_status(),
+                    "services": await self.orchestrator.service_status(display_host),
+                    "profile": await self.orchestrator.profile_status(),
                     "log_path": str(self.orchestrator.config.logging.path),
                     "web": {
                         "host": self.orchestrator.config.web.host,
@@ -908,8 +908,8 @@ class WebDashboard:
                 pass
 
         return {
-            "services": self.orchestrator.service_status(display_host),
-            "profile": self.orchestrator.profile_status(),
+            "services": await self.orchestrator.service_status(display_host),
+            "profile": await self.orchestrator.profile_status(),
             "log_path": str(self.orchestrator.config.logging.path),
             "web": {
                 "host": self.orchestrator.config.web.host,
@@ -956,8 +956,7 @@ class WebDashboard:
         ip_counts = {ip: data["count"] for ip, data in stats.items()}
         
         ti_config = self.orchestrator.config.threat_intel
-        attackers = await asyncio.to_thread(
-            enrich_top_ips,
+        attackers = await enrich_top_ips(
             ip_counts,
             honeypot_host=self.orchestrator.config.host,
             abuseipdb_key=ti_config.abuseipdb_key,

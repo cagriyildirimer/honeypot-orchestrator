@@ -157,3 +157,28 @@ async def apply_profile_network_settings(
     # Apply firewall rules to hide closed ports and ICMP scans
     setup_firewall(active_ports, web_port if web_enabled else None)
     apply_nfqueue_rules(profile_name)
+
+
+def apply_firewall_rule(ip_or_mac: str) -> None:
+    try:
+        if ":" in ip_or_mac:
+            # Block by MAC address using iptables mac extension
+            subprocess.run(["iptables", "-I", "HONEYPOT_INPUT", "1", "-m", "mac", "--mac-source", ip_or_mac, "-j", "DROP"], capture_output=True)
+        else:
+            # Block by IP address
+            subprocess.run(["iptables", "-I", "HONEYPOT_INPUT", "1", "-s", ip_or_mac, "-j", "DROP"], capture_output=True)
+    except Exception as e:
+        logger.warning(f"Could not apply firewall rule for {ip_or_mac}: {e}")
+
+
+def remove_firewall_rule(ip_or_mac: str) -> None:
+    try:
+        if ":" in ip_or_mac:
+            # Unblock MAC address
+            subprocess.run(["iptables", "-D", "HONEYPOT_INPUT", "-m", "mac", "--mac-source", ip_or_mac, "-j", "DROP"], capture_output=True)
+        else:
+            # Unblock IP address
+            subprocess.run(["iptables", "-D", "HONEYPOT_INPUT", "-s", ip_or_mac, "-j", "DROP"], capture_output=True)
+    except Exception as e:
+        logger.warning(f"Could not remove firewall rule for {ip_or_mac}: {e}")
+

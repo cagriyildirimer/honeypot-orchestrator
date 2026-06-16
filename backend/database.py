@@ -30,5 +30,6 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     # Optional: creates all tables based on Base metadata
     # Useful for simple deployments without Alembic migrations
+    import models  # Register models to Base.metadata to prevent circular imports
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

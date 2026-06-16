@@ -63,11 +63,24 @@ class HTTPHoneypot(BaseHoneypotService):
             login_error = False
 
             if method == "POST":
-                from urllib.parse import parse_qs
-                parsed = parse_qs(body_payload.decode("utf-8", errors="replace"))
-                username = parsed.get("username", [""])[0].strip()
-                password = parsed.get("password", [""])[0].strip()
-                domain = parsed.get("domain", [""])[0].strip()
+                # Try JSON first
+                parsed_json = {}
+                try:
+                    import json
+                    parsed_json = json.loads(body_payload.decode("utf-8", errors="replace"))
+                except Exception:
+                    pass
+
+                if isinstance(parsed_json, dict) and (parsed_json.get("username") or parsed_json.get("password")):
+                    username = str(parsed_json.get("username", "")).strip()
+                    password = str(parsed_json.get("password", "")).strip()
+                    domain = str(parsed_json.get("domain", "")).strip()
+                else:
+                    from urllib.parse import parse_qs
+                    parsed = parse_qs(body_payload.decode("utf-8", errors="replace"))
+                    username = parsed.get("username", [""])[0].strip()
+                    password = parsed.get("password", [""])[0].strip()
+                    domain = parsed.get("domain", [""])[0].strip()
 
                 if username or password:
                     login_error = True

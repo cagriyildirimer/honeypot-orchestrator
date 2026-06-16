@@ -1047,7 +1047,7 @@ def _build_dir_listing_payload() -> bytes:
     payload = b""
     for index, (name, size, is_dir) in enumerate(entries):
         encoded_name = name.encode("utf-16le")
-        entry_size = 64 + len(encoded_name)
+        entry_size = 60 + len(encoded_name)
         padding_needed = (8 - (entry_size % 8)) % 8
         next_offset = 0 if index == len(entries) - 1 else entry_size + padding_needed
         
