@@ -883,7 +883,7 @@ class WebDashboard:
         if ip_totals:
             top_ip = max(ip_totals, key=ip_totals.get)
             top_mac = resolve_mac(top_ip)
-            top_ip_blocked = is_blacklisted(top_ip)
+            top_ip_blocked = await is_blacklisted(top_ip)
             # GeoIP lookup for map markers
             try:
                 geo_data = bulk_lookup(list(ip_totals.keys())[:200])

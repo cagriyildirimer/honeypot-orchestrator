@@ -30,6 +30,19 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     # Optional: creates all tables based on Base metadata
     # Useful for simple deployments without Alembic migrations
+    import asyncio
     import models  # Register models to Base.metadata to prevent circular imports
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    
+    max_retries = 15
+    retry_delay = 2
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            break
+        except Exception as e:
+            if attempt == max_retries:
+                print(f"Database initialization failed after {max_retries} attempts: {e}")
+                raise
+            print(f"Database connection failed (attempt {attempt}/{max_retries}), retrying in {retry_delay}s: {e}")
+            await asyncio.sleep(retry_delay)
