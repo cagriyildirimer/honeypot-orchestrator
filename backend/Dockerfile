@@ -20,11 +20,8 @@ RUN mkdir -p /app/logs && chown -R honeypot:honeypot /app
 # Run as root to allow writing to namespaced /proc/sys/net/ipv4/* settings
 # USER honeypot
 
-EXPOSE 8000 80 8080 21 22 23 53 135 139 389 445 636 1433 3389 1445
+EXPOSE 8000 80 8080 21 22 23 53 135 139 389 445 636 1433 3389 1445 2222 2223 2121 2323 1053 5355/udp 137/udp
 
 VOLUME ["/app/logs"]
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()"
 
 CMD ["python", "-m", "cli", "--config", "config.yaml"]

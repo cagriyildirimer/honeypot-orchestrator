@@ -6,9 +6,11 @@
     <title>Honeypot Director Access</title>
     <script>
       try {
-        document.documentElement.dataset.theme = localStorage.getItem("honeypot-director-theme") === "dark" ? "dark" : "light";
+        var savedTheme = localStorage.getItem("honeypot-director-theme");
+        var themes = ["vision", "nebula", "aurora", "emerald", "sunset", "slate"];
+        document.documentElement.dataset.theme = themes.indexOf(savedTheme) >= 0 ? savedTheme : "vision";
       } catch (error) {
-        document.documentElement.dataset.theme = "light";
+        document.documentElement.dataset.theme = "vision";
       }
     </script>
     <link rel="stylesheet" href="/src/styles.css">

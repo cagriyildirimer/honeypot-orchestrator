@@ -17,7 +17,7 @@ export function LiveActivityPage(props) {
         // Avoid noise, show login_attempt, command, queries, etc.
         return e.event_type !== "service_started" && e.event_type !== "service_stopped";
       });
-      setEvents(securityEvents);
+      setEvents(securityEvents.reverse());
     }
     setLoading(false);
   }

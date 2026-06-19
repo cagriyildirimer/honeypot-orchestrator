@@ -93,7 +93,7 @@ class Orchestrator:
 
         # Güvenlik duvarı kurallarını temizler.
         if self.mode in ("all", "daemon", "system"):
-            from net_tuner import cleanup_firewall
+            from system.net_tuner import cleanup_firewall
             cleanup_firewall()
             self.packet_mangler.stop()
 

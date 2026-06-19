@@ -7,3 +7,4 @@ cffi
 sqlalchemy
 asyncpg
 alembic
+aiosqlite

@@ -2,3 +2,14 @@ __pycache__/
 *.py[cod]
 logs/*.jsonl
 logs/*.json
+
+# Environment variables
+.env
+
+# Databases
+*.db
+logs/honeypot.db
+
+# Frontend
+node_modules/
+dist/

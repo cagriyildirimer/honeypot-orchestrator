@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Text, Boolean
 from database.database import Base
 
@@ -6,7 +6,7 @@ class Event(Base):
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, index=True)
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     service = Column(String, index=True)
     event_type = Column(String, index=True)
     src_ip = Column(String, index=True, nullable=True)
@@ -28,7 +28,7 @@ class Session(Base):
     session_id = Column(String, primary_key=True, index=True)
     username = Column(String, index=True, nullable=False)
     role = Column(String, default="viewer")
-    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class Whitelist(Base):
     __tablename__ = "whitelist"
@@ -36,7 +36,7 @@ class Whitelist(Base):
     id = Column(Integer, primary_key=True, index=True)
     ip = Column(String, unique=True, index=True, nullable=False)
     description = Column(String, nullable=True)
-    timestamp = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class Blacklist(Base):
     __tablename__ = "blacklist"
@@ -44,18 +44,18 @@ class Blacklist(Base):
     id = Column(Integer, primary_key=True, index=True)
     ip = Column(String, unique=True, index=True, nullable=False)
     description = Column(String, nullable=True)
-    timestamp = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class ThreatIntelCache(Base):
     __tablename__ = "threat_intel_cache"
 
     ip = Column(String, primary_key=True, index=True)
     data = Column(JSON, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class SystemSettings(Base):
     __tablename__ = "system_settings"
 
     setting_key = Column(String, primary_key=True, index=True)
     setting_value = Column(String, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

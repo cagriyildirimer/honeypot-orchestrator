@@ -9,10 +9,13 @@ from database.models import Event
 
 class DBEventLogger:
     def __init__(self, path: Any = None) -> None:
-        self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-        self._task = asyncio.create_task(self._process_queue())
+        self.queue: asyncio.Queue[dict[str, Any]] | None = None
+        self._task: asyncio.Task | None = None
 
     async def log(self, event: dict[str, Any]) -> None:
+        if self.queue is None:
+            self.queue = asyncio.Queue()
+            self._task = asyncio.create_task(self._process_queue())
         await self.queue.put(event)
 
     async def _process_queue(self) -> None:
