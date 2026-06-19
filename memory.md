@@ -14,6 +14,8 @@
 - **Phase 8 (Adım 2):** PostgreSQL Veritabanı Migrasyonu — Dosya tabanlı mimariden PostgreSQL'e geçiş, SQL tablolarının oluşturulması (Events, Sessions, Users, ThreatIntelCache) ve veri taşıma betiği.
 - **Phase 10:** Mimari Sadeleştirme, Teknik Borç ve Frontend Split — Arka plan dizin yapısı katmanlara (`api/`, `core/`, `database/`, `services/`, `system/`) ayrıldı, veritabanı sorguları repository katmanına taşındı. `server.py` temizlenerek router-handler yapısına geçildi. 3000+ satırlık devasa `app-react.js` dosyası modüler ES bileşenlerine bölündü, eski kodlar silindi. Dashboard 3D Globe haritasının genişleme/taşma (resize loop) CSS bugı giderildi. `start-lan.sh` betiğindeki decoy konteyner adı uyuşmazlığı çözüldü.
 - **Attacker Origins Paneli Taşma & Sidebar Üzerine Gelme Bugı Düzeltildi:** Masaüstü modunda `.sidebar`'a `z-index: 99;` eklenerek panellerin üzerine binmesi engellendi. `.geo-map-panel` (harita paneli) üzerindeki beyaz parlama (shine effect) WebGL uyumluluğu nedeniyle devredışı bırakıldı (`display: none !important;`) ve `isolation: isolate;` eklenerek tarayıcılardaki taşma ve scrollbar tetikleme hatası tamamen çözüldü.
+- **3D Harita Durumu:** Kullanıcı tercihi doğrultusunda harita, topoğrafya/bump map ve varsayılan sürekli auto-rotate özellikleri aktif olacak şekilde orijinal ve kararlı varsayılan haline geri döndürüldü.
+
 
 
 ---
