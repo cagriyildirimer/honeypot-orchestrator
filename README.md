@@ -1,261 +1,89 @@
-# Honeypot Orchestrator
+# Honeypot Director (formerly Orchestrator)
 
-Profil tabanlı, lab odaklı bir honeypot orkestratörü. Uygulama tek Python prosesi içinde sahte servis listener'larını yönetir, olayları JSONL olarak toplar ve dahili web panelinden aktif profili değiştirmenizi sağlar.
+Profil tabanlı, modüler ve lab odaklı bir honeypot yönetim sistemi. Bu sistem, modern mikroservis mimarisiyle tasarlanmış olup sahte servis listener'larını yönetir, ağ tabanlı (TCP/IP) parmak izi taklidi yapar ve siber olayları PostgreSQL üzerinde toplayarak gelişmiş bir Threat Intelligence (Tehdit İstihbaratı) analizi sunar.
 
-Bu proje gerçek servis, exploit veya saldırı aracı değildir. Amaç kontrollü bir savunma/lab ortamında tarama, parmak izi alma ve kimlik denemesi gibi davranışları gözlemlemektir.
+Bu proje gerçek servis, exploit veya saldırı aracı değildir. Amaç kontrollü bir savunma/lab ortamında tarama, parmak izi alma ve kimlik denemesi gibi saldırgan davranışlarını gözlemlemektir.
 
-## Mimari
+## 🏗️ Mimari (Mikroservisler)
 
-Proje küçük ve bağımlılıksız tutulmuştur:
+Proje tamamen Dockerize edilmiş ve görev odaklı mikroservislere ayrılmıştır:
 
-- `honeypot_orchestrator/config.py`: `config.yaml` dosyasını ve `HONEYPOT_*` environment override'larını yükler.
-- `honeypot_orchestrator/profiles.py`: Hazır host profillerini tanımlar.
-- `honeypot_orchestrator/services/`: Decoy servis implementasyonları ve `SERVICE_REGISTRY`.
-- `honeypot_orchestrator/orchestrator.py`: Profil uygulama, servis başlatma/durdurma ve rollback mantığını yönetir.
-- `honeypot_orchestrator/web/server.py`: Minimal asyncio HTTP sunucusu, dashboard, auth, yetkilendirme ve JSON API katmanı.
-- `honeypot_orchestrator/web/static/app-react.js`: Harici build adımı gerektirmeyen React tabanlı tek sayfa panel.
-- `honeypot_orchestrator/net_tuner.py`: İşletim sistemi ağ kimliğini taklit etmek için sysctl TTL ve TCP zaman damgası parametrelerini düzenler.
-- `honeypot_orchestrator/defense.py`: Kara liste/beyaz liste yönetimini, MAC adresi çözümlemeyi ve otomatik IP engellemeyi kontrol eder.
+- **`frontend`**: React tabanlı modern Single Page Application (SPA). Nginx üzerinden sunulur ve kullanıcıya dinamik 3D harita, istatistikler ve analiz sayfaları sunar.
+- **`honeypot-web`**: FastAPI tabanlı arka plan (backend) sunucusu. Frontend'in API isteklerini karşılar, kimlik doğrulama, session yönetimi ve veritabanı okuma işlemlerini yapar. Yetkisiz (non-root) çalışır.
+- **`honeypot-decoy`**: Esas tuzak servislerini (HTTP, SSH, FTP, SMB, RDP vb.) başlatan ve yöneten modüldür. `SERVICE_REGISTRY` yapısı ile eklenti (plug-and-play) mantığında çalışır.
+- **`honeypot-system`**: İşletim sisteminin ağ kimliğini (sysctl TTL, TCP Window, SACK) ve dinamik güvenlik duvarı (iptables) kurallarını yönetir. Root yetkileri (`NET_ADMIN`) ile çalışır.
+- **`honeypot-ti`**: Threat Intelligence (Tehdit İstihbaratı) işçisidir. Belirli aralıklarla veritabanındaki yeni IP adreslerini tarar; AbuseIPDB, GreyNoise, Tor Exit Node ve GeoIP veritabanları üzerinden saldırgan IP'lerini zenginleştirir.
+- **`postgres`**: Sistem state'ini, olay (event) loglarını, kullanıcı ayarlarını ve TI önbelleğini saklayan merkezi veritabanı sunucusudur.
 
-Başlangıçta `empty` profil uygulanır; bu profil honeypot listener açmaz. Listener'lar dashboard üzerinden `linux_server` veya `windows_server` profili seçildiğinde başlar.
+## 🛡️ Profiller ve Yüzeyler
 
-## Profiller
+- `empty`: Honeypot listener açılmaz, sadece altyapı çalışır.
+- `linux_server`: HTTP, SSH, FTP ve Telnet yüzeyi sunar. TCP TTL değeri 64 olarak ayarlanır.
+- `windows_server`: HTTP, DNS, NetBIOS, LDAP, LDAPS, MSSQL, RDP, SMB, LLMNR, NBTNS ve SSH yüzeyi sunar. TCP TTL değeri 128 yapılır, TCP pencereleri Windows Server mimarisine benzetilir.
 
-- `empty`: Sadece web paneli çalışır, honeypot listener açılmaz.
-- `linux_server`: HTTP, SSH, FTP ve Telnet yüzeyi sunar.
-- `windows_server`: HTTP, DNS, NetBIOS, LDAP, LDAPS, MSSQL, RDP, SMB, LLMNR, NBTNS ve SSH yüzeyi sunar.
+Profil değişimi panelden tek tuşla atomik olarak yapılır. Bir servis başlatılamazsa orkestratör önceki profil durumuna güvenli şekilde geri döner (rollback).
 
-Profil değişimi atomik yapılmaya çalışılır. Bir servis başlatılamazsa orchestrator önceki profil durumuna geri dönmeye çalışır.
+## 🕸️ Ağ Ayarları ve Kimlik Taklidi (Network Tuning)
 
-## Ağ Ayarları ve Kimlik Taklidi (Network Tuning)
+Orkestratör, uygulanan profile göre konteynerin ağ ad alanında (network namespace) çekirdek parametrelerini değiştirerek TCP/IP parmak izi (fingerprint) taklidi gerçekleştirir:
+- **Windows Emülasyonu**: Varsayılan TTL değeri `128` yapılır, TCP zaman damgaları kapatılır, SACK ve Windows tarzı TCP tampon boyutları ayarlanarak Nmap gibi gelişmiş tarayıcıların "OS Detection" yetenekleri yanıltılır.
+- **Dinamik Güvenlik Duvarı (iptables)**: Sadece açık olması gereken honeypot portlarına izin verilir. Diğer tüm bağlantılar ve ICMP/Ping provaları sessizce DROP edilerek açık olmayan portlar hakkında saldırgana bilgi verilmez.
+- **Deep OS Fake (NFQUEUE)**: TCP Seçenek sıralaması (TCP Options) ve IP ID üretimi, arka plandaki `packet_mangler` servisi ile paket bazında modifiye edilerek Linux çekirdeğinin statik yapısı tamamen maskelenir.
 
-Orkestratör, uygulanan profile göre konteynerin ağ ad alanında (network namespace) sysctl parametrelerini değiştirerek TCP/IP parmak izi (fingerprint) taklidi gerçekleştirir:
-- **`windows_server` profili**: Varsayılan TTL değeri `128` yapılır, TCP zaman damgaları kapatılır (`tcp_timestamps=0`), TCP pencere ölçekleme (`tcp_window_scaling=1`) ve SACK (`tcp_sack=1`) aktif edilir, ve TCP alma/gönderme tampon boyutlarının (`tcp_rmem` ve `tcp_wmem`) başlangıç varsayılan değeri `65536` yapılarak Windows tarzı bir TCP pencere yapısı emüle edilir.
-- **`linux_server` veya `empty` profili**: Varsayılan TTL değeri `64` yapılır, TCP zaman damgaları açılır (`tcp_timestamps=1`), TCP pencere ölçekleme (`tcp_window_scaling=1`) ve SACK (`tcp_sack=1`) aktif edilir ve standart Linux tampon sınırları geri yüklenir.
+## 🚨 Güvenlik & Otomatik Engelleme (Defense)
 
-**Dinamik Güvenlik Duvarı (iptables)**:
-Orkestratör, uygulanan profile göre konteyner içinde dinamik güvenlik duvarı kuralları tanımlar:
-- `HONEYPOT_INPUT` adında özel bir zincir oluşturulur ve `INPUT` zincirinin en başına yerleştirilir.
-- Sadece localhost (`lo`), mevcut açık bağlantılar (`ESTABLISHED,RELATED`), aktif profilin açık honeypot portları ve web arayüzü portuna (8000) gelen isteklere izin verilir (`ACCEPT`).
-- Diğer tüm kapalı port TCP/UDP istekleri ve ICMP (ping) tarama paketleri sessizce düşürülür (`DROP`). Nmap'in OS tespitini yanıltmak için T2-T7 probları (geçersiz TCP bayraklarına sahip paketler) önceden filtrelenir.
-- Uygulama kapatılırken (`stop` anında) eklenen kurallar tamamen silinir ve temizlenir (`cleanup_firewall`).
+- **Otomatik IP Engelleme**: Güvenli listede olmayan dış IP'ler belirli bir limitten fazla bağlantı denemesi (brute-force/scan) yaptığında otomatik kara listeye (blacklist) alınır.
+- **Pre-Connection Filtresi**: TCP tuzakları, gelen bağlantıları socket seviyesinde filtreler; kara listedeki IP'ler direkt düşürülür.
+- **Web Paneli Koruması**: Dashboard girişi PBKDF2 ile şifrelenmiştir ve brute-force korumalıdır (5 hata / 5 dakika limit). Oturumlar JWT/Cookie bazlı olarak yönetilir.
 
-**Derin İşletim Sistemi Taklidi (Packet Mangling)**:
-- Nmap gibi gelişmiş tarayıcılar, işletim sistemini SYN-ACK paketlerindeki TCP Seçeneklerinin (TCP Options) sıralamasına ve IP ID üretim yöntemine bakarak anlar.
-- Orkestratör `windows_server` profilinde iken, konteyner içindeki tüm SYN-ACK paketleri `NFQUEUE` (Netfilter Queue) aracılığıyla özel bir arka plan servisine (`packet_mangler.py`) aktarılır.
-- Bu servis, Scapy kullanarak TCP Seçenekleri sırasını Windows Server mimarisine uygun hale getirir (örn: `[MSS, NOP, WScale, SAckOK]`), IP ID değerini sıralı hale getirir ve TCP Pencere boyutunu sahteler.
-- Bu işlem sayesinde Linux çekirdeğinin statik yapısı tamamen gizlenir ve dışarıya %100 Windows Server profili sunulur.
+## 📊 Dashboard ve Arayüz
 
-Bu sayede saldırganların `ping` veya `nmap` taramalarında işletim sistemini doğru tahmin etmeleri (OS fingerprinting) kusursuz bir şekilde simüle edilir. Konteynerin bu ayarları uygulayabilmesi için `cap_add: [NET_ADMIN]` yetkisine sahip olması ve imajında `libnetfilter-queue-dev` kurulu olması gerekir. Yetki yoksa orkestratör hata vermez, bir uyarı logu oluşturarak çalışmaya devam eder.
+Sistemi başlattıktan sonra panele erişim sağlayabilirsiniz. (Docker port map ayarlarına göre port değişebilir, varsayılan `80` veya `8080`).
 
-## Güvenlik & Otomatik Engelleme (Defense)
-
-Sistem, orkestratör seviyesinde dinamik bir savunma mekanizması sunar:
-- **Beyaz/Kara Liste (`logs/whitelist.json`, `logs/blacklist.json`)**: Engellenen ve izin verilen IP adresleri JSON dosyalarında tutulur.
-- **MAC Adresi Çözümleme**: Saldırganın IP adresinden yerel ağdaki MAC adresi dynamic olarak çözümlenir (`arp -a` veya `arp -n` komutları yardımıyla). Blacklist kontrolünde MAC eşleşmesi de dikkate alınır.
-- **Otomatik IP Engelleme**: Güvenli listede (whitelist) yer almayan bir istemci IP adresi honeypot servislerine 100 veya daha fazla bağlantı denemesi (şüpheli etkinlik) yaptığında otomatik olarak kara listeye eklenir.
-- **Pre-Connection Filtresi**: TCP decoys, gelen bağlantıları henüz protokol işlemeden önce filtreler; kara listedeki bir IP veya MAC adresinden gelen bağlantılar derhal sonlandırılır.
-
-## Dashboard ve Yetki Yönetimi (RBAC)
-
-Varsayılan adres:
-
-```text
-http://127.0.0.1:8000
-```
-
-Varsayılan giriş bilgileri:
-
+Varsayılan giriş bilgileri (`.env` üzerinden değiştirilebilir):
 ```text
 Username: admin
 Password: admin123
 ```
 
-Kullanıcı yetkilendirmesi iki farklı role ayrılmıştır:
-- **`admin` rolü**: Aktif profili değiştirebilir, kullanıcıları yönetebilir (kullanıcı ekleme, silme, rol/şifre değiştirme), kara liste/beyaz liste düzenleyebilir, logları temizleyebilir ve dışa aktarabilir.
-- **`viewer` rolü**: Panelde sadece canlı olay akışını (`/live`), sistem genel durumunu ve log özetlerini izleyebilir. Herhangi bir yapılandırma değişikliği yapamaz.
+Kullanıcı yetkileri (RBAC):
+- **`admin`**: Profili değiştirebilir, sistem ayarlarını yönetebilir, kara/beyaz listeyi düzenleyebilir.
+- **`viewer`**: Sadece olay akışını, 3D haritayı, analiz (TI) sayfasını ve logları izleyebilir.
 
-Oturumlar sunucu tarafında bellek üzerinde saklanan session cookie'leri ile doğrulanır. Kullanıcı veri tabanı `logs/web_users.json` yolunda şifreli/düz metin olarak saklanır.
+## 🚀 Başlangıç
 
-## Lokal Çalıştırma
-
+Sistem tamamen Docker tabanlıdır. Lokalinizde Python ortamı kurmanıza gerek yoktur.
+Başlatmak için:
 ```bash
-py -m honeypot_orchestrator.cli --config config.yaml
+docker-compose up -d --build
+```
+Durdurmak için:
+```bash
+docker-compose down
 ```
 
-Linux/macOS veya PATH içinde `python` doğru kuruluysa:
+Tüm sistem verisi Docker volume (`pgdata`) aracılığıyla korunur.
 
+## 🌐 Ubuntu LAN Modu (Gerçek Ağda Yayınlama)
+
+Sistemi ev veya ofis ağınızda gerçek bir cihazmış gibi yayınlamak isterseniz `macvlan` ağı kullanan LAN modunu kullanabilirsiniz:
 ```bash
-python -m honeypot_orchestrator.cli --config config.yaml
+scripts/start-lan.sh --ip 192.168.1.240
+```
+Bu bash betiği, Linux ana makinenizin alt ağını ve varsayılan geçidini otomatik tespit ederek honeypot'u doğrudan fiziksel modeminize bağlar. (Host makineniz üzerinden macvlan IP'sine erişemezsiniz, ağdaki başka bir bilgisayardan test etmeniz gerekir).
+
+## 🔧 Konfigürasyon ve `.env`
+
+Uygulamanın varsayılan parametreleri `config.yaml` dosyasında bulunur, ancak ortam değişkenleri önceliklidir.
+Ana proje dizininde bir `.env` dosyası oluşturarak şu ayarları yapabilirsiniz:
+```dotenv
+HONEYPOT_AUTH_USERNAME=admin
+HONEYPOT_AUTH_PASSWORD=GuvenliSifre123
+HONEYPOT_SECRET_KEY=super_gizli_sifreleme_anahtari
+HONEYPOT_TI_ABUSEIPDB_KEY=abuse_ipdb_api_key_buraya
+HONEYPOT_TI_GREYNOISE_KEY=greynoise_api_key_buraya
 ```
 
-Varsayılan lab portları:
+## ⚠️ Güvenlik Sınırı
 
-- web paneli: `8000`
-- HTTP Linux: `8080`
-- HTTP Windows: `80`
-- SSH Linux: `2222`
-- SSH Windows: `2223`
-- FTP: `2121`
-- Telnet: `2323`
-- DNS (TCP): `1053`
-- NetBIOS: `139`
-- NBTNS (NetBIOS Name Service - UDP): `137`
-- LLMNR (UDP): `5355`
-- LDAP: `389`
-- LDAPS: `636`
-- MSSQL: `1433`
-- RDP: `3389`
-- SMB: `1445`
-
-## Docker
-
-Host port publish modunda çalıştırma:
-
-```bash
-docker compose up -d --build
-```
-
-Durdurma:
-
-```bash
-docker compose down
-```
-
-Container içinde log yolu varsayılan olarak `/app/logs/events.jsonl` olur ve `honeypot_logs` volume'una yazılır.
-
-## Ubuntu LAN Modu
-
-LAN modu `macvlan` ağ sürücüsünü kullanır. Container, ev veya ofis ağınızdaki herhangi bir fiziksel bilgisayar gibi doğrudan modeme/anahtara bağlanarak kendi bağımsız LAN IP adresini alır. Böylece tüm honeypot servisleri kendi gerçek standart portlarında (HTTP 80, SSH 22, SMB 445 vb.) çalıştırılabilir.
-
-### Otomatik Başlatma Betiği (`scripts/start-lan.sh`)
-
-Sistemde LAN kurulumunu otomatikleştiren bir Bash betiği yer alır. Bu betik ağ kartını, alt ağı ve varsayılan geçidi otomatik tespit ederek macvlan ağını kurar.
-
-Kullanım parametreleri:
-
-- `--ip LAN_IP`: Konteynere atanacak boş ve statik LAN IP adresi (örn. `192.168.1.240`). Belirtilmezse, alt ağda ping yanıtı vermeyen boş bir yüksek IP adresi önerilir.
-- `--parent IFACE`: macvlan ağının bağlanacağı fiziksel ağ arayüzü (örn. `eth0` veya `enp3s0`). Belirtilmezse varsayılan ağ geçidine sahip olan arayüz otomatik seçilir.
-- `--subnet CIDR`: Yerel ağın CIDR biçimindeki tanımı (örn. `192.168.1.0/24`).
-- `--gateway IP`: Ağ geçidi IP adresi (örn. `192.168.1.1`).
-- `--network NAME`: Oluşturulacak docker macvlan ağının adı. Varsayılan: `honeypot_lan_net`.
-- `--detached` veya `-d`: Konteyneri arka planda (detached) başlatır.
-- `--recreate-network`: Mevcut macvlan ağını silip sıfırdan yeniden oluşturur.
-
-Örnek çalıştırma:
-
-```bash
-# IP adresini otomatik seçtirerek etkileşimli başlatma
-scripts/start-lan.sh
-
-# Belirli bir statik IP ile arka planda başlatma
-scripts/start-lan.sh --ip 192.168.1.240 -d
-
-# Arayüz ve ağ detaylarını elle belirterek ağ ağını yeniden oluşturma
-scripts/start-lan.sh --ip 192.168.1.240 --parent eth0 --subnet 192.168.1.0/24 --gateway 192.168.1.1 --recreate-network -d
-```
-
-### Manuel LAN Yayını
-
-Otomatik betik yerine adımları manuel işletmek isterseniz:
-
-```bash
-docker compose -f docker-compose.lan.yml up -d --build
-```
-
-**Notlar:**
-- `HONEYPOT_LAN_IP` yerel ağda IP çakışması yaratmayacak, DHCP havuzunun dışında rezerve edilmiş bir IP olmalıdır.
-- macvlan güvenlik sınırları gereği, ana makinenin (host) kendisi doğrudan konteynerin macvlan IP'sine erişemez. Testleri ağdaki başka bir bilgisayardan veya cihazdan yapmanız gerekir.
-- LAN modunda servis portları `.env` dosyasına yazılan değerler doğrultusunda standart portlara (HTTP `80`, SSH `22`, FTP `21`, Telnet `23`, DNS `53`, SMB `445` vb.) çekilir.
-
-## Konfigürasyon
-
-Ana dosya `config.yaml`.
-
-Önemli alanlar:
-
-- `profile`
-- `web.host`
-- `web.port`
-- `auth.username`
-- `auth.password`
-- `logging.path`
-- `services.<name>.enabled`
-- `services.<name>.host`
-- `services.<name>.port`
-
-Sık kullanılan environment override'ları:
-
-- `HONEYPOT_PROFILE`
-- `HONEYPOT_HOST`
-- `HONEYPOT_WEB_HOST`
-- `HONEYPOT_WEB_PORT`
-- `HONEYPOT_AUTH_USERNAME`
-- `HONEYPOT_AUTH_PASSWORD`
-- `HONEYPOT_LOG_PATH`
-- `HONEYPOT_SERVICE_HTTP_PORT`
-- `HONEYPOT_SERVICE_SMB_PORT`
-- `HONEYPOT_SERVICE_MSSQL_PORT`
-
-## Loglama
-
-Olaylar JSONL formatında yazılır.
-
-Varsayılan yollar:
-
-- Lokal: `logs/events.jsonl`
-- Container: `/app/logs/events.jsonl`
-
-Tipik alanlar:
-
-- `timestamp`
-- `service`
-- `event_type`
-- `src_ip`
-- `src_port`
-- `summary`
-
-Protokole göre ek alanlar:
-
-- `username`
-- `password`
-- `domain`
-- `workstation`
-- `user_agent`
-- `query_name`
-- `query_type`
-
-## Doğrulama
-
-Python bytecode derleme:
-
-```bash
-py -m compileall honeypot_orchestrator
-```
-
-Unit testler:
-
-```bash
-py -m unittest discover
-```
-
-Docker build:
-
-```bash
-docker compose build
-```
-
-## Güvenlik Sınırı
-
-Bu proje yalnızca savunma amaçlı lab kullanımı içindir.
-
-Amaçlamadığı şeyler:
-
-- gerçek exploit çalıştırma
-- malware davranışı
-- kalıcı erişim
-- otomatik saldırı zinciri
-- yetki yükseltme
-- yatay hareket
-
-Varsayılan parolaları gerçek ağda kullanmayın. LAN modunda servisleri görünür hale getirmeden önce hedef ağın size ait ve kontrollü olduğundan emin olun.
+Bu proje **yalnızca savunma ve analiz amaçlı lab kullanımı** içindir. Sistemin tasarımı gerçek ağlarda bir sızma denemesi (exploit execution) barındırmaz. Kurulumu yaparken zayıf veya varsayılan şifreleri internete açık ortamlarda kullanmaktan kaçının.
