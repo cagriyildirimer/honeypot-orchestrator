@@ -6,7 +6,7 @@ from collections import Counter
 from http import HTTPStatus
 from api.router import router
 
-from web.server import (
+from web.utils import (
     _request_display_host,
     _safe_int,
     read_recent_events,

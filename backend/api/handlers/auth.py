@@ -6,7 +6,7 @@ from http import HTTPStatus
 from api.router import router
 
 # Let's import the helper functions from web.server to avoid duplicate logic
-from web.server import (
+from web.utils import (
     _verify_password,
     _hash_password,
     _normalize_role,

@@ -1,0 +1,10 @@
+const h = React.createElement;
+const { useEffect, useState, useRef, useMemo } = React;
+import { target, rect, x, y, midX, midY, rotateX, rotateY, target, NAV_ITEMS, SETTINGS_ITEMS, STANDARD_PORTS, DONUT_COLORS, RISK_EVENT_WEIGHTS, RISK_IGNORED_EVENT_TYPES, ROLE_LABELS, TIMELINE_RANGES, APPEARANCE_THEMES, pathToPage, isSettingsPage, parseEventTime, normalized, date, classifyRisk, getRiskWeight, eventType, isRiskRelevantEvent, eventType, service, summarizeRangeLabel, buildSuspiciousOverview, now, windowMs, start, hourTotals, serviceTotals, ipTotals, date, time, hourStart, hourKey, service, ip, topHour, topService, topIp, buildRiskModel, now, windowMs, start, bucketCount, bucketSizeMs, buckets, serviceTotals, typeTotals, date, time, service, eventType, weight, recencyBoost, weightedValue, bucketIndex, bucket, sortedServices, topServices, strongestBucket, burstScore, diversityScore, concentrationScore, baseScore, score, band, hottestService, timelineRangeConfig, formatTimelineBucketLabel, alignTimelineWindowStart, base, bucketMs, bucketHours, aligned, aligned, buildTimelineBuckets, range, bucketCount, windowMs, bucketMs, now, start, buckets, date, time, index, smoothLinePath, slopes, path, current, next, dx, minY, maxY, controlOneY, controlTwoY, controlOne, controlTwo, buildTimelinePoints, width, height, padding, plotWidth, plotHeight, divisor, maxValue, buildTimelineAreaPath, baseline, timelineHitBox, start, end, formatBytes, value, standardPortNote, baseName, standardPort, servicePortTone, baseName, standardPort, filterLogEvents, search, copyText, textarea, copied, usePolling, run, timer } from '../utils.js';
+import { Skeleton, PageSkeleton, NavLink, AnimatedCounter, MetricCard, AppLayout, EventDrawer, GeoWorldMap } from './Core.js';
+import { DashboardPage } from './Dashboard.js';
+import { LiveActivityPage } from './Live.js';
+import { ProfilesPage } from './Profiles.js';
+import { LogsPage } from './Logs.js';
+import { AppRouter } from './AppRouter.js';
+

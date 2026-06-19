@@ -3,7 +3,7 @@ from typing import Any
 from http import HTTPStatus
 from api.router import router
 
-from web.server import _decode_json_body
+from web.utils import _decode_json_body
 from defense import (
     get_whitelist,
     get_blacklist,

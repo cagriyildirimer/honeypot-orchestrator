@@ -3,7 +3,7 @@ from typing import Any
 from http import HTTPStatus
 from api.router import router
 
-from web.server import _decode_json_body
+from web.utils import _decode_json_body
 
 @router.post("/api/services/toggle")
 async def handle_services_toggle(self, request: dict[str, Any]) -> dict[str, Any]:
