@@ -12,7 +12,7 @@
 - **Phase 8 (Adım 1):** Mikroservis İzolasyonu — Backend servisi `honeypot-daemon` (tuzaklar) ve `honeypot-web` (API) olarak ikiye bölündü. Frontend portu 80'e alındı. Docker compose ağ yapılandırmaları ayrıldı.
 
 - **Phase 8 (Adım 2):** PostgreSQL Veritabanı Migrasyonu — Dosya tabanlı mimariden PostgreSQL'e geçiş, SQL tablolarının oluşturulması (Events, Sessions, Users, ThreatIntelCache) ve veri taşıma betiği.
-- **Phase 10 (Part 1):** Mimari Sadeleştirme ve Router-Handler Refactoring — Arka plan dizin yapısı katmanlara (`api/`, `core/`, `database/`, `services/`, `system/`) ayrıldı. Veritabanı sorguları `database/repository.py` katmanında toplandı. Sıfır bağımlılıklı HTTP sunucusu asenkron `router.py` ve modüler `api/handlers/*` (auth, blacklist, services, overview) yapısına geçirilerek `server.py` temizlendi.
+- **Phase 10:** Mimari Sadeleştirme, Teknik Borç ve Frontend Split — Arka plan dizin yapısı katmanlara (`api/`, `core/`, `database/`, `services/`, `system/`) ayrıldı, veritabanı sorguları repository katmanına taşındı. `server.py` temizlenerek router-handler yapısına geçildi. 3000+ satırlık devasa `app-react.js` dosyası modüler ES bileşenlerine bölündü, eski kodlar silindi. Dashboard 3D Globe haritasının genişleme/taşma (resize loop) CSS bugı giderildi. `start-lan.sh` betiğindeki decoy konteyner adı uyuşmazlığı çözüldü.
 
 ---
 
