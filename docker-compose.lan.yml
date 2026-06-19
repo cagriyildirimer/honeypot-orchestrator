@@ -52,16 +52,12 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
-  honeypot-daemon:
+  honeypot-decoy:
     build: ./backend
-    container_name: honeypot-daemon-lan
+    container_name: honeypot-decoy-lan
     depends_on:
       - postgres
-    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "daemon"]
-    cap_add:
-      - NET_BIND_SERVICE
-      - NET_ADMIN
-    privileged: true
+    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "decoy"]
     environment:
       <<: *backend-env
     volumes:
@@ -72,9 +68,26 @@ services:
       default:
     restart: unless-stopped
 
+  honeypot-system:
+    build: ./backend
+    container_name: honeypot-system-lan
+    depends_on:
+      - postgres
+    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "system"]
+    network_mode: "service:honeypot-decoy"
+    cap_add:
+      - NET_ADMIN
+    privileged: true
+    environment:
+      <<: *backend-env
+    volumes:
+      - honeypot_logs:/app/logs
+    restart: unless-stopped
+
   honeypot-web:
     build: ./backend
     container_name: honeypot-web-lan
+    user: "honeypot:honeypot"
     depends_on:
       - postgres
     command: ["python", "cli.py", "--config", "config.yaml", "--mode", "web"]
@@ -89,6 +102,7 @@ services:
   honeypot-ti:
     build: ./backend
     container_name: honeypot-ti-lan
+    user: "honeypot:honeypot"
     depends_on:
       - postgres
     command: ["python", "cli.py", "--config", "config.yaml", "--mode", "ti"]

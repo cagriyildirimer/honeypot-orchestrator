@@ -36,15 +36,12 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
-  honeypot-daemon:
+  honeypot-decoy:
     build: ./backend
-    container_name: honeypot-daemon
+    container_name: honeypot-decoy
     depends_on:
       - postgres
-    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "daemon"]
-    cap_add:
-      - NET_ADMIN
-    privileged: true
+    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "decoy"]
     ports:
       - "${HONEYPOT_HTTP_WINDOWS_PORT:-8080}:80"
       - "${HONEYPOT_SSH_WINDOWS_PORT:-2223}:2223"
@@ -67,9 +64,26 @@ services:
       - honeypot_logs:/app/logs
     restart: unless-stopped
 
+  honeypot-system:
+    build: ./backend
+    container_name: honeypot-system
+    depends_on:
+      - postgres
+    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "system"]
+    network_mode: "service:honeypot-decoy"
+    cap_add:
+      - NET_ADMIN
+    privileged: true
+    environment:
+      <<: *backend-env
+    volumes:
+      - honeypot_logs:/app/logs
+    restart: unless-stopped
+
   honeypot-web:
     build: ./backend
     container_name: honeypot-web
+    user: "honeypot:honeypot"
     depends_on:
       - postgres
     command: ["python", "cli.py", "--config", "config.yaml", "--mode", "web"]
@@ -84,6 +98,7 @@ services:
   honeypot-ti:
     build: ./backend
     container_name: honeypot-ti
+    user: "honeypot:honeypot"
     depends_on:
       - postgres
     command: ["python", "cli.py", "--config", "config.yaml", "--mode", "ti"]

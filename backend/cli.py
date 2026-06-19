@@ -89,9 +89,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["all", "daemon", "web", "ti"],
+        choices=["all", "daemon", "web", "ti", "system", "decoy"],
         default="all",
-        help="Run mode: 'all' (default), 'daemon' (only traps), 'web' (only API), or 'ti' (threat intel worker).",
+        help="Run mode: 'all' (default), 'daemon', 'system' (controller only), 'decoy' (traps only), 'web' (API), or 'ti' (threat intel worker).",
     )
     args = parser.parse_args()
     # Asenkron run fonksiyonunu Python'un event loop'u icinde calistirir.

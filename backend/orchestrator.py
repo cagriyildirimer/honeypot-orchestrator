@@ -66,8 +66,9 @@ class Orchestrator:
         if self.mode in ("all", "web") and self.config.web.enabled:
             await self.web_dashboard.start()
 
-        if self.mode in ("all", "daemon"):
+        if self.mode in ("all", "daemon", "system"):
             self.packet_mangler.start()
+        if self.mode in ("all", "daemon", "system", "decoy"):
             await self._apply_profile(self.profile, emit_log=False)
             self._sync_task = asyncio.create_task(self._db_sync_loop())
 
@@ -91,7 +92,7 @@ class Orchestrator:
             self._sync_task = None
 
         # Güvenlik duvarı kurallarını temizler.
-        if self.mode in ("all", "daemon"):
+        if self.mode in ("all", "daemon", "system"):
             from net_tuner import cleanup_firewall
             cleanup_firewall()
             self.packet_mangler.stop()
@@ -110,7 +111,7 @@ class Orchestrator:
             await self.web_dashboard.stop()
 
         # Calisan servisler ters sirada kapatilir.
-        if self.mode in ("all", "daemon"):
+        if self.mode in ("all", "daemon", "decoy"):
             for service in reversed(list(self.services.values())):
                 await service.stop()
 
@@ -186,15 +187,16 @@ class Orchestrator:
             state.setdefault("service_overrides", {})[name] = True
             await _write_db_state(session, state)
 
-        if self.mode in ("all", "daemon"):
+        if self.mode in ("all", "daemon", "system", "decoy"):
             service = self.services[name]
-            if not service.running:
-                await service.start()
-                running = {n for n, s in self.services.items() if s.running}
-                await apply_profile_network_settings(
-                    self.profile.name, self.logger, self.services,
-                    running, self.config.web.port, self.config.web.enabled,
-                )
+            if not service.running or self.mode == "system":
+                if self.mode in ("all", "daemon", "decoy"):
+                    await service.start()
+                if self.mode in ("all", "daemon", "system"):
+                    # We have to fetch target_services from DB because system mode doesnt know running
+                    pass # We actually rely on DB sync loop for this. start_service API call just sets override in DB!
+                    # So we don't need to manually apply it here if we are web. If we are daemon/decoy/system, DB loop will pick it up.
+
                 await self.logger.log({
                     "service": "orchestrator",
                     "event_type": "service_started",
@@ -211,7 +213,7 @@ class Orchestrator:
             state.setdefault("service_overrides", {})[name] = False
             await _write_db_state(session, state)
 
-        if self.mode in ("all", "daemon"):
+        if self.mode in ("all", "daemon", "system", "decoy"):
             service = self.services[name]
             if service.running:
                 await service.stop()
@@ -275,44 +277,7 @@ class Orchestrator:
         return [service_name for service_name in profile.services if service_name in self.services]
 
 
-    async def start_service(self, name: str) -> bool:
-        if name not in self.services:
-            return False
-        service = self.services[name]
-        if service.running:
-            return True
-        running = {n for n, s in self.services.items() if s.running}
-        running.add(name)
-        await service.start()
-        await apply_profile_network_settings(
-            self.profile.name, self.logger, self.services,
-            running, self.config.web.port, self.config.web.enabled,
-        )
-        await self.logger.log({
-            "service": "orchestrator",
-            "event_type": "service_started",
-            "summary": f"Service {name} manually started.",
-        })
-        return True
 
-    async def stop_service(self, name: str) -> bool:
-        if name not in self.services:
-            return False
-        service = self.services[name]
-        if not service.running:
-            return True
-        await service.stop()
-        running = {n for n, s in self.services.items() if s.running}
-        await apply_profile_network_settings(
-            self.profile.name, self.logger, self.services,
-            running, self.config.web.port, self.config.web.enabled,
-        )
-        await self.logger.log({
-            "service": "orchestrator",
-            "event_type": "service_stopped",
-            "summary": f"Service {name} manually stopped.",
-        })
-        return True
 
     async def _apply_profile(self, profile: HoneypotProfile, *, emit_log: bool) -> None:
         previous_profile = self.profile
@@ -324,47 +289,50 @@ class Orchestrator:
         stopped_services: list[str] = []
 
         self.profile = profile
-        self.packet_mangler.set_profile(profile.name)
+        if self.mode in ("all", "daemon", "system"):
+            self.packet_mangler.set_profile(profile.name)
         self._sync_service_profiles(profile)
-        await apply_profile_network_settings(
-            profile.name,
-            self.logger,
-            self.services,
-            target_services,
-            self.config.web.port,
-            self.config.web.enabled,
-        )
-        try:
-            for service_name, service in self.services.items():
-                if service.running and service_name not in target_services:
-                    await service.stop()
-                    stopped_services.append(service_name)
-
-            for service_name in self._configured_profile_services(profile):
-                service = self.services.get(service_name)
-                if service is None or service.running:
-                    continue
-                try:
-                    await service.start()
-                    started_services.append(service_name)
-                except OSError as err:
-                    await self.logger.log(
-                        {
-                            "service": "orchestrator",
-                            "event_type": "service_bind_warning",
-                            "summary": f"Could not start {service_name} on port {service.port}: {err}",
-                            "error": str(err),
-                        }
-                    )
-                    print(f"Warning: Could not start {service_name} on port {service.port}: {err}")
-        except Exception:
-            await self._rollback_profile_change(
-                previous_profile=previous_profile,
-                previously_running=previously_running,
-                started_services=started_services,
-                stopped_services=stopped_services,
+        if self.mode in ("all", "daemon", "system"):
+            await apply_profile_network_settings(
+                profile.name,
+                self.logger,
+                self.services,
+                target_services,
+                self.config.web.port,
+                self.config.web.enabled,
             )
-            raise
+        if self.mode in ("all", "daemon", "decoy"):
+            try:
+                for service_name, service in self.services.items():
+                    if service.running and service_name not in target_services:
+                        await service.stop()
+                        stopped_services.append(service_name)
+
+                for service_name in self._configured_profile_services(profile):
+                    service = self.services.get(service_name)
+                    if service is None or service.running:
+                        continue
+                    try:
+                        await service.start()
+                        started_services.append(service_name)
+                    except OSError as err:
+                        await self.logger.log(
+                            {
+                                "service": "orchestrator",
+                                "event_type": "service_bind_warning",
+                                "summary": f"Could not start {service_name} on port {service.port}: {err}",
+                                "error": str(err),
+                            }
+                        )
+                        print(f"Warning: Could not start {service_name} on port {service.port}: {err}")
+            except Exception:
+                await self._rollback_profile_change(
+                    previous_profile=previous_profile,
+                    previously_running=previously_running,
+                    started_services=started_services,
+                    stopped_services=stopped_services,
+                )
+                raise
 
         if emit_log:
             await self.logger.log(
@@ -386,33 +354,36 @@ class Orchestrator:
         started_services: list[str],
         stopped_services: list[str],
     ) -> None:
-        for service_name in reversed(started_services):
-            service = self.services.get(service_name)
-            if service is not None and service.running:
-                try:
-                    await service.stop()
-                except OSError:
-                    continue
+        if self.mode in ("all", "daemon", "decoy"):
+            for service_name in reversed(started_services):
+                service = self.services.get(service_name)
+                if service is not None and service.running:
+                    try:
+                        await service.stop()
+                    except OSError:
+                        continue
 
         self.profile = previous_profile
         self._sync_service_profiles(previous_profile)
-        await apply_profile_network_settings(
-            previous_profile.name,
-            self.logger,
-            self.services,
-            previously_running,
-            self.config.web.port,
-            self.config.web.enabled,
-        )
+        if self.mode in ("all", "daemon", "system"):
+            await apply_profile_network_settings(
+                previous_profile.name,
+                self.logger,
+                self.services,
+                previously_running,
+                self.config.web.port,
+                self.config.web.enabled,
+            )
 
-        for service_name in stopped_services:
-            service = self.services.get(service_name)
-            if service is None or service_name not in previously_running or service.running:
-                continue
-            try:
-                await service.start()
-            except OSError:
-                continue
+        if self.mode in ("all", "daemon", "decoy"):
+            for service_name in stopped_services:
+                service = self.services.get(service_name)
+                if service is None or service_name not in previously_running or service.running:
+                    continue
+                try:
+                    await service.start()
+                except OSError:
+                    continue
 
     def _sync_service_profiles(self, profile: HoneypotProfile) -> None:
         for service in self.services.values():
@@ -465,42 +436,44 @@ class Orchestrator:
                                         target_services.discard(svc_name)
 
                                 self.profile = profile
-                                self.packet_mangler.set_profile(profile.name)
                                 self._sync_service_profiles(profile)
                                 
-                                # Apply sysctl/iptables
-                                running = {n for n in target_services if n in self.services}
-                                await apply_profile_network_settings(
-                                    profile.name,
-                                    self.logger,
-                                    self.services,
-                                    running,
-                                    self.config.web.port,
-                                    self.config.web.enabled,
-                                )
+                                if self.mode in ("all", "daemon", "system"):
+                                    self.packet_mangler.set_profile(profile.name)
+                                    # Apply sysctl/iptables
+                                    await apply_profile_network_settings(
+                                        profile.name,
+                                        self.logger,
+                                        self.services,
+                                        target_services, # use target_services instead of running because system mode doesn't track running
+                                        self.config.web.port,
+                                        self.config.web.enabled,
+                                    )
 
-                                # Stop services that shouldn't run
-                                for s_name, service in self.services.items():
-                                    if service.running and s_name not in target_services:
-                                        await service.stop()
+                                if self.mode in ("all", "daemon", "decoy"):
+                                    # Stop services that shouldn't run
+                                    for s_name, service in self.services.items():
+                                        if service.running and s_name not in target_services:
+                                            await service.stop()
 
-                                # Start services that should run
-                                for s_name in target_services:
-                                    service = self.services.get(s_name)
-                                    if service and not service.running:
-                                        try:
-                                            await service.start()
-                                        except OSError as err:
-                                            print(f"Warning: Could not start {s_name}: {err}")
+                                    # Start services that should run
+                                    for s_name in target_services:
+                                        service = self.services.get(s_name)
+                                        if service and not service.running:
+                                            try:
+                                                await service.start()
+                                            except OSError as err:
+                                                print(f"Warning: Could not start {s_name}: {err}")
 
                             last_profile_name = db_profile_name
                             last_overrides = dict(db_overrides)
                     
-                    # Update running services back to DB
-                    running_list = [name for name, s in self.services.items() if s.running]
-                    if state.get("running_services") != running_list:
-                        state["running_services"] = running_list
-                        await _write_db_state(session, state)
+                    if self.mode in ("all", "daemon", "decoy"):
+                        # Update running services back to DB
+                        running_list = [name for name, s in self.services.items() if s.running]
+                        if state.get("running_services") != running_list:
+                            state["running_services"] = running_list
+                            await _write_db_state(session, state)
             except asyncio.CancelledError:
                 break
             except Exception as e:
