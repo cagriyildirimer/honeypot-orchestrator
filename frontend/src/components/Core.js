@@ -294,8 +294,8 @@ export function GeoWorldMap(props) {
     }
   }, [markers]);
 
-  return h("div", { className: "geo-map-container", style: { position: 'relative', width: '100%', height: '400px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center' } },
-    h("div", { ref: containerRef, style: { position: 'absolute', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' } }),
+  return h("div", { className: "geo-map-container", style: { display: 'flex', justifyContent: 'center', minHeight: '400px', position: 'relative', width: '100%', overflow: 'hidden' } },
+    h("div", { ref: containerRef, style: { width: '100%', overflow: 'hidden', display: 'flex', justifyContent: 'center' } }),
     markers.length === 0 ? h("div", { className: "geo-empty", style: { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none' } }, "No external attacker IPs detected yet.") : null
   );
 }
@@ -409,7 +409,7 @@ export function ThreatIntelPanel(props) {
     // Top 10 attacker table
     h(
       "div",
-      { className: "ti-table-wrap" },
+      { className: "table-shell ti-table-wrap" },
       h(
         "table",
         { className: "ti-table" },

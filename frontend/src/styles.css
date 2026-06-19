@@ -283,6 +283,7 @@ pre {
   border-right: 1px solid rgba(226, 232, 240, 0.16);
   box-shadow: 18px 0 46px rgba(0, 0, 0, 0.22);
   backdrop-filter: blur(18px);
+  z-index: 99;
 }
 
 .brand {
@@ -2357,7 +2358,13 @@ input:checked + .toggle-slider:before {
 
 
 /* Geo World Map */
-.geo-map-panel { overflow: visible; }
+.geo-map-panel {
+  overflow: hidden;
+  isolation: isolate;
+}
+.geo-map-panel::before {
+  display: none !important;
+}
 .geo-map-container { position: relative; width: 100%; }
 .geo-map-svg { width: 100%; height: auto; display: block; border-radius: 12px; }
 .geo-pulse { animation: geo-pulse-anim 2.5s ease-in-out infinite; }

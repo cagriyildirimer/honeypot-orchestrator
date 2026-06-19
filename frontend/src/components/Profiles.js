@@ -158,7 +158,7 @@ export function ProfilesPage(props) {
                   const standardPort = STANDARD_PORTS[baseName] || STANDARD_PORTS[service.name];
                   return standardPort && standardPort !== service.port
                     ? h("p", { style: { fontSize: "11.5px", color: "#f59e0b", marginTop: "8px", display: "flex", alignItems: "center", gap: "5px", lineHeight: "1.4" } }, 
-                        `ÔÜá´©Å Exposed on custom port ${service.port} to prevent host port conflict (Standard: ${standardPort}).`
+                        `⚠️ Exposed on custom port ${service.port} to prevent host port conflict (Standard: ${standardPort}).`
                       )
                     : null;
                 })()

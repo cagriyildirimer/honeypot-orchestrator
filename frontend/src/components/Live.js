@@ -83,7 +83,7 @@ export function LiveActivityPage(props) {
           }
         },
         events.length === 0
-          ? h("div", { style: { color: "#a0aec0", textAlign: "center", paddingTop: "120px" } }, "­şôí Listening for target activity... Expose decoy services to start receiving live logs.")
+          ? h("div", { style: { color: "#a0aec0", textAlign: "center", paddingTop: "120px" } }, "📡 Listening for target activity... Expose decoy services to start receiving live logs.")
           : events.map((event, idx) => {
               const timestamp = event.timestamp || "";
               const src = `${event.src_ip}:${event.src_port || 0}`;
@@ -101,7 +101,7 @@ export function LiveActivityPage(props) {
               } else if (type === "smb_negotiate") {
                 detailText = "SMBv2 session negotiation initiated. (Likely smbclient, Nmap probe, or mounting attempt)";
               } else if (type === "smb_session_setup") {
-                detailText = "SMB session security challenge requested. (El s─▒k─▒┼şmas─▒ ba┼şlat─▒ld─▒)";
+                detailText = "SMB session security challenge requested. (El sıkışması başlatıldı)";
               } else if (type === "login_attempt") {
                 if (service === "SMB") {
                   detailText = `SMB Authentication login attempted for domain='${event.domain || "WORKGROUP"}' username='${event.username || "anonymous"}' workstation='${event.workstation || "none"}' (Authentication rejected)`;

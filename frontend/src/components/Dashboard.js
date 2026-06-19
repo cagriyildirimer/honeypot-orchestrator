@@ -183,7 +183,7 @@ export function DashboardPage(props) {
                   ? [
                       suspiciousOverview.topIp.ip,
                       stats.top_ip_blocked
-                        ? h("span", { key: "blocked-badge", style: { color: "#e31a1a", marginLeft: "6px" }, title: "Blocked" }, "Ôèİ")
+                        ? h("span", { key: "blocked-badge", style: { color: "#e31a1a", marginLeft: "6px" }, title: "Blocked" }, "⊘")
                         : null
                     ]
                   : "-"
@@ -414,7 +414,7 @@ export function ServiceActivityDonut(props) {
           "div",
           { className: "donut-tooltip" },
           h("strong", null, activeEntry[0]),
-          h("span", null, `${activeCount} events ÔÇó ${activePercent}%`)
+          h("span", null, `${activeCount} events • ${activePercent}%`)
         )
       : null
   );

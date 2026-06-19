@@ -7,7 +7,6 @@ import { LiveActivityPage } from './Live.js';
 import { LogsPage } from './Logs.js';
 import { ProfilesPage } from './Profiles.js';
 import { WhitelistPage, BlacklistPage, AppearancePage, SystemPage, UsersPage } from './Settings.js';
-
 export function App() {
   const [page, setPage] = useState(pathToPage(window.location.pathname));
   const [session, setSession] = useState(null);
