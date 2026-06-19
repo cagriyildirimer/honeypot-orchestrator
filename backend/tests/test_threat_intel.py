@@ -24,6 +24,10 @@ import textwrap
 import time
 from datetime import datetime, timezone
 
+# Add parent dir to path so we can import from backend modules
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # ---------------------------------------------------------------------------
 # Rich-ish console helpers (no dependency)
 # ---------------------------------------------------------------------------
@@ -83,7 +87,7 @@ def phase1_unit_tests() -> tuple[int, int]:
 
     # Add parent dir to path so we can import
     import os
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     import asyncio
     from database.database import init_db
@@ -242,8 +246,9 @@ def phase1_unit_tests() -> tuple[int, int]:
             _fail("enrich_top_ips returned empty list for public IPs")
             failed += 1
     except Exception as exc:
-        _fail(f"enrich_top_ips raised {type(exc).__name__}: {exc}")
-        failed += 1    # --- Test 7: Auto-Blacklist Toggle settings ---
+        failed += 1
+
+    # --- Test 7: Auto-Blacklist Toggle settings ---
     print(f"\n  {DIM}Testing Auto-Blacklist Toggle and record_suspicious_event ...{RESET}")
     try:
         from defense import (
@@ -449,59 +454,46 @@ def phase2_service_probes(host: str, web_port: int) -> tuple[int, int]:
     print(f"\n  {DIM}Injecting fake external IP traffic into logs ...{RESET}")
     import os
     import subprocess
-    import tempfile
-    
     events_to_inject = []
-    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    now_utc = datetime.now(timezone.utc)
     for ip in FAKE_ATTACKER_IPS:
         # Add 5-15 random events per IP
         count = random.randint(5, 15)
         for _ in range(count):
-            event = {
-                "timestamp": now_str,
+            events_to_inject.append({
+                "timestamp": now_utc,
                 "event_type": "simulated_attack",
                 "src_ip": ip,
                 "src_port": random.randint(1024, 65535),
                 "dest_port": 80,
                 "service": "simulated",
-                "protocol": "tcp"
-            }
-            events_to_inject.append(json.dumps(event))
-            
-    payload = "\n".join(events_to_inject) + "\n"
+                "protocol": "tcp",
+                "summary": "Simulated external attack probe",
+                "details": {"test_tool": "test_threat_intel"}
+            })
+
+    from database.database import async_session
+    from database.models import Event
     
-    # Check if running alongside Docker, otherwise write locally
-    docker_container = "honeypot-backend"
-    try:
-        res = subprocess.run(["docker", "ps", "-q", "-f", f"name={docker_container}"], capture_output=True, text=True)
-        is_docker = bool(res.stdout.strip())
-    except FileNotFoundError:
-        is_docker = False
-        
-    try:
-        if is_docker:
-            # Inject into Docker container's log volume
-            with tempfile.NamedTemporaryFile(mode='w', delete=False, encoding='utf-8') as tf:
-                tf.write(payload)
-                tmp_path = tf.name
-            try:
-                subprocess.run(["docker", "cp", tmp_path, f"{docker_container}:/tmp/fake_events.jsonl"], check=True, capture_output=True)
-                subprocess.run(["docker", "exec", docker_container, "sh", "-c", "cat /tmp/fake_events.jsonl >> /app/logs/events.jsonl"], check=True, capture_output=True)
-                _ok(f"Injected fake events for {len(FAKE_ATTACKER_IPS)} external IPs directly into Docker container '{docker_container}'")
-                passed += 1
-            finally:
-                os.remove(tmp_path)
-        else:
-            # Write locally
-            log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "events.jsonl")
-            os.makedirs(os.path.dirname(log_path), exist_ok=True)
-            with open(log_path, "a", encoding="utf-8") as f:
-                f.write(payload)
-            _ok(f"Injected fake events for {len(FAKE_ATTACKER_IPS)} external IPs into local {log_path}")
-            passed += 1
-    except Exception as exc:
-        _warn(f"Failed to inject fake logs: {exc}")
-        failed += 1
+    async def inject_db_events():
+        async with async_session() as session:
+            for ev in events_to_inject:
+                db_event = Event(
+                    timestamp=ev["timestamp"],
+                    service=ev["service"],
+                    event_type=ev["event_type"],
+                    src_ip=ev["src_ip"],
+                    src_port=ev["src_port"],
+                    summary=ev["summary"],
+                    details=ev["details"]
+                )
+                session.add(db_event)
+            await session.commit()
+            
+    import asyncio
+    asyncio.run(inject_db_events())
+    _ok(f"Injected fake events for {len(FAKE_ATTACKER_IPS)} external IPs directly into PostgreSQL Database")
+    passed += 1
 
     # --- Wait for logs to be written ---
     print(f"  {DIM}Waiting 1 second for logs to be flushed ...{RESET}")

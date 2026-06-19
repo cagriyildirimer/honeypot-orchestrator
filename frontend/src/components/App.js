@@ -3,6 +3,7 @@ const { useEffect, useState, useRef, useMemo } = React;
 import { pathToPage } from '../utils.js';
 import { PageSkeleton, AppLayout } from './Core.js';
 import { DashboardPage } from './Dashboard.js';
+import { AnalyzePage } from './Analyze.js';
 import { LiveActivityPage } from './Live.js';
 import { LogsPage } from './Logs.js';
 import { ProfilesPage } from './Profiles.js';
@@ -15,6 +16,7 @@ export function App() {
   useEffect(() => {
     const titles = {
       dashboard: "Honeypot Director Dashboard",
+      analyze: "Honeypot Director Analyze",
       live: "Honeypot Director Live Monitor",
       whitelist: "Honeypot Director Whitelist",
       blacklist: "Honeypot Director Blacklist",
@@ -78,6 +80,8 @@ export function App() {
   let pageNode = null;
   if (page === "dashboard") {
     pageNode = h(DashboardPage, { session, onLogout: handleLogout, navigateClick });
+  } else if (page === "analyze") {
+    pageNode = h(AnalyzePage, { session, onLogout: handleLogout });
   } else if (page === "live") {
     pageNode = h(LiveActivityPage, { session, onLogout: handleLogout });
   } else if (page === "whitelist") {

@@ -4,8 +4,10 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import declarative_base
 
 # PostgreSQL URL, defaults to sqlite for local tests if not set
+_db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tests", "logs", "honeypot.db"))
+_sqlite_uri = _db_path.replace("\\", "/")
 DATABASE_URL = os.environ.get(
-    "HONEYPOT_DB_URL", "sqlite+aiosqlite:///logs/honeypot.db"
+    "HONEYPOT_DB_URL", f"sqlite+aiosqlite:///{_sqlite_uri}"
 )
 
 # Create async engine
@@ -31,7 +33,7 @@ async def init_db() -> None:
     # Optional: creates all tables based on Base metadata
     # Useful for simple deployments without Alembic migrations
     import asyncio
-    import database.models as models  # Register models to Base.metadata to prevent circular imports
+    from . import models  # noqa: F401 (Register models to Base.metadata to prevent circular imports)
     
     max_retries = 15
     retry_delay = 2

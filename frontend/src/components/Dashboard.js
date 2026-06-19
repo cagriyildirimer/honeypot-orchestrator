@@ -7,25 +7,13 @@ export function DashboardPage(props) {
   const [loading, setLoading] = useState(true);
   const [timelineRangeKey, setTimelineRangeKey] = useState("day");
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [tiData, setTiData] = useState(null);
-
   async function loadOverview() {
     const next = await window.requestJson("/api/overview?limit=2000");
     setPayload(next);
     setLoading(false);
   }
 
-  async function loadThreatIntel() {
-    try {
-      const data = await window.requestJson("/api/threat-intel");
-      setTiData(data);
-    } catch (e) {
-      // silently ignore TI errors
-    }
-  }
-
   usePolling(loadOverview, 5000, []);
-  usePolling(loadThreatIntel, 30000, []);
 
   if (loading && !payload) {
     return h(PageSkeleton, null);
@@ -121,7 +109,7 @@ export function DashboardPage(props) {
       ),
       h(GeoWorldMap, { markers: payload.geo_markers || [] })
     ),
-    h(ThreatIntelPanel, { data: tiData }),
+
     h(
       "section",
       { className: "overview-section", "data-risk-tone": risk.band.tone },
@@ -300,8 +288,8 @@ export function DashboardPage(props) {
         h(
           "div",
           null,
-          h("h2", null, "Recent Events"),
-          h("p", null, "Latest 10 captured records.")
+          h("h2", null, "Recent Suspicious Events"),
+          h("p", null, "Latest 10 captured events containing attacker IPs.")
         ),
         h(
           "a",
@@ -309,7 +297,7 @@ export function DashboardPage(props) {
           "Open logs"
         )
       ),
-      h(EventsTable, { events: events.slice(0, 10), fallbackProfile: profile ? profile.name : "-", onSelect: (e) => setSelectedEvent(e) })
+      h(EventsTable, { events: events.filter(e => e && e.src_ip).slice(0, 10), fallbackProfile: profile ? profile.name : "-", onSelect: (e) => setSelectedEvent(e) })
     ),
     h(EventDrawer, { event: selectedEvent, onClose: () => setSelectedEvent(null) })
   );

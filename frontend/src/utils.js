@@ -25,6 +25,7 @@ document.addEventListener('mouseout', (e) => {
 
 export const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", path: "/dashboard" },
+  { key: "analyze", label: "Analyze", path: "/analyze" },
   { key: "profiles", label: "Profiles", path: "/profiles" },
   { key: "live", label: "Live Activity", path: "/live" },
   { key: "logs", label: "Logs", path: "/logs" },
@@ -112,6 +113,9 @@ export const APPEARANCE_THEMES = [
 export function pathToPage(pathname) {
   if (pathname === "/dashboard" || pathname === "/") {
     return "dashboard";
+  }
+  if (pathname === "/analyze") {
+    return "analyze";
   }
   if (pathname === "/live") {
     return "live";

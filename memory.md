@@ -138,10 +138,15 @@ honeypot-orchestrator/
 - **Phase 10:** Mimari Sadeleştirme, Frontend Split ve Mikroservis İzolasyonu — Arka plan dizin yapısı katmanlara ayrıldı. `server.py` temizlenerek router-handler yapısına geçildi. 3000+ satırlık devasa `app-react.js` modüler ES bileşenlerine bölündü. Sistem tek parça yerine tam bağımsız 4 mikroservise (`decoy`, `system`, `web`, `ti`) ayrıldı. `honeypot-system` root/NET_ADMIN yetkileriyle network ayarlarını (iptables) devralırken, `honeypot-web` ve `honeypot-ti` tam yetkisiz (non-root) şekilde çalıştırılarak izolasyon sağlandı. Servisler arası iletişim ve state yönetimi PostgreSQL veritabanı üzerinden senkronize hale getirildi. Decoy servisleri `SERVICE_REGISTRY` üzerinden modüler Plug-and-Play altyapısına geçirildi. Dashboard 3D Globe CSS bugı giderildi.
 - **Attacker Origins Paneli Taşma & Sidebar Üzerine Gelme Bugı Düzeltildi:** Masaüstü modunda `.sidebar`'a `z-index: 99;` eklenerek panellerin üzerine binmesi engellendi. `.geo-map-panel` (harita paneli) üzerindeki beyaz parlama (shine effect) WebGL uyumluluğu nedeniyle devredışı bırakıldı (`display: none !important;`) ve `isolation: isolate;` eklenerek tarayıcılardaki taşma ve scrollbar tetikleme hatası tamamen çözüldü.
 - **3D Harita Durumu:** Kullanıcı tercihi doğrultusunda harita, topoğrafya/bump map ve varsayılan sürekli auto-rotate özellikleri aktif olacak şekilde orijinal ve kararlı varsayılan haline geri döndürüldü.
+- **UI & Bugfix Serisi:** `Live.js` üzerindeki liste sıralama (reverse) hatası giderildi. Dashboard'daki "Recent Events" paneli sadece şüpheli olayları (src_ip içeren) gösterecek şekilde filtrelendi ve adı "Recent Suspicious Events" olarak güncellendi.
+- **Threat Intel & Test Suite Düzeltmeleri:** `test_threat_intel.py`'nin yerel ortamda SQLite'a düşme hatası giderilip doğrudan Docker Postgres'e (test verileri) yönlendirmesi sağlandı. API key'lerin `.env` değişimi sonrası şifrelenme çakışması (InvalidToken) veritabanı senkronizasyonu ile çözülerek AbuseIPDB ve Greynoise skorlarının `N/A` dönmesi hatası giderildi.
+- **Analyze Sayfası Eklendi:** Phase 12'nin hazırlığı olarak, Frontend SPA mimarisine uygun şekilde `/analyze` route'u eklendi ve Threat Intel tablosu Dashboard'dan çıkartılarak bu özel sayfaya taşındı.
 
 ---
 
 ## To-Do: Phase 11 — Web UI Alerts & SIEM Integration
+
+## !!!!!!TO-DO'DA OLANLARI SANA SÖYLENMEDİĞİ SÜRECE KESİNLİKLE BAŞLAMIYOSUN HİÇ BİR ŞEY YAPMIYOSUN!!!!!!!!!!
 
 **Amaç:** Kullanıcıyı kritik olaylardan arayüz üzerinden anında haberdar etmek ve honeypot loglarını merkezi bir SIEM (Security Information and Event Management) sistemine aktarabilmek.
 

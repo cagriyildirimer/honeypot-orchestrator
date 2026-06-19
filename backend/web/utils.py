@@ -35,7 +35,7 @@ async def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
                 if r.details:
                     event_data.update(r.details)
                 records.append(event_data)
-            return list(reversed(records))
+            return records
     except Exception as e:
         print(f"DB read events error: {e}")
         return []
