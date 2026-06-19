@@ -4,8 +4,6 @@ import asyncio
 import csv
 import io
 import json
-import hashlib
-import secrets
 import time
 import uuid
 from database.database import async_session
@@ -43,7 +41,7 @@ from web.utils import (
     read_recent_events, _response, _decode_json_body, _clear_file,
     _hash_password, _verify_password, _load_users, _save_users,
     _normalize_role, _format_duration, _parse_request_line, _parse_cookies,
-    ROLE_ADMIN, ROLE_VIEWER, USER_ROLES
+    ROLE_ADMIN, ROLE_VIEWER, USER_ROLES, _safe_int, _request_display_host
 )
 
 
@@ -649,3 +647,8 @@ class WebDashboard:
         )
 
 
+# Import all handler modules to register routes onto the global router
+import api.handlers.auth
+import api.handlers.blacklist
+import api.handlers.services
+import api.handlers.overview

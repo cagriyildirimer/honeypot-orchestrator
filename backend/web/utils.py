@@ -6,7 +6,6 @@ import secrets
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
 from datetime import datetime, UTC
 
 from sqlalchemy import select, delete, desc
@@ -207,13 +206,3 @@ def _safe_int(value: str, *, default: int, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(minimum, min(parsed, maximum))
-
-
-# Import all handler modules to register routes onto the global router
-import api.handlers.auth
-import api.handlers.blacklist
-import api.handlers.services
-import api.handlers.overview
-
-
-
