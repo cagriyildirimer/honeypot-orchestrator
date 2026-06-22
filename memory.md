@@ -144,6 +144,11 @@ honeypot-orchestrator/
 
 ---
 
+## To-Do: ÖNCELİKLİ GÖREV — `.env` Setup Scripti
+**Amaç:** Projenin ilk kurulumunda kullanıcıyı yönlendirecek, şifreleme anahtarlarını (HONEYPOT_SECRET_KEY) ve API anahtarlarını vs. otomatik oluşturup sorarak interaktif bir `.env` dosyası hazırlayan bir başlatıcı (init/setup) betiği yazmak. (Sıradaki işlemlerden önce bu yapılacak!)
+
+---
+
 ## To-Do: Phase 11 — Web UI Alerts & SIEM Integration
 
 ## !!!!!!TO-DO'DA OLANLARI SANA SÖYLENMEDİĞİ SÜRECE KESİNLİKLE BAŞLAMIYOSUN HİÇ BİR ŞEY YAPMIYOSUN!!!!!!!!!!
