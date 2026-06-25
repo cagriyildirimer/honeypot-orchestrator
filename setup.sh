@@ -8,19 +8,45 @@ echo "   Honeypot Director - İnteraktif Kurulum    "
 echo "============================================="
 echo ""
 
-# 1. LAN Ağ Ayarlarını Yap (start-lan.sh --setup-only çalıştır)
-echo "[1/4] Ağ Yapılandırması..."
-if [[ ! -f "backend/scripts/start-lan.sh" ]]; then
-  echo "Hata: backend/scripts/start-lan.sh bulunamadı!" >&2
-  exit 1
+# 1. Kurulum Türü Seçimi
+echo "Lütfen kurulum türünü seçiniz:"
+echo "1) Standart Kurulum (Varsayılan Docker port köprüleme, ağ yapılandırması gerektirmez)"
+echo "2) Macvlan / LAN Kurulumu (Yerel ağdan doğrudan IP tahsis etme, macvlan gerektirir)"
+read -p "Seçiminiz [1 veya 2, Varsayılan: 1]: " INSTALL_TYPE
+INSTALL_TYPE="${INSTALL_TYPE:-1}"
+
+# .env dosyasını sıfırdan oluşturmak için hazırla
+if [[ -f .env ]]; then
+  # Mevcut .env varsa yedekle
+  cp .env .env.bak
+  echo "✓ Mevcut .env dosyası .env.bak olarak yedeklendi."
 fi
 
-# start-lan.sh çalıştırılır. Bu betik kullanıcıya IP sorup .env dosyasına yazacaktır.
-bash backend/scripts/start-lan.sh --setup-only
+# Temiz bir .env dosyası başlatalım
+echo "# Honeypot Director Environment Settings" > .env
+
+# Ağ Yapılandırma Adımı
+if [[ "$INSTALL_TYPE" == "2" ]]; then
+  echo ""
+  echo "[1/3] Macvlan Ağ Yapılandırması Başlatılıyor..."
+  if [[ ! -f "backend/scripts/start-lan.sh" ]]; then
+    echo "Hata: backend/scripts/start-lan.sh bulunamadı!" >&2
+    exit 1
+  fi
+  
+  # start-lan.sh çalıştırılır. Bu betik ağ ayarlarını yapıp HONEYPOT_LAN_IP'yi .env'ye yazacaktır.
+  bash backend/scripts/start-lan.sh --setup-only
+  echo "✓ Macvlan ağ ayarları ve IP başarıyla yapılandırıldı."
+else
+  echo ""
+  echo "[1/3] Standart Kurulum Yapılandırması..."
+  echo "HONEYPOT_LAN_IP=" >> .env
+  echo "✓ Standart mod seçildi (Yerel IP adresi atanmadı)."
+fi
 
 # 2. Şifreleme Anahtarı (Secret Key) Üretimi
 echo ""
-echo "[2/4] Şifreleme Anahtarı (HONEYPOT_SECRET_KEY) Üretiliyor..."
+echo "[2/3] Şifreleme Anahtarı (HONEYPOT_SECRET_KEY) Üretiliyor..."
 
 SECRET_KEY=""
 # Python ile Fernet uyumlu anahtar üretmeyi dene
@@ -42,19 +68,12 @@ if [[ -z "$SECRET_KEY" ]]; then
   exit 1
 fi
 
-# Üretilen secret key'i .env dosyasına ekle
-if [[ -f .env ]]; then
-  grep -v "^HONEYPOT_SECRET_KEY=" .env > .env.tmp || true
-  echo "HONEYPOT_SECRET_KEY=$SECRET_KEY" >> .env.tmp
-  mv .env.tmp .env
-else
-  echo "HONEYPOT_SECRET_KEY=$SECRET_KEY" > .env
-fi
-echo "✓ Güvenli şifreleme anahtarı üretildi ve .env dosyasına yazıldı."
+echo "HONEYPOT_SECRET_KEY=$SECRET_KEY" >> .env
+echo "✓ Güvenli şifreleme anahtarı otomatik üretildi ve yazıldı."
 
 # 3. Yönetici Kullanıcı Adı ve Şifresi
 echo ""
-echo "[3/4] Yönetici Giriş Bilgileri Yapılandırması..."
+echo "[3/3] Yönetici Giriş Bilgileri Yapılandırması..."
 
 read -p "Yönetici Kullanıcı Adı [Varsayılan: admin]: " USERNAME
 USERNAME="${USERNAME:-admin}"
@@ -64,18 +83,11 @@ read -s -p "Yönetici Şifresi [Varsayılan: admin123]: " PASSWORD
 echo ""
 PASSWORD="${PASSWORD:-admin123}"
 
-# .env dosyasına kullanıcı adı ve şifreyi yaz
-grep -v "^HONEYPOT_AUTH_USERNAME=" .env > .env.tmp 2>/dev/null || true
-echo "HONEYPOT_AUTH_USERNAME=$USERNAME" >> .env.tmp
-mv .env.tmp .env
+echo "HONEYPOT_AUTH_USERNAME=$USERNAME" >> .env
+echo "HONEYPOT_AUTH_PASSWORD=$PASSWORD" >> .env
+echo "✓ Yönetici bilgileri .env dosyasına yazıldı."
 
-grep -v "^HONEYPOT_AUTH_PASSWORD=" .env > .env.tmp 2>/dev/null || true
-echo "HONEYPOT_AUTH_PASSWORD=$PASSWORD" >> .env.tmp
-mv .env.tmp .env
-
-echo "✓ Yönetici kullanıcı adı ve şifresi .env dosyasına yazıldı."
-
-# 4. Kurulumu Tamamla ve Başlatma Teklifi Sun
+# 4. Kurulumu Tamamla ve Başlatma
 echo ""
 echo "============================================="
 echo "   Kurulum Başarıyla Tamamlandı! 🎉          "
@@ -88,7 +100,15 @@ echo ""
 read -p "Honeypot sistemini şimdi başlatmak ister misiniz? [y/N]: " START_NOW
 if [[ "$START_NOW" =~ ^[yY](es|ES)?$ ]]; then
   echo "Sistem başlatılıyor..."
-  exec bash backend/scripts/start-lan.sh
+  if [[ "$INSTALL_TYPE" == "2" ]]; then
+    exec bash backend/scripts/start-lan.sh
+  else
+    exec docker compose up --build
+  fi
 else
-  echo "Sistemi daha sonra başlatmak için: bash backend/scripts/start-lan.sh"
+  if [[ "$INSTALL_TYPE" == "2" ]]; then
+    echo "Sistemi daha sonra başlatmak için: bash backend/scripts/start-lan.sh"
+  else
+    echo "Sistemi daha sonra başlatmak için: docker compose up --build"
+  fi
 fi
