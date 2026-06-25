@@ -105,6 +105,7 @@ LAN_GATEWAY="${HONEYPOT_LAN_GATEWAY:-}"
 LAN_NETWORK="${HONEYPOT_LAN_NETWORK:-honeypot_lan_net}"
 DETACHED=0
 RECREATE_NETWORK=0
+SETUP_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -134,6 +135,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --recreate-network)
       RECREATE_NETWORK=1
+      shift
+      ;;
+    --setup-only)
+      SETUP_ONLY=1
       shift
       ;;
     --help|-h)
@@ -238,6 +243,14 @@ if ! docker network inspect "$HONEYPOT_LAN_NETWORK" >/dev/null 2>&1; then
     "$HONEYPOT_LAN_NETWORK" >/dev/null
 else
   echo "Using existing Docker network: $HONEYPOT_LAN_NETWORK"
+fi
+
+if (( SETUP_ONLY )); then
+  echo "Setup-only mode active."
+  echo "LAN Network configured: $HONEYPOT_LAN_NETWORK"
+  echo "Honeypot IP written to .env: $HONEYPOT_LAN_IP"
+  echo "Skipping docker compose startup."
+  exit 0
 fi
 
 echo "Starting Honeypot Orchestrator LAN mode"

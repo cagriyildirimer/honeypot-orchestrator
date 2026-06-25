@@ -15,10 +15,10 @@ from database.database import init_db
 from sqlalchemy import select
 from database.database import async_session
 from database.models import SystemSettings
-from core.crypto_utils import encrypt_value
+from core.crypto_utils import encrypt_value, decrypt_value
 
 async def sync_api_keys(config) -> None:
-    # Migrate TI keys from config to DB if they exist and DB is empty
+    # Migrate TI keys from config to DB, or re-encrypt if secret key changed (key rotation)
     try:
         async with async_session() as session:
             for key_name, plain_val in [
@@ -31,10 +31,29 @@ async def sync_api_keys(config) -> None:
                 # Check if it already exists in DB
                 result = await session.execute(select(SystemSettings).where(SystemSettings.setting_key == key_name))
                 existing = result.scalars().first()
+                
+                should_write = False
                 if not existing:
-                    print(f"Migrating {key_name} to encrypted DB storage...")
+                    should_write = True
+                else:
+                    try:
+                        decrypted = decrypt_value(existing.setting_value)
+                        if decrypted != plain_val:
+                            should_write = True
+                    except Exception:
+                        # Decryption failed (likely due to secret key rotation), we must overwrite and re-encrypt
+                        print(f"Decryption failed for {key_name} (likely due to secret key rotation). Re-encrypting...")
+                        should_write = True
+                
+                if should_write:
+                    print(f"Writing/updating {key_name} in encrypted DB storage...")
                     encrypted = encrypt_value(plain_val)
-                    session.add(SystemSettings(setting_key=key_name, setting_value=encrypted))
+                    if existing:
+                        existing.setting_value = encrypted
+                        from datetime import datetime, timezone
+                        existing.updated_at = datetime.now(timezone.utc)
+                    else:
+                        session.add(SystemSettings(setting_key=key_name, setting_value=encrypted))
             await session.commit()
     except Exception as e:
         print(f"Failed to sync API keys: {e}")

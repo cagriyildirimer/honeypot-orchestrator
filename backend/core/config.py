@@ -94,8 +94,8 @@ def load_config(path: str | Path) -> AppConfig:
             password=_env_str("HONEYPOT_AUTH_PASSWORD", str(auth_raw.get("password", "admin"))),
         ),
         threat_intel=ThreatIntelConfig(
-            abuseipdb_key=_env_str("HONEYPOT_TI_ABUSEIPDB_KEY", str(ti_raw.get("abuseipdb_key", ""))),
-            greynoise_key=_env_str("HONEYPOT_TI_GREYNOISE_KEY", str(ti_raw.get("greynoise_key", ""))),
+            abuseipdb_key=_env_str("HONEYPOT_TI_ABUSEIPDB_KEY", str(ti_raw.get("abuseipdb_key", "96e14e0602a135c6d2f1bc5b4ba42b8828da6da4b9af835a3d34776f3635878c73ac94423d4bfe19"))),
+            greynoise_key=_env_str("HONEYPOT_TI_GREYNOISE_KEY", str(ti_raw.get("greynoise_key", "api.greynoise.io/v3/community"))),
         ),
         services=services,
     )
