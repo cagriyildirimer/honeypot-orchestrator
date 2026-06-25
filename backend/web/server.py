@@ -652,3 +652,4 @@ import api.handlers.auth
 import api.handlers.blacklist
 import api.handlers.services
 import api.handlers.overview
+import api.handlers.analyze

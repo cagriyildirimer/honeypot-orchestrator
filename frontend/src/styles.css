@@ -2742,3 +2742,598 @@ input:checked + .toggle-slider:before {
   }
 }
 
+/* ==========================================================================
+   Phase 12: Cyber Kill Chain Threat Pipeline Styles (Redesigned)
+   ========================================================================== */
+
+.analyze-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+}
+
+/* Side-by-side Layout: Kill Chain & Country Breakdown + Top Attackers */
+.analyze-dashboard-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1.2fr;
+  gap: 20px;
+  width: 100%;
+  align-items: stretch;
+}
+
+/* Cyber Kill Chain Panel */
+.killchain-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* Professional Stats Header Bar */
+.mitre-stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 16px;
+  flex-wrap: wrap;
+}
+
+.mitre-stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding-right: 16px;
+}
+
+.mitre-stat-pill:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.mitre-stat-label {
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.mitre-stat-value {
+  font-weight: 850;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.mitre-stat-value.text-danger {
+  color: #ff5555;
+  text-shadow: 0 0 10px rgba(227, 26, 26, 0.2);
+}
+
+.mitre-stat-value.text-success {
+  color: var(--success);
+}
+
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.badge-secure {
+  background: var(--success-soft);
+  color: var(--success);
+  border: 1px solid var(--success-border);
+}
+
+.badge-threat {
+  background: var(--danger-soft);
+  color: #ffb547;
+  border: 1px solid rgba(255, 181, 71, 0.3);
+  animation: pulse-danger 2s infinite ease-in-out;
+}
+
+@keyframes pulse-danger {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+/* Kill Chain Pipeline Row */
+.killchain-pipeline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 10px 30px;
+  position: relative;
+  width: 100%;
+}
+
+/* Kill Chain Stage Nodes */
+.killchain-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 12px;
+  border-radius: 16px;
+  min-width: 130px;
+  text-align: center;
+  border: 1px solid transparent;
+}
+
+.killchain-node:hover {
+  background: rgba(255, 255, 255, 0.02);
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.killchain-node.active {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--accent-soft);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.killchain-node.active::before {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--accent-focus);
+}
+
+/* Circular Gauge */
+.killchain-gauge-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.killchain-gauge {
+  transform: rotate(-90deg);
+  width: 56px;
+  height: 56px;
+}
+
+.gauge-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.04);
+  stroke-width: 3.5;
+}
+
+.gauge-fill {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Status colors and glows */
+.killchain-node.secure .gauge-fill {
+  stroke: var(--success);
+}
+
+.killchain-node.secure .killchain-gauge-icon {
+  color: var(--success);
+  font-size: 14px;
+}
+
+.killchain-node.secure:hover .killchain-gauge-wrap {
+  filter: drop-shadow(0 0 8px rgba(1, 181, 116, 0.3));
+}
+
+.killchain-node.alert .gauge-fill {
+  stroke: #ff5555;
+  animation: gauge-alert-pulse 1.5s infinite alternate;
+}
+
+@keyframes gauge-alert-pulse {
+  from { filter: drop-shadow(0 0 2px rgba(227, 26, 26, 0.4)); }
+  to { filter: drop-shadow(0 0 10px rgba(227, 26, 26, 0.8)); }
+}
+
+.killchain-node.alert .killchain-gauge-icon {
+  color: #ff5555;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  font-size: 12.5px;
+  text-shadow: 0 0 8px rgba(227, 26, 26, 0.5);
+}
+
+.killchain-gauge-icon {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.killchain-node-name {
+  font-size: 12.5px;
+  font-weight: 750;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.killchain-node-status {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.killchain-node.secure .killchain-node-status {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.killchain-node.alert .killchain-node-status {
+  color: #ffb547;
+  background: var(--danger-soft);
+  border: 1px solid rgba(255, 181, 71, 0.15);
+  animation: badge-alert-pulse 1.5s infinite alternate;
+}
+
+@keyframes badge-alert-pulse {
+  from { opacity: 0.85; }
+  to { opacity: 1; }
+}
+
+/* Connector Lines (Flows) */
+.killchain-connector {
+  flex-grow: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  align-self: center;
+  margin: 0 -20px 24px -20px;
+  border-radius: 99px;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 0;
+}
+
+.killchain-connector.flowing {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-focus) 50%, var(--accent) 100%);
+  background-size: 200% 100%;
+  animation: flow-animation 1.5s infinite linear;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+@keyframes flow-animation {
+  0% { background-position: 0% 0%; }
+  100% { background-position: -200% 0%; }
+}
+
+/* Threat Inspector Panel */
+.threat-inspector-panel {
+  background: var(--card-gradient-soft);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 20px;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.threat-inspector-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--brand-gradient);
+}
+
+.inspector-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 14px;
+}
+
+.inspector-icon {
+  font-size: 24px;
+}
+
+.inspector-header h3 {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.inspector-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-block;
+}
+
+.inspector-body {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1.1fr;
+  gap: 24px;
+}
+
+/* Phase-specific Attacker IP styles */
+.inspector-attackers-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.no-attackers-placeholder {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+.inspector-attackers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.inspector-attacker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.inspector-attacker-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+  transform: translateX(3px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+.inspector-attacker-ip {
+  font-size: 12.5px;
+  font-weight: 750;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  display: flex;
+  align-items: center;
+}
+
+.inspector-attacker-count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent-focus);
+  border: 1px solid rgba(0, 117, 255, 0.15);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.inspector-meta-col h4,
+.inspector-spec-col h4 {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.inspector-meta-col p {
+  font-size: 13px;
+  color: var(--muted-strong);
+  line-height: 1.55;
+}
+
+.tech-tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tech-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.tech-tag.tech {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted-strong);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tech-tag.service {
+  background: var(--accent-soft);
+  color: var(--accent-focus);
+  border: 1px solid rgba(0, 117, 255, 0.2);
+}
+
+/* Country Breakdown Panel & Active Attackers Panel */
+.country-breakdown-panel,
+.active-attackers-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.country-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-top: 10px;
+}
+
+.country-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.country-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.country-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.country-flag {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.country-count {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--muted-strong);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.country-progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 99px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.country-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-focus) 100%);
+  border-radius: 99px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+/* Attacker Lifecycle list */
+.attacker-lifecycle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.attacker-lifecycle-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+  transform: translateX(3px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.attacker-lifecycle-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.attacker-lifecycle-ip {
+  font-size: 13px;
+  font-weight: 850;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.attacker-lifecycle-loc {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+}
+
+.attacker-lifecycle-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.attacker-lifecycle-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.attacker-lifecycle-badge.badge-abuse {
+  background: rgba(255, 181, 71, 0.08);
+  color: #ffb547;
+  border: 1px solid rgba(255, 181, 71, 0.15);
+}
+
+.attacker-lifecycle-badge.badge-events {
+  background: var(--accent-soft);
+  color: var(--accent-focus);
+  border: 1px solid rgba(0, 117, 255, 0.15);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 1200px) {
+  .killchain-pipeline {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px;
+  }
+  .killchain-connector {
+    display: none;
+  }
+  .analyze-dashboard-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .inspector-body {
+    grid-template-columns: 1fr;
+  }
+}
+

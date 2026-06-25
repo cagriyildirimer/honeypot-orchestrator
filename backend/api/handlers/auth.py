@@ -40,6 +40,7 @@ async def handle_login(self, request: dict[str, Any]) -> dict[str, Any]:
             {
                 "service": "web",
                 "event_type": "login_failed",
+                "src_ip": client_ip or "127.0.0.1",
                 "summary": f"Dashboard login failed for {username or 'unknown'}.",
             }
         )
@@ -58,6 +59,7 @@ async def handle_login(self, request: dict[str, Any]) -> dict[str, Any]:
         {
             "service": "web",
             "event_type": "login_success",
+            "src_ip": client_ip or "127.0.0.1",
             "summary": f"Dashboard login success for {username}.",
         }
     )
