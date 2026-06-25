@@ -143,46 +143,8 @@ honeypot-orchestrator/
 - **Threat Intel & Test Suite Düzeltmeleri:** `test_threat_intel.py`'nin yerel ortamda SQLite'a düşme hatası giderilip doğrudan Docker Postgres'e (test verileri) yönlendirmesi sağlandı. API key'lerin `.env` değişimi sonrası şifrelenme çakışması (InvalidToken) veritabanı senkronizasyonu ile çözülerek AbuseIPDB ve Greynoise skorlarının `N/A` dönmesi hatası giderildi.
 - **Analyze Sayfası Eklendi:** Phase 12'nin hazırlığı olarak, Frontend SPA mimarisine uygun şekilde `/analyze` route'u eklendi ve Threat Intel tablosu Dashboard'dan çıkartılarak bu özel sayfaya taşındı.
 - **Öncelikli Görev - İnteraktif `.env` Kurulum Betiği & Gömülü TI Anahtarları:** Tehdit istihbaratı API anahtarları doğrudan yazılım çekirdeğine (`config.py`) gömülerek `.env` sadeleştirildi. `setup.sh` betiği yazıldı; ağ kurulumunu tetikler, şifreleme anahtarını otomatik üretir, kullanıcı adı/şifreyi alır ve `.env` dosyasını hazırlar. Ayrıca `cli.py` içerisinde key rotation mantığı eklenerek şifreleme anahtarı değiştiğinde veritabanındaki şifreli anahtarların otomatik olarak yeni anahtarla yeniden şifrelenip güncellenmesi sağlandı.
-
----
-
-## To-Do: Phase 11 — Web UI Alerts & SIEM Integration
-
-## !!!!!!TO-DO'DA OLANLARI SANA SÖYLENMEDİĞİ SÜRECE KESİNLİKLE BAŞLAMIYOSUN HİÇ BİR ŞEY YAPMIYOSUN!!!!!!!!!!
-
-**Amaç:** Kullanıcıyı kritik olaylardan arayüz üzerinden anında haberdar etmek ve honeypot loglarını merkezi bir SIEM (Security Information and Event Management) sistemine aktarabilmek.
-
-1. **Web UI Bildirim Sistemi (Frontend & Backend):**
-   - Web arayüzünün sağ üst köşesine bir bildirim (çan) ikonu ve açılır menü eklenecek.
-   - Sadece "Şüpheli Olaylar" (Suspicious Events / Alerts) için (ör. login_attempt, exploit_attempt) anlık bildirim (toast/pop-up) gösterilecek.
-   - Backend tarafında WebSocket veya Server-Sent Events (SSE) ile anlık bildirim akışı sağlanacak.
-
-2. **SIEM Entegrasyon Sayfası (Frontend):**
-   - Ayarlar veya özel bir route altında yeni bir "SIEM Integration" sayfası oluşturulacak.
-   - **Konfigürasyon Formu:**
-     - SIEM Name (ör. Splunk, QRadar, Wazuh)
-     - SIEM IP Address
-     - Port
-     - Protocol (TCP / UDP / HTTP)
-     - Log Format (JSON)
-     - Scope (Yalnızca Alertler / Tüm Loglar)
-   - "Test Connection" butonu ile hedefe örnek bir JSON paketi gönderilip bağlantı test edilebilecek.
-
-3. **SIEM Forwarder Engine (Backend):**
-   - Yeni bir `siem_forwarder.py` servisi/modülü yazılacak.
-   - `event_logger.py` üzerinden gelen loglar, kullanıcı ayarlarına (Scope) göre filtrelenecek.
-   - Filtrelenen loglar asenkron olarak ve belirlenen protokol (TCP/UDP/HTTP) üzerinden SIEM IP/Port adresine basılacak.
-   - SIEM konfigürasyonu veritabanında (`SystemSettings`) veya `config.yaml` içinde saklanıp dinamik olarak yüklenecek.
-
----
-
-## To-Do: Phase 12 — MITRE ATT&CK Mapping + Analyze Sayfası
-
-**Amaç:** Honeypot verilerini profesyonel güvenlik çerçevesinde analiz edebilmek.
-
-1. **MITRE ATT&CK Mapping (Backend):** Yeni `mitre.py` modülü. Event type → ATT&CK taktik/teknik eşlemesi.
-2. **Analyze Sayfası (Frontend):** Yeni `/analyze` route (Threat Heatmap, MITRE ATT&CK Matrix, Country Breakdown).
-3. **API Endpoint:** `/api/analyze` — MITRE mapping, ülke breakdown, servis dağılımı verilerini döner.
+- **Phase 12:** MITRE ATT&CK Mapping + Analyze Sayfası — Honeypot verilerinin profesyonel güvenlik çerçevesinde analiz edilebilmesi için `mitre.py` modülü yazıldı. Event type'lar MITRE taktik ve tekniklerine eşlendi. Frontend tarafında `/analyze` route'u ve `/api/analyze` endpoint'i tamamlanarak Threat Heatmap, MITRE ATT&CK Matrix ve Country Breakdown başarıyla sisteme entegre edildi.
+- **Phase 11:** Web UI Alerts & SIEM Integration — Sağ üst köşeye okunmamış bildirimleri gösteren rozetli bir Bildirim Çanı eklendi. Hız ve yoğunluğa dayalı akıllı kümeleme (rate-based throttling) yapan Server-Sent Events (SSE) tabanlı gerçek zamanlı uyarı sistemi kuruldu. Ayrıca `siem_forwarder.py` yazılarak honeypot loglarının eşzamanlı olarak UDP, TCP veya HTTP üzerinden dış bir SIEM sistemine (Wazuh, Splunk vb.) iletilmesi sağlandı. Kullanıcı için "SIEM Integration" ayarlar arayüzü kodlandı.
 
 ---
 

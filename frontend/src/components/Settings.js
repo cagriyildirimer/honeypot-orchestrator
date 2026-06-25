@@ -833,3 +833,180 @@ export function UsersPage(props) {
       : null
   );
 }
+
+export function SiemSettingsPage(props) {
+  const [config, setConfig] = useState({
+    enabled: false,
+    host: "",
+    port: 514,
+    protocol: "udp",
+    scope: "all"
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  async function loadConfig() {
+    try {
+      const next = await window.requestJson("/api/settings/siem");
+      if (next) {
+        setConfig(next);
+      }
+    } catch (e) {
+      window.showToast("Failed to load SIEM settings: " + e.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  async function handleSave(e) {
+    e.preventDefault();
+    if (props.session.role !== "admin") {
+      window.showToast("Admin access required.", "error");
+      return;
+    }
+    if (config.enabled && !config.host) {
+      window.showToast("Host address is required when enabled.", "error");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await window.requestJson("/api/settings/siem", {
+        method: "POST",
+        body: JSON.stringify(config)
+      });
+      window.showToast("SIEM settings saved.", "success");
+    } catch (e) {
+      window.showToast("Save failed: " + e.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    if (!config.enabled) {
+      window.showToast("Please enable and save SIEM settings before testing.", "error");
+      return;
+    }
+    setTesting(true);
+    try {
+      const res = await window.requestJson("/api/settings/siem/test", { method: "POST" });
+      if (res.ok) {
+        window.showToast("Test event sent to SIEM successfully.", "success");
+      }
+    } catch (e) {
+      window.showToast("Test failed: " + e.message, "error");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  if (loading) {
+    return h(PageSkeleton, null);
+  }
+
+  const isAdmin = props.session.role === "admin";
+
+  return h(
+    React.Fragment,
+    null,
+    h(
+      "header",
+      { className: "topbar" },
+      h(
+        "div",
+        null,
+        h("h1", null, "SIEM Integration"),
+        h("p", { className: "page-subtitle" }, "Forward honeypot events to an external SIEM (Splunk, QRadar, Wazuh, etc).")
+      ),
+      h(
+        "div",
+        { className: "topbar-actions" },
+        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
+        h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
+      )
+    ),
+    h(
+      "section",
+      { className: "panel" },
+      h("div", { className: "section-heading" }, h("div", null, h("h2", null, "SIEM Configuration"), h("p", null, "Define how logs should be exported."))),
+      h(
+        "form",
+        { className: "settings-form", onSubmit: handleSave, style: { maxWidth: "600px" } },
+        h(
+          "div",
+          { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" } },
+          h("span", null, h("strong", null, "Enable SIEM Forwarding")),
+          h(
+            "label",
+            { className: "toggle-switch" },
+            h("input", {
+              type: "checkbox",
+              checked: config.enabled,
+              disabled: !isAdmin,
+              onChange: (e) => setConfig({ ...config, enabled: e.target.checked })
+            }),
+            h("span", { className: "toggle-slider" })
+          )
+        ),
+        h(
+          "div",
+          { style: { opacity: config.enabled ? 1 : 0.5, pointerEvents: config.enabled ? "auto" : "none" } },
+          h(
+            "label",
+            { className: "field-block" },
+            h("span", null, "SIEM Host (IP or Domain)"),
+            h("input", { type: "text", value: config.host, onChange: (e) => setConfig({ ...config, host: e.target.value }), placeholder: "e.g. 192.168.1.50 or http://siem:8080" })
+          ),
+          h(
+            "div",
+            { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" } },
+            h(
+              "label",
+              { className: "field-block" },
+              h("span", null, "Port"),
+              h("input", { type: "number", value: config.port, onChange: (e) => setConfig({ ...config, port: parseInt(e.target.value) || 514 }) })
+            ),
+            h(
+              "label",
+              { className: "field-block" },
+              h("span", null, "Protocol"),
+              h(
+                "select",
+                { value: config.protocol, onChange: (e) => setConfig({ ...config, protocol: e.target.value }) },
+                h("option", { value: "udp" }, "UDP"),
+                h("option", { value: "tcp" }, "TCP"),
+                h("option", { value: "http" }, "HTTP POST")
+              )
+            )
+          ),
+          h(
+            "label",
+            { className: "field-block" },
+            h("span", null, "Forwarding Scope"),
+            h(
+              "select",
+              { value: config.scope, onChange: (e) => setConfig({ ...config, scope: e.target.value }) },
+              h("option", { value: "all" }, "All Events"),
+              h("option", { value: "alerts" }, "Critical Alerts Only")
+            ),
+            h("small", { style: { display: "block", marginTop: "4px", color: "#888" } }, "Select whether to send every log or only high-risk events.")
+          )
+        ),
+        isAdmin
+          ? h(
+              "div",
+              { className: "button-row", style: { marginTop: "24px" } },
+              h("button", { type: "submit", className: "button", disabled: saving }, saving ? "Saving..." : "Save Settings"),
+              h("button", { type: "button", className: "button secondary", disabled: testing || !config.enabled, onClick: handleTest }, testing ? "Testing..." : "Test Connection")
+            )
+          : null
+      )
+    )
+  );
+}

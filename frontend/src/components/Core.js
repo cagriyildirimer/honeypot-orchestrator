@@ -203,7 +203,66 @@ export function AppLayout(props) {
       { className: "main-content" },
       props.children,
       h("div", { id: "toast", className: "toast", hidden: true })
-    )
+    ),
+    h(NotificationBell, null)
+  );
+}
+
+export function NotificationBell() {
+  const [alerts, setAlerts] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const es = new EventSource("/api/alerts/stream");
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === "ping") return;
+        if (data.alerts && data.alerts.length > 0) {
+          setAlerts(prev => {
+            const newAlerts = [...data.alerts, ...prev].slice(0, 50); // keep last 50
+            return newAlerts;
+          });
+          setUnreadCount(prev => prev + data.alerts.length);
+          
+          const latest = data.alerts[0];
+          window.showToast(`🚨 ${latest.summary}`, "error");
+        }
+      } catch (err) {
+        console.error("SSE parse error", err);
+      }
+    };
+    return () => es.close();
+  }, []);
+
+  return h("div", { className: "notification-bell-container", style: { position: "fixed", top: "18px", right: "20px", zIndex: 9999 } },
+    h("button", { 
+      className: "bell-btn", 
+      onClick: () => { setOpen(!open); setUnreadCount(0); },
+      style: { background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "50%", width: "42px", height: "42px", cursor: "pointer", position: "relative", fontSize: "18px", display: "flex", alignItems: "center", justifyContent: "center" }
+    },
+      "🔔",
+      unreadCount > 0 ? h("span", { 
+        className: "badge", 
+        style: { position: "absolute", top: "-4px", right: "-4px", background: "#ff4444", color: "white", borderRadius: "10px", padding: "2px 6px", fontSize: "11px", fontWeight: "bold", border: "2px solid #121212" } 
+      }, unreadCount > 99 ? "99+" : unreadCount) : null
+    ),
+    open ? h("div", { 
+      className: "dropdown-menu", 
+      style: { position: "absolute", top: "52px", right: "0", width: "320px", background: "#1e1e1e", border: "1px solid #333", borderRadius: "8px", padding: "0", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: "400px", overflowY: "auto", overflowX: "hidden" } 
+    },
+      h("div", { style: { padding: "12px 16px", borderBottom: "1px solid #333", background: "rgba(0,0,0,0.2)", fontWeight: "600", fontSize: "14px" } }, "Notifications"),
+      alerts.length === 0 ? h("p", { style: { textAlign: "center", color: "#888", margin: "20px 0" } }, "No recent alerts.") : null,
+      alerts.map((a, i) => h("div", { key: i, style: { padding: "12px 16px", borderBottom: "1px solid #333", fontSize: "13px", background: a.type === "aggregated" ? "rgba(255, 68, 68, 0.05)" : "transparent" } },
+        h("strong", { style: { color: "#ff4444", display: "block", marginBottom: "4px" } }, a.type === "aggregated" ? "Aggregated Alert" : "Critical Alert"),
+        h("div", { style: { color: "#ccc", lineHeight: "1.4" } }, a.summary),
+        h("div", { style: { color: "#888", marginTop: "6px", fontSize: "11px", display: "flex", justifyContent: "space-between" } }, 
+          h("span", null, `IP: ${a.src_ip || "Unknown"}`),
+          a.service ? h("span", { style: { background: "rgba(255,255,255,0.1)", padding: "2px 6px", borderRadius: "4px" } }, a.service) : null
+        )
+      ))
+    ) : null
   );
 }
 

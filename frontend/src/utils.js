@@ -36,6 +36,7 @@ export const SETTINGS_ITEMS = [
   { key: "blocklist", label: "Blocklist", path: "/settings/blocklist" },
   { key: "users", label: "User", path: "/settings/users" },
   { key: "system", label: "System", path: "/settings/system" },
+  { key: "siem", label: "SIEM Integration", path: "/settings/siem" },
 ];
 export const STANDARD_PORTS = {
   dns: 53,

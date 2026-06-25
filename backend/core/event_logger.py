@@ -6,6 +6,7 @@ from typing import Any
 
 from database.database import async_session
 from database.models import Event
+from core.siem_forwarder import siem_forwarder
 
 class DBEventLogger:
     def __init__(self, path: Any = None) -> None:
@@ -57,6 +58,15 @@ class DBEventLogger:
                 
                 for _ in range(len(batch)):
                     self.queue.task_done()
+                
+                # SIEM Forwarding
+                if siem_forwarder.enabled:
+                    for event in batch:
+                        # Copy the event to avoid mutating the original
+                        forward_evt = event.copy()
+                        forward_evt["timestamp"] = datetime.now(UTC).isoformat()
+                        asyncio.create_task(siem_forwarder.forward(forward_evt))
+                
                 batch.clear()
 
             except asyncio.CancelledError:

@@ -12,7 +12,7 @@ echo ""
 echo "Lütfen kurulum türünü seçiniz:"
 echo "1) Standart Kurulum (Varsayılan Docker port köprüleme, ağ yapılandırması gerektirmez)"
 echo "2) Macvlan / LAN Kurulumu (Yerel ağdan doğrudan IP tahsis etme, macvlan gerektirir)"
-read -p "Seçiminiz [1 veya 2, Varsayılan: 1]: " INSTALL_TYPE
+read -p "Seçiminiz [1 veya 2, Önerilen: 2]: " INSTALL_TYPE
 INSTALL_TYPE="${INSTALL_TYPE:-1}"
 
 # .env dosyasını sıfırdan oluşturmak için hazırla

@@ -105,6 +105,10 @@ class WebDashboard:
     async def start(self) -> None:
         self._sessions = await self._load_sessions()
         await self._reload_users()
+        
+        from api.handlers.settings import load_siem_config
+        await load_siem_config()
+        
         # Tarayici istekleri handle_client metoduna yonlendirilir.
         self._server = await asyncio.start_server(self.handle_client, self.host, self.port)
 
@@ -129,7 +133,10 @@ class WebDashboard:
             request = await self._read_request(reader)
             request["client_ip"] = client_ip
             response = await self._route_request(request)
-            await self._send_response(writer, response)
+            if response.get("stream", False):
+                await self._send_sse_stream(writer, response["generator"])
+            else:
+                await self._send_response(writer, response)
         except EOFError:
             return
         except Exception as exc:
@@ -255,6 +262,23 @@ class WebDashboard:
         header_blob = ("\r\n".join(header_lines) + "\r\n\r\n").encode("utf-8")
         writer.write(header_blob + body)
         await writer.drain()
+
+    async def _send_sse_stream(self, writer: asyncio.StreamWriter, generator: Any) -> None:
+        headers = (
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/event-stream\r\n"
+            "Cache-Control: no-cache\r\n"
+            "Connection: keep-alive\r\n\r\n"
+        )
+        writer.write(headers.encode("utf-8"))
+        await writer.drain()
+        
+        try:
+            async for data in generator:
+                writer.write(f"data: {data}\n\n".encode("utf-8"))
+                await writer.drain()
+        except (asyncio.CancelledError, ConnectionResetError, BrokenPipeError):
+            pass
 
     def _is_authenticated(self, cookies: dict[str, str]) -> bool:
         token = cookies.get("session", "")
@@ -653,3 +677,5 @@ import api.handlers.blacklist
 import api.handlers.services
 import api.handlers.overview
 import api.handlers.analyze
+import api.handlers.alerts
+import api.handlers.settings
