@@ -443,6 +443,28 @@ export function SystemPage(props) {
       )
     ),
     h(
+      "section",
+      { className: "panel resources-panel", style: { marginBottom: "24px" } },
+      h("div", { className: "section-heading compact" }, h("div", null, h("h2", null, "System Resources"), h("p", null, "Real-time CPU, Memory, and Disk usage status."))),
+      h(
+        "div",
+        { className: "resources-grid", style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "24px", marginTop: "16px" } },
+        h(ResourceGauge, { label: "CPU Usage", percent: payload.resources?.cpu?.percent || 0, note: "Processor utilization", colorClass: "--accent" }),
+        h(ResourceGauge, { 
+          label: "RAM Usage", 
+          percent: payload.resources?.ram?.percent || 0, 
+          note: `${payload.resources?.ram?.used_mb || 0} MB / ${payload.resources?.ram?.total_mb || 0} MB`, 
+          colorClass: "--accent-focus" 
+        }),
+        h(ResourceGauge, { 
+          label: "Disk Usage", 
+          percent: payload.resources?.disk?.percent || 0, 
+          note: `${payload.resources?.disk?.used_gb || 0} GB / ${payload.resources?.disk?.total_gb || 0} GB`, 
+          colorClass: "--success" 
+        })
+      )
+    ),
+    h(
       "div",
       { className: "settings-grid" },
       h(DetailPanel, {
@@ -464,75 +486,161 @@ export function SystemPage(props) {
           ["Version", payload.runtime ? payload.runtime.version : "-"],
         ],
       })
-    ),
-    h(
-      "section",
-      { className: "panel resources-panel", style: { marginTop: "24px" } },
-      h("div", { className: "section-heading compact" }, h("div", null, h("h2", null, "System Resources"), h("p", null, "Real-time CPU, Memory, and Disk usage status."))),
-      h(
-        "div",
-        { className: "resources-grid", style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "24px", marginTop: "16px" } },
-        h(ResourceGauge, { label: "CPU Usage", percent: payload.resources?.cpu?.percent || 0, note: "Processor utilization", color: "#f97316" }),
-        h(ResourceGauge, { 
-          label: "RAM Usage", 
-          percent: payload.resources?.ram?.percent || 0, 
-          note: `${payload.resources?.ram?.used_mb || 0} MB / ${payload.resources?.ram?.total_mb || 0} MB`, 
-          color: "#8b5cf6" 
-        }),
-        h(ResourceGauge, { 
-          label: "Disk Usage", 
-          percent: payload.resources?.disk?.percent || 0, 
-          note: `${payload.resources?.disk?.used_gb || 0} GB / ${payload.resources?.disk?.total_gb || 0} GB`, 
-          color: "#00d4ff" 
-        })
-      )
     )
   );
 }
 
-export function ResourceGauge({ label, percent, note, color }) {
-  const radius = 30;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (percent / 100) * circumference;
+export function ResourceGauge({ label, percent, note }) {
+  const r_inner = 48;
+  const circumference_inner = 2 * Math.PI * r_inner; // 301.6
+  const arc_length_inner = circumference_inner * 0.5; // 150.8
+  const gap_inner = circumference_inner - arc_length_inner; // 150.8
+  const strokeDashoffset = arc_length_inner - (percent / 100) * arc_length_inner;
+
+  const r_outer = 60;
+  const circumference_outer = 2 * Math.PI * r_outer; // 377
+  const arc_length_outer = circumference_outer * 0.5; // 188.5
+  const gap_outer = circumference_outer - arc_length_outer; // 188.5
+
+  const green_len = arc_length_outer * 0.7; // 132.0
+  const orange_len = arc_length_outer * 0.2; // 37.7
+  const red_len = arc_length_outer * 0.1; // 18.9
+
+  // Determine status color based on value thresholds
+  const statusColor = percent >= 90 
+    ? "var(--danger, #e31a1a)" 
+    : (percent >= 70 ? "var(--warning, #ffb547)" : "var(--success, #01b574)");
+  
+  const statusGlow = percent >= 90
+    ? "rgba(227, 26, 26, 0.4)"
+    : (percent >= 70 ? "rgba(255, 181, 71, 0.4)" : "rgba(1, 181, 116, 0.4)");
 
   return h(
     "div",
-    { className: "resource-gauge-card", style: { display: "flex", flexDirection: "column", alignItems: "center", padding: "16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "12px", textAlign: "center" } },
+    { 
+      className: "resource-gauge-card", 
+      style: { 
+        display: "flex", 
+        flexDirection: "column", 
+        alignItems: "center", 
+        padding: "20px", 
+        background: "rgba(255, 255, 255, 0.02)", 
+        border: "1px solid rgba(255, 255, 255, 0.05)", 
+        borderRadius: "14px",
+        textAlign: "center",
+        boxSizing: "border-box",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)"
+      } 
+    },
     h(
       "div",
-      { className: "gauge-wrap", style: { position: "relative", width: "76px", height: "76px", marginBottom: "12px" } },
+      { className: "gauge-svg-wrap", style: { width: "180px", height: "95px", position: "relative", marginBottom: "8px" } },
       h(
         "svg",
-        { width: "76", height: "76", style: { transform: "rotate(-90deg)" } },
+        { width: "180", height: "95", viewBox: "0 0 180 95", style: { display: "block" } },
+        
+        // 1. Inner Thick Arc Background Track (Strict 180-Degree Half-Circle)
         h("circle", {
-          cx: "38",
-          cy: "38",
-          r: String(radius),
+          cx: "90",
+          cy: "85",
+          r: String(r_inner),
           fill: "none",
-          stroke: "rgba(255,255,255,0.05)",
-          strokeWidth: "6"
+          stroke: "rgba(255, 255, 255, 0.03)",
+          strokeWidth: "16",
+          strokeDasharray: `${arc_length_inner} ${gap_inner}`,
+          strokeLinecap: "round",
+          style: {
+            transform: "rotate(-180deg)",
+            transformOrigin: "90px 85px"
+          }
         }),
+        
+        // 2. Inner Thick Arc Progress Fill (Fills Clockwise from Left to Right)
         h("circle", {
-          cx: "38",
-          cy: "38",
-          r: String(radius),
+          cx: "90",
+          cy: "85",
+          r: String(r_inner),
           fill: "none",
-          stroke: color,
-          strokeWidth: "6",
-          strokeDasharray: String(circumference),
+          stroke: statusColor,
+          strokeWidth: "16",
+          strokeDasharray: `${arc_length_inner} ${gap_inner}`,
           strokeDashoffset: String(strokeDashoffset),
           strokeLinecap: "round",
-          style: { transition: "stroke-dashoffset 0.5s ease" }
-        })
-      ),
-      h(
-        "span",
-        { style: { position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", fontSize: "14px", fontWeight: "bold", color: "#fff" } },
-        `${percent}%`
+          style: {
+            transform: "rotate(-180deg)",
+            transformOrigin: "90px 85px",
+            transition: "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
+            filter: `drop-shadow(0 0 5px ${statusGlow})`
+          }
+        }),
+        
+        // 3. Outer Thin Arc - Green Segment (0% - 70%)
+        h("circle", {
+          cx: "90",
+          cy: "85",
+          r: String(r_outer),
+          fill: "none",
+          stroke: "var(--success, #01b574)",
+          strokeWidth: "3",
+          strokeDasharray: `${green_len} ${circumference_outer - green_len}`,
+          strokeLinecap: "round",
+          style: {
+            transform: "rotate(-180deg)",
+            transformOrigin: "90px 85px"
+          }
+        }),
+        
+        // 4. Outer Thin Arc - Orange Segment (70% - 90%)
+        h("circle", {
+          cx: "90",
+          cy: "85",
+          r: String(r_outer),
+          fill: "none",
+          stroke: "var(--warning, #ffb547)",
+          strokeWidth: "3",
+          strokeDasharray: `${orange_len} ${circumference_outer - orange_len}`,
+          strokeDashoffset: String(-green_len),
+          strokeLinecap: "round",
+          style: {
+            transform: "rotate(-180deg)",
+            transformOrigin: "90px 85px"
+          }
+        }),
+        
+        // 5. Outer Thin Arc - Red Segment (90% - 100%)
+        h("circle", {
+          cx: "90",
+          cy: "85",
+          r: String(r_outer),
+          fill: "none",
+          stroke: "var(--danger, #e31a1a)",
+          strokeWidth: "3",
+          strokeDasharray: `${red_len} ${circumference_outer - red_len}`,
+          strokeDashoffset: String(-(green_len + orange_len)),
+          strokeLinecap: "round",
+          style: {
+            transform: "rotate(-180deg)",
+            transformOrigin: "90px 85px"
+          }
+        }),
+        
+        // 6. Centered Percentage Text (Centered Inside the Arch)
+        h("text", {
+          x: "90",
+          y: "80",
+          textAnchor: "middle",
+          style: {
+            fill: statusColor,
+            fontSize: "22px",
+            fontWeight: "850",
+            fontFamily: "inherit",
+            filter: `drop-shadow(0 0 2px ${statusGlow})`
+          }
+        }, `${percent}%`)
       )
     ),
-    h("strong", { style: { display: "block", fontSize: "14px", color: "#e2e8f0", marginBottom: "4px" } }, label),
-    h("small", { style: { fontSize: "12px", color: "#888" } }, note)
+    h("strong", { style: { display: "block", fontSize: "14px", color: "var(--text, #e2e8f0)", marginBottom: "4px" } }, label),
+    h("small", { style: { fontSize: "12px", color: "var(--muted, #888)", fontWeight: "500" } }, note)
   );
 }
 

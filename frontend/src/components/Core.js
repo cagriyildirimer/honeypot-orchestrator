@@ -204,11 +204,11 @@ export function AppLayout(props) {
       props.children,
       h("div", { id: "toast", className: "toast", hidden: true })
     ),
-    h(NotificationBellPortal, null)
+    h(NotificationBellPortal, { page: props.page })
   );
 }
 
-export function NotificationBellPortal() {
+export function NotificationBellPortal(props) {
   const [portalTarget, setPortalTarget] = useState(null);
 
   useEffect(() => {
@@ -218,12 +218,16 @@ export function NotificationBellPortal() {
     };
 
     updateTarget();
+    const timer = setTimeout(updateTarget, 50);
 
     const observer = new MutationObserver(updateTarget);
     observer.observe(document.body, { childList: true, subtree: true });
 
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [props.page]);
 
   if (!portalTarget) return null;
 
@@ -258,16 +262,29 @@ export function NotificationBell() {
     return () => es.close();
   }, []);
 
-  return h("div", { className: "notification-bell-container", style: { position: "relative", zIndex: 999 } },
+  return h("div", { className: "notification-bell-container", style: { position: "relative", zIndex: 999, flexShrink: 0 } },
     h("button", { 
       className: "bell-btn", 
       onClick: () => { setOpen(!open); setUnreadCount(0); },
-      style: { background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "50%", width: "38px", height: "38px", cursor: "pointer", position: "relative", fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center" }
+      style: { background: "transparent", border: "none", width: "38px", height: "38px", cursor: "pointer", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--accent, #0075ff)", padding: 0 }
     },
-      "🔔",
+      h("svg", {
+        width: "22",
+        height: "22",
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: "2.2",
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+        style: { display: "block" }
+      },
+        h("path", { d: "M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" }),
+        h("path", { d: "M13.73 21a2 2 0 0 1-3.46 0" })
+      ),
       unreadCount > 0 ? h("span", { 
         className: "badge", 
-        style: { position: "absolute", top: "-4px", right: "-4px", background: "#ff4444", color: "white", borderRadius: "10px", padding: "2px 6px", fontSize: "11px", fontWeight: "bold", border: "2px solid #121212" } 
+        style: { position: "absolute", top: "0px", right: "0px", background: "#ff4444", color: "white", borderRadius: "10px", padding: "2px 6px", fontSize: "11px", fontWeight: "bold", border: "2px solid #121212" } 
       }, unreadCount > 99 ? "99+" : unreadCount) : null
     ),
     open ? h("div", { 

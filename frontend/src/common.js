@@ -132,13 +132,21 @@ function showToast(message, tone = "neutral") {
   if (!toast) {
     return;
   }
-  toast.hidden = false;
-  toast.className = `toast ${tone}`;
-  toast.textContent = message;
+  
   clearTimeout(showToast.timer);
+  clearTimeout(showToast.hideTimer);
+
+  toast.textContent = message;
+  toast.className = `toast ${tone}`;
+  toast.hidden = false;
+
   showToast.timer = setTimeout(() => {
-    toast.hidden = true;
-  }, 2600);
+    toast.classList.add("hiding");
+    showToast.hideTimer = setTimeout(() => {
+      toast.hidden = true;
+      toast.classList.remove("hiding");
+    }, 400);
+  }, 3000);
 }
 
 function formatTimestamp(value) {

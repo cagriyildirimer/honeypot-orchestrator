@@ -370,13 +370,13 @@ class WebDashboard:
                 with open("/proc/stat", "r") as f:
                     line = f.readline()
                 parts = line.split()
-                times = [float(x) for x in parts[1:8]]
+                times = [float(x) for x in parts[1:]]
                 idle = times[3] + times[4]
                 total = sum(times)
                 return idle, total
 
             idle1, total1 = read_cpu()
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.2)
             idle2, total2 = read_cpu()
 
             idle_diff = idle2 - idle1

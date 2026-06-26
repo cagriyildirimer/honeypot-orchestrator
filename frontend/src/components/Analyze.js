@@ -149,7 +149,7 @@ export function AnalyzePage(props) {
         h(
           "a",
           {
-            className: `button secondary${isAdmin ? "" : " disabled"}`,
+            className: `button${isAdmin ? "" : " disabled"}`,
             href: "/api/ioc/csv",
             download: "ioc_export.csv",
             onClick: (event) => {
@@ -164,7 +164,7 @@ export function AnalyzePage(props) {
         h(
           "a",
           {
-            className: `button secondary${isAdmin ? "" : " disabled"}`,
+            className: `button${isAdmin ? "" : " disabled"}`,
             href: "/api/ioc/stix",
             download: "ioc_export.stix.json",
             onClick: (event) => {

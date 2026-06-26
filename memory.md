@@ -1,5 +1,115 @@
 # Honeypot Orchestrator - Memory & Next Steps
 
+---
+## ⚠️ ÖNCELİKLİ YAPILACAKLAR (Kod Denetim Raporu)
+
+> **Tarih:** 2026-06-26  
+> **Kapsam:** Tüm frontend (JS/CSS) + backend (Python) kaynak kodları incelendi.
+
+### 🔴 KRİTİK HATALAR
+
+1. **`Live.js` — Döngüsel Import**  
+   - **Dosya:** `frontend/src/components/Live.js:4`  
+   - **Sorun:** `import { App } from './App.js';` satırı var ama `App` hiçbir yerde kullanılmıyor. `App.js` zaten `Live.js`'i import ettiği için bu potansiyel bir döngüsel bağımlılık oluşturur. Vite bunu şimdilik tolere ediyor ama modül init sırası karışabilir.  
+   - **Çözüm:** Bu import satırını sil.
+
+2. **`styles.css` — Çift `.toast` Tanımı (CSS Çakışması)**  
+   - **Dosya:** `frontend/src/styles.css` — Satır 1873-1897 ve 3363-3414  
+   - **Sorun:** `.toast` sınıfı iki ayrı yerde tanımlanmış. Satır 1873'teki eski tanım `position: sticky; bottom: 16px` kullanıyor. Satır 3363'teki yeni tanım `position: fixed !important; top: 24px !important` ve `display: none !important` kullanıyor. Yeni tanım `!important` sayesinde baskın geliyor ama eski tanımdaki bazı stil kuralları (font-weight: 800 vs.) hâlâ cascade'de kalıyor ve debug'u zorlaştırıyor.  
+   - **Çözüm:** Satır 1873-1897 arasındaki eski `.toast`, `.toast.success`, `.toast.error` bloklarını tamamen sil.
+
+3. **`ResourceGauge` — `colorClass` prop'u kullanılmıyor**  
+   - **Dosya:** `frontend/src/components/Settings.js:452-464` (çağıran) ve `:493` (bileşen)  
+   - **Sorun:** `SystemPage` bileşeni her gauge'e `colorClass` prop'u gönderiyor (`--accent`, `--accent-focus`, `--success`) ama `ResourceGauge` bileşeninin fonksiyon imzasında `colorClass` destructure edilmiyor ve hiçbir yerde kullanılmıyor. Bu ölü prop.  
+   - **Çözüm:** Ya prop gönderimini kaldır ya da gauge'de renk olarak kullan.
+
+4. **`ResourceGauge` — Yarım Daire Yön Sorunu**  
+   - **Dosya:** `frontend/src/components/Settings.js:493-645`  
+   - **Sorun:** Kullanıcı, gauge bar'ın **soldan sağa** doğru dolmasını istiyor. Şu anki SVG implementasyonu `strokeDashoffset` mantığı nedeniyle yanlış yönde doluyor olabilir. SVG circle'da `rotate(-180deg)` ile başlayan bir half-circle'da, `strokeDashoffset = arc_length - (percent / 100) * arc_length` formülü, dolu kısmı soldan başlatıp sağa doğru ilerletir ama görsel test gerekiyor.  
+   - **Çözüm:** Tarayıcıda test edip doğrulanmalı. Gerekirse rotation ve offset mantığı ayarlanmalı.
+
+### 🟠 ORTA ÖNCELİK SORUNLARI
+
+5. **`settings.py` Handler — Admin Yetkisi Kontrolü Eksik**  
+   - **Dosya:** `backend/api/handlers/settings.py:33-54`  
+   - **Sorun:** `/api/settings/siem` POST endpoint'i sadece `_is_authenticated` kontrolü yapıyor ama `_is_admin` kontrolü yapmıyor. Viewer rolündeki bir kullanıcı SIEM ayarlarını değiştirebilir. Aynı sorun `/api/settings/siem/test` için de geçerli.  
+   - **Çözüm:** `if not server._is_admin(request["cookies"]): return server._forbidden_response()` ekle.
+
+6. **`server.py` — `_handle_clear_logs` Çağrılmıyor (Dead Code)**  
+   - **Dosya:** `backend/web/server.py:204-207`  
+   - **Sorun:** `_handle_clear_logs` metodu tanımlı ama hiçbir route tarafından çağrılmıyor. Eski bir kalıntı.  
+   - **Çözüm:** Ya bir route'a bağla ya da sil.
+
+7. **`server.py` — `_export_logs_response` Çağrılmıyor (Dead Code)**  
+   - **Dosya:** `backend/web/server.py:456-467`  
+   - **Sorun:** `_export_logs_response` metodu tanımlı ama router'da kayıtlı bir endpoint yok. Log export fonksiyonu erişilemez durumda.  
+   - **Çözüm:** `/api/logs/export` gibi bir route kaydet veya sil.
+
+8. **`test_cpu.py` — Root Seviyede Test Dosyası**  
+   - **Dosya:** `backend/test_cpu.py`  
+   - **Sorun:** Bu geçici bir test dosyası. Proje root'unda gereksiz yer kaplıyor.  
+   - **Çözüm:** Sil veya `tests/` dizinine taşı.
+
+9. **`Core.js` — `NotificationBell` Dropdown Menü Tema Uyumsuzluğu**  
+   - **Dosya:** `frontend/src/components/Core.js:290-304`  
+   - **Sorun:** Bildirim dropdown menüsü hardcoded renkler kullanıyor: `background: "#1e1e1e"`, `border: "1px solid #333"`, `color: "#888"` vs. Bu renkler tema CSS değişkenlerini kullanmıyor. Farklı temalarda (özellikle Slate Mono) kötü görünür.  
+   - **Çözüm:** `var(--surface)`, `var(--border)`, `var(--muted)` gibi CSS değişkenleri kullan.
+
+10. **`Core.js` — `NotificationBell` MutationObserver Performans Riski**  
+    - **Dosya:** `frontend/src/components/Core.js:223-224`  
+    - **Sorun:** `MutationObserver` tüm `document.body`'yi `childList: true, subtree: true` ile izliyor. Her DOM değişikliğinde `querySelector` çalışıyor. Büyük sayfalarda (Dashboard, Analyze) her render'da tetiklenir.  
+    - **Çözüm:** `subtree: true` yerine daha dar bir hedef kullan veya debounce ekle.
+
+### 🟡 DÜŞÜK ÖNCELİK / KOD KALİTESİ
+
+11. **`Dashboard.js:154` — Yazım Hatası**  
+    - **Sorun:** `"Suspicios Events"` yazıyor, doğrusu `"Suspicious Events"` olmalı.  
+    - **Çözüm:** Düzelt.
+
+12. **`index.html` — CSP İhlali Riski**  
+    - **Dosya:** `frontend/index.html:22`  
+    - **Sorun:** `<script src="https://unpkg.com/globe.gl">` harici bir CDN'den yükleniyor. Backend'in gönderdiği CSP header'ı (`script-src 'self'`) bu kaynağı engelliyor. Tarayıcı konsolunda CSP ihlal hatası üretir (Nginx proxy üzerinden sunulduğu için şu an sorun olmayabilir ama doğrudan backend'e bağlanıldığında çalışmaz).  
+    - **Çözüm:** Globe.js'i vendor dizinine indir veya CSP'ye `https://unpkg.com` ekle.
+
+13. **`common.js` — `setText` ve `applyRoleVisibility` Kullanılmıyor**  
+    - **Dosya:** `frontend/src/common.js:121-128` ve `:195-200`  
+    - **Sorun:** `setText` fonksiyonu ve `applyRoleVisibility` fonksiyonu tanımlı ve `window`'a atanmış ama React SPA'da hiçbir yerde çağrılmıyor. Eski vanilya JS kalıntısı.  
+    - **Çözüm:** Sil.
+
+14. **`common.js` — `initializeThemeControls` Gereksiz DOM Event Listener**  
+    - **Dosya:** `frontend/src/common.js:100-110`  
+    - **Sorun:** `[data-theme-toggle]` butonları için click listener ekliyor ama React SPA'da böyle butonlar yok. `AppearancePage` kendi state'ini yönetiyor. Bu kod hala sayfa yüklendiğinde çalışıyor ama hiçbir etkisi yok.  
+    - **Çözüm:** Bu fonksiyonu kaldır veya sadece login.html için bırak.
+
+15. **`Live.js:57` — Logout Butonu Stil Tutarsızlığı**  
+    - **Dosya:** `frontend/src/components/Live.js:56-59`  
+    - **Sorun:** Live sayfasındaki logout butonu `className: "button secondary"` kullanıyor. Diğer tüm sayfalarda logout butonu `className: "button"` (primary) kullanıyor. Tutarsız.  
+    - **Çözüm:** Diğer sayfalarla aynı yap: `className: "button"`.
+
+16. **`Live.js` — User Pill Eksik**  
+    - **Dosya:** `frontend/src/components/Live.js:43-60`  
+    - **Sorun:** Live sayfasının topbar-actions bölümünde `user-pill` (Signed in as) bileşeni yok. Diğer tüm sayfalarda var.  
+    - **Çözüm:** Ekle.
+
+17. **`server.py` — `_build_settings_payload` CPU Ölçümü 200ms Blokaj**  
+    - **Dosya:** `backend/web/server.py:378-379`  
+    - **Sorun:** CPU kullanım yüzdesi hesaplamak için `await asyncio.sleep(0.2)` çağrılıyor. Her settings API isteğinde 200ms blokaj oluyor. System sayfası 5 saniyede bir poll yapıyor — sorun küçük ama gereksiz yavaşlatma.  
+    - **Çözüm:** Arka plan task'ı ile periyodik olarak CPU ölç ve cache'le. API isteğinde cache'ten dön.
+
+18. **`styles.css` — 3416 Satır / 70KB Boyut**  
+    - **Sorun:** Tek bir CSS dosyası 70KB. İçinde duplike tanımlar var (eski/yeni toast, dark tema duplicate). Bakımı zorlaştırıyor.  
+    - **Çözüm:** İleride bileşen bazlı CSS'e bölünebilir.
+
+19. **`server.py:250` — CSP `script-src` Sorunu**  
+    - **Dosya:** `backend/web/server.py:250`  
+    - **Sorun:** CSP header `script-src 'self'` diyor ama `index.html` inline script (`<script>try { var savedTheme...`) içeriyor. Bu `unsafe-inline` olmadan çalışmaz. Frontend Nginx üzerinden sunulduğu için backend CSP bypass ediliyor ama güvenlik açısından tutarsız.  
+    - **Çözüm:** Inline script'i ayrı bir dosyaya taşı veya nonce-based CSP kullan.
+
+20. **`ResourceGauge` — Inline Style Yığını**  
+    - **Dosya:** `frontend/src/components/Settings.js:518-644`  
+    - **Sorun:** Gauge bileşeni tüm stillerini inline style olarak tanımlıyor. CSS dosyasında karşılığı yok. Bu bakımı zorlaştırıyor ve tema değişikliklerinde sorun çıkarabilir.  
+    - **Çözüm:** CSS sınıflarına taşı.
+
 ## 🏗️ Proje Mimari ve Dosya Yapısı
 
 ```text
