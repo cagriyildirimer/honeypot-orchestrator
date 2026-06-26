@@ -4,9 +4,9 @@ import { usePolling } from '../utils.js';
 import { PageSkeleton, ThreatIntelPanel } from './Core.js';
 
 function getFlagEmoji(countryCode) {
-  if (!countryCode || countryCode === "XX" || countryCode === "Private" || countryCode === "Unknown") return "🌐";
-  const codePoints = countryCode
-    .toUpperCase()
+  const code = String(countryCode || "").toUpperCase();
+  if (!code || code === "XX" || code === "PRIVATE" || code === "UNKNOWN") return "🌐";
+  const codePoints = code
     .split("")
     .map(char => 127397 + char.charCodeAt(0));
   try {
@@ -40,8 +40,8 @@ export function AnalyzePage(props) {
   usePolling(loadData, 30000, []);
 
   // Extract techniques and calculate total counts
-  const techniques = analyzeData?.techniques || [];
-  const countryBreakdown = analyzeData?.country_breakdown || [];
+  const techniques = Array.isArray(analyzeData?.techniques) ? analyzeData.techniques : [];
+  const countryBreakdown = Array.isArray(analyzeData?.country_breakdown) ? analyzeData.country_breakdown : [];
   const totalCountryHits = countryBreakdown.reduce((sum, c) => sum + c.count, 0) || 1;
 
   // Stages definition with dynamic counts aggregated from techniques
@@ -121,14 +121,14 @@ export function AnalyzePage(props) {
   const selectedStage = stages[selectedStageIdx] || stages[0];
 
   // Filter top attackers for the selected stage's services (or show overall top if no matches)
-  const topAttackers = tiData?.attackers || [];
+  const topAttackers = Array.isArray(tiData?.attackers) ? tiData.attackers : [];
 
   return h(
     "div",
     { className: "page-container page-fade-in" },
     h(
       "header",
-      { className: "page-header" },
+      { className: "topbar" },
       h(
         "div",
         null,
@@ -137,7 +137,13 @@ export function AnalyzePage(props) {
       ),
       h(
         "div",
-        { className: "page-actions" },
+        { className: "topbar-actions" },
+        h(
+          "div",
+          { className: "user-pill" },
+          h("span", null, "Signed in as"),
+          h("strong", null, props.session.username || "-")
+        ),
         h(
           "button",
           { type: "button", className: "button", onClick: props.onLogout },
@@ -329,7 +335,7 @@ export function AnalyzePage(props) {
                   "div",
                   { className: "inspector-attackers-list" },
                   stageAttackers.slice(0, 4).map((att, idx) => {
-                    const matchingAttacker = tiData?.attackers?.find(a => a.ip === att.ip);
+                    const matchingAttacker = Array.isArray(tiData?.attackers) ? tiData.attackers.find(a => a.ip === att.ip) : null;
                     const countryCode = matchingAttacker?.countryCode || matchingAttacker?.country_code || "XX";
                     return h(
                       "div",

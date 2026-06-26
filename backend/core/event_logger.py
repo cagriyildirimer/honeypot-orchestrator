@@ -8,6 +8,16 @@ from database.database import async_session
 from database.models import Event
 from core.siem_forwarder import siem_forwarder
 
+def sanitize_null_bytes(val: Any) -> Any:
+    if isinstance(val, str):
+        return val.replace("\x00", "")
+    elif isinstance(val, dict):
+        return {k: sanitize_null_bytes(v) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [sanitize_null_bytes(x) for x in val]
+    return val
+
+
 class DBEventLogger:
     def __init__(self, path: Any = None) -> None:
         self.queue: asyncio.Queue[dict[str, Any]] | None = None
@@ -25,10 +35,10 @@ class DBEventLogger:
             try:
                 if not batch:
                     item = await self.queue.get()
-                    batch.append(item)
+                    batch.append(sanitize_null_bytes(item))
                 
                 while not self.queue.empty() and len(batch) < 100:
-                    batch.append(self.queue.get_nowait())
+                    batch.append(sanitize_null_bytes(self.queue.get_nowait()))
                 
                 async with async_session() as session:
                     events = []

@@ -413,7 +413,6 @@ export function AppearancePage(props) {
 
 export function SystemPage(props) {
   const [payload, setPayload] = useState(null);
-  const [busy, setBusy] = useState(false);
 
   async function loadSettings() {
     const next = await window.requestJson("/api/settings");
@@ -427,41 +426,6 @@ export function SystemPage(props) {
   }
 
   const isAdmin = props.session.role === "admin";
-
-  async function clearLogs() {
-    if (!isAdmin) {
-      window.showToast("Admin access required.", "error");
-      return;
-    }
-    setBusy(true);
-    try {
-      await window.requestJson("/api/logs/clear", { method: "POST" });
-      await loadSettings();
-      window.showToast("Logs cleared.", "success");
-    } catch (error) {
-      window.showToast(error.message, "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function copyLogs() {
-    if (!isAdmin) {
-      window.showToast("Admin access required.", "error");
-      return;
-    }
-    try {
-      const response = await fetch("/api/logs/export");
-      if (!response.ok) {
-        throw new Error(`Request failed: ${response.status}`);
-      }
-      const content = await response.text();
-      await copyText(content);
-      window.showToast("Logs copied as JSONL.", "success");
-    } catch (error) {
-      window.showToast(error.message, "error");
-    }
-  }
 
   return h(
     React.Fragment,
@@ -517,21 +481,6 @@ export function SystemPage(props) {
             "a",
             {
               className: `button secondary${isAdmin ? "" : " disabled"}`,
-              href: "/api/logs/export",
-              download: "honeypot-events.jsonl",
-              onClick: (event) => {
-                if (!isAdmin) {
-                  event.preventDefault();
-                  window.showToast("Admin access required.", "error");
-                }
-              },
-            },
-            "Export JSONL"
-          ),
-          h(
-            "a",
-            {
-              className: `button secondary${isAdmin ? "" : " disabled"}`,
               href: "/api/ioc/csv",
               download: "ioc_export.csv",
               onClick: (event) => {
@@ -557,9 +506,7 @@ export function SystemPage(props) {
               },
             },
             "Export IOC (STIX)"
-          ),
-          h("button", { type: "button", className: "button secondary", disabled: !isAdmin, onClick: copyLogs }, "Copy Logs"),
-          h("button", { type: "button", className: "button danger", disabled: !isAdmin || busy, onClick: clearLogs }, busy ? "Clearing..." : "Clear Logs")
+          )
         )
       )
     )
