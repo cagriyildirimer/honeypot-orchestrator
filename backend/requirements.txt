@@ -8,3 +8,5 @@ sqlalchemy
 asyncpg
 alembic
 aiosqlite
+aiohttp
+
