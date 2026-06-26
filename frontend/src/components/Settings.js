@@ -463,53 +463,76 @@ export function SystemPage(props) {
           ["Uptime", payload.runtime ? payload.runtime.uptime : "-"],
           ["Version", payload.runtime ? payload.runtime.version : "-"],
         ],
-      }),
+      })
+    ),
+    h(
+      "section",
+      { className: "panel resources-panel", style: { marginTop: "24px" } },
+      h("div", { className: "section-heading compact" }, h("div", null, h("h2", null, "System Resources"), h("p", null, "Real-time CPU, Memory, and Disk usage status."))),
       h(
-        "section",
-        { className: "panel" },
-        h("div", { className: "section-heading compact" }, h("div", null, h("h2", null, "Logging"), h("p", null, "Inspect and export current event storage."))),
-        h(
-          "dl",
-          { className: "detail-list" },
-          h("div", null, h("dt", null, "Path"), h("dd", null, payload.logging ? payload.logging.path : "-")),
-          h("div", null, h("dt", null, "Size"), h("dd", null, payload.logging ? formatBytes(payload.logging.size_bytes) : "-"))
-        ),
-        h(
-          "div",
-          { className: "button-row" },
-          h(
-            "a",
-            {
-              className: `button secondary${isAdmin ? "" : " disabled"}`,
-              href: "/api/ioc/csv",
-              download: "ioc_export.csv",
-              onClick: (event) => {
-                if (!isAdmin) {
-                  event.preventDefault();
-                  window.showToast("Admin access required.", "error");
-                }
-              },
-            },
-            "Export IOC (CSV)"
-          ),
-          h(
-            "a",
-            {
-              className: `button secondary${isAdmin ? "" : " disabled"}`,
-              href: "/api/ioc/stix",
-              download: "ioc_export.stix.json",
-              onClick: (event) => {
-                if (!isAdmin) {
-                  event.preventDefault();
-                  window.showToast("Admin access required.", "error");
-                }
-              },
-            },
-            "Export IOC (STIX)"
-          )
-        )
+        "div",
+        { className: "resources-grid", style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "24px", marginTop: "16px" } },
+        h(ResourceGauge, { label: "CPU Usage", percent: payload.resources?.cpu?.percent || 0, note: "Processor utilization", color: "#f97316" }),
+        h(ResourceGauge, { 
+          label: "RAM Usage", 
+          percent: payload.resources?.ram?.percent || 0, 
+          note: `${payload.resources?.ram?.used_mb || 0} MB / ${payload.resources?.ram?.total_mb || 0} MB`, 
+          color: "#8b5cf6" 
+        }),
+        h(ResourceGauge, { 
+          label: "Disk Usage", 
+          percent: payload.resources?.disk?.percent || 0, 
+          note: `${payload.resources?.disk?.used_gb || 0} GB / ${payload.resources?.disk?.total_gb || 0} GB`, 
+          color: "#00d4ff" 
+        })
       )
     )
+  );
+}
+
+export function ResourceGauge({ label, percent, note, color }) {
+  const radius = 30;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (percent / 100) * circumference;
+
+  return h(
+    "div",
+    { className: "resource-gauge-card", style: { display: "flex", flexDirection: "column", alignItems: "center", padding: "16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "12px", textAlign: "center" } },
+    h(
+      "div",
+      { className: "gauge-wrap", style: { position: "relative", width: "76px", height: "76px", marginBottom: "12px" } },
+      h(
+        "svg",
+        { width: "76", height: "76", style: { transform: "rotate(-90deg)" } },
+        h("circle", {
+          cx: "38",
+          cy: "38",
+          r: String(radius),
+          fill: "none",
+          stroke: "rgba(255,255,255,0.05)",
+          strokeWidth: "6"
+        }),
+        h("circle", {
+          cx: "38",
+          cy: "38",
+          r: String(radius),
+          fill: "none",
+          stroke: color,
+          strokeWidth: "6",
+          strokeDasharray: String(circumference),
+          strokeDashoffset: String(strokeDashoffset),
+          strokeLinecap: "round",
+          style: { transition: "stroke-dashoffset 0.5s ease" }
+        })
+      ),
+      h(
+        "span",
+        { style: { position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", fontSize: "14px", fontWeight: "bold", color: "#fff" } },
+        `${percent}%`
+      )
+    ),
+    h("strong", { style: { display: "block", fontSize: "14px", color: "#e2e8f0", marginBottom: "4px" } }, label),
+    h("small", { style: { fontSize: "12px", color: "#888" } }, note)
   );
 }
 

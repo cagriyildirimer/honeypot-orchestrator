@@ -349,7 +349,7 @@ class WebDashboard:
             status=HTTPStatus.FORBIDDEN,
         )
 
-    def _build_settings_payload(
+    async def _build_settings_payload(
         self,
         request: dict[str, Any],
         cookies: dict[str, str],
@@ -358,6 +358,71 @@ class WebDashboard:
         log_path = self.orchestrator.config.logging.path
         log_size = log_path.stat().st_size if log_path.exists() else 0
         uptime_seconds = int(time.monotonic() - self._started_at)
+        
+        # Collect system resource metrics
+        cpu_metrics = {"percent": 0.0}
+        ram_metrics = {"total_mb": 0.0, "used_mb": 0.0, "percent": 0.0}
+        disk_metrics = {"total_gb": 0.0, "used_gb": 0.0, "percent": 0.0}
+        
+        try:
+            # CPU calculation via /proc/stat
+            def read_cpu():
+                with open("/proc/stat", "r") as f:
+                    line = f.readline()
+                parts = line.split()
+                times = [float(x) for x in parts[1:8]]
+                idle = times[3] + times[4]
+                total = sum(times)
+                return idle, total
+
+            idle1, total1 = read_cpu()
+            await asyncio.sleep(0.1)
+            idle2, total2 = read_cpu()
+
+            idle_diff = idle2 - idle1
+            total_diff = total2 - total1
+            if total_diff > 0:
+                cpu_metrics["percent"] = round((1.0 - idle_diff / total_diff) * 100, 1)
+        except Exception as e:
+            print(f"Error reading CPU usage: {e}")
+
+        try:
+            # RAM calculation via /proc/meminfo
+            with open("/proc/meminfo", "r") as f:
+                lines = f.readlines()
+            meminfo = {}
+            for line in lines:
+                parts = line.split()
+                if len(parts) >= 2:
+                    meminfo[parts[0].rstrip(":")] = int(parts[1])
+            total = meminfo.get("MemTotal", 0)
+            available = meminfo.get("MemAvailable", 0)
+            if total > 0:
+                used = total - available
+                ram_metrics = {
+                    "total_mb": round(total / 1024, 1),
+                    "used_mb": round(used / 1024, 1),
+                    "percent": round((used / total) * 100, 1)
+                }
+        except Exception as e:
+            print(f"Error reading RAM usage: {e}")
+
+        try:
+            # Disk calculation via os.statvfs
+            import os
+            stat = os.statvfs("/")
+            total = stat.f_blocks * stat.f_frsize
+            free = stat.f_bfree * stat.f_frsize
+            used = total - free
+            if total > 0:
+                disk_metrics = {
+                    "total_gb": round(total / (1024**3), 1),
+                    "used_gb": round(used / (1024**3), 1),
+                    "percent": round((used / total) * 100, 1)
+                }
+        except Exception as e:
+            print(f"Error reading Disk usage: {e}")
+
         return {
             "panel": {
                 "url": f"http://{display_host}:{self.orchestrator.config.web.port}",
@@ -379,6 +444,11 @@ class WebDashboard:
                 "uptime": _format_duration(uptime_seconds),
                 "health": "ok" if self._server is not None else "stopped",
                 "version": __version__,
+            },
+            "resources": {
+                "cpu": cpu_metrics,
+                "ram": ram_metrics,
+                "disk": disk_metrics,
             },
             "users": self._user_payload(),
         }

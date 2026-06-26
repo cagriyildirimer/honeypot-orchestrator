@@ -123,6 +123,8 @@ export function AnalyzePage(props) {
   // Filter top attackers for the selected stage's services (or show overall top if no matches)
   const topAttackers = Array.isArray(tiData?.attackers) ? tiData.attackers : [];
 
+  const isAdmin = props.session?.role === "admin";
+
   return h(
     "div",
     { className: "page-container page-fade-in" },
@@ -143,6 +145,36 @@ export function AnalyzePage(props) {
           { className: "user-pill" },
           h("span", null, "Signed in as"),
           h("strong", null, props.session.username || "-")
+        ),
+        h(
+          "a",
+          {
+            className: `button secondary${isAdmin ? "" : " disabled"}`,
+            href: "/api/ioc/csv",
+            download: "ioc_export.csv",
+            onClick: (event) => {
+              if (!isAdmin) {
+                event.preventDefault();
+                window.showToast("Admin access required.", "error");
+              }
+            },
+          },
+          "Export IOC (CSV)"
+        ),
+        h(
+          "a",
+          {
+            className: `button secondary${isAdmin ? "" : " disabled"}`,
+            href: "/api/ioc/stix",
+            download: "ioc_export.stix.json",
+            onClick: (event) => {
+              if (!isAdmin) {
+                event.preventDefault();
+                window.showToast("Admin access required.", "error");
+              }
+            },
+          },
+          "Export IOC (STIX)"
         ),
         h(
           "button",

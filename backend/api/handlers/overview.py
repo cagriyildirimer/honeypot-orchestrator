@@ -75,7 +75,8 @@ async def handle_get_stats(self, request: dict[str, Any]) -> dict[str, Any]:
 @router.get("/api/settings")
 async def handle_get_settings(self, request: dict[str, Any]) -> dict[str, Any]:
     cookies = request["cookies"]
-    return self._json_response(self._build_settings_payload(request, cookies))
+    payload = await self._build_settings_payload(request, cookies)
+    return self._json_response(payload)
 
 @router.get("/api/logs/export")
 async def handle_export_logs(self, request: dict[str, Any]) -> dict[str, Any]:
