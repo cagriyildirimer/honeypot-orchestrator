@@ -124,6 +124,7 @@ honeypot-orchestrator/
 16. **Frontend Split:** `frontend/src/app-react.js` (3037 satır) başarıyla ES bileşenlerine bölündü ve silindi.
 17. **Backend Router Ayrışımı:** `web/server.py` modüler handler'lara bölündü (655 satıra düştü).
 18. **MITRE Panel Alert & Attacker IP Senkronizasyonu:** `Analyze.js`'deki React closure/timing bug'ı düzeltildi. Sayfa yüklendiğinde tehdit içeren (hits > 0) ilk aşama render anında dinamik olarak seçilerek hem sol tarafta görsel olarak vurgulanması hem de sağ taraftaki Threat Inspector sütununda saldırgan IP adreslerinin anında listelenmesi sağlandı.
+19. **setup.sh & start-lan.sh Macvlan .env Hatası:** `start-lan.sh` içindeki `REPO_ROOT` değişkeninin yanlışlıkla `backend` dizinini göstermesi nedeniyle `HONEYPOT_LAN_IP` değerinin yanlış `.env` dosyasına (repository root yerine `backend/.env` içine) yazılması sorunu giderildi. `REPO_ROOT` iki üst dizine (`../../`) yönlendirilerek hem `.env` dosyasının hem de `docker-compose` dosyalarının doğru dizinde çalışması sağlandı. Ayrıca `setup.sh` içindeki varsayılan seçim, arayüzdeki öneriyle uyumlu olarak 2 (Macvlan) olarak güncellendi.
 
 ### Phase 0 - 9
 - **Phase 0:** `start_service` / `stop_service` signature bugs fixed. Toggle buttons working.

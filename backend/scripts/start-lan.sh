@@ -158,7 +158,7 @@ require_command ip
 require_command awk
 require_command ping
 
-REPO_ROOT="$(cd "$(script_dir)/.." >/dev/null 2>&1 && pwd)"
+REPO_ROOT="$(cd "$(script_dir)/../.." >/dev/null 2>&1 && pwd)"
 cd "$REPO_ROOT"
 
 DEFAULT_ROUTE="$(ip route show default | head -n 1 || true)"
