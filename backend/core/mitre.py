@@ -47,6 +47,12 @@ def map_event_to_mitre(event: dict[str, Any]) -> str | None:
     event_type = str(event.get("event_type") or "").lower()
     summary = str(event.get("summary") or "").lower()
     
+    # Exclude system/orchestrator events and events without a valid source IP
+    if not event.get("src_ip") or event_type in (
+        "service_started", "service_stopped", "network_tuning_applied", "system_tuning"
+    ):
+        return None
+    
     # 1. Credential Access / Brute Force
     if event_type in ("login_attempt", "login_failed", "brute_force"):
         return "T1110"
