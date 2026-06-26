@@ -278,3 +278,34 @@ honeypot-orchestrator/
 1. **Custom Profile Builder (Frontend + Backend):** Dashboard üzerinden yeni profil oluşturma GUI'si.
 2. **Honeypot File Traps (FTP + SMB):** FTP ve SMB servislerine sahte ama gerçekçi görünen dosya/dizin yapısı ekleme (`passwords.xlsx` vb.). Canary token mantığı.
 3. **Light Mode (Frontend):** CSS variable tabanlı modern light theme.
+
+---
+
+## 💭 Düşünülecek: Backend'in Go Diline Geçişi
+
+> **Durum:** Yapılmayacak ama ileride değerlendirilecek. Referans olarak burada tutuluyor.
+
+### Neden Düşünülüyor
+
+- **Performans:** Python asyncio (tek thread, cooperative) → Go goroutine (preemptive, çok çekirdekli). Honeypot = düşük seviye TCP/UDP = Go'nun doğal alanı.
+- **Bellek:** Python runtime ~80-120MB → Go statik binary ~15-30MB (5-6x azalma).
+- **Deploy:** Docker + pip + runtime bağımlılıkları → Tek statik binary. Docker imajı 10MB'a düşer. `embed.FS` ile frontend tek binary'ye gömülebilir.
+- **Startup:** Python ~2-3 saniye → Go ~50ms.
+- **Tip güvenliği:** Runtime duck typing hataları → derleme zamanı hata yakalama.
+
+### Riskler ve Zorluklar
+
+- **Efor:** 16 ayrı honeypot servisi var. Özellikle `smb.py` (38KB) ve `ssh.py` (23KB) protokol düzeyinde binary parsing yapıyor. Tamamını çevirmek 2-3 haftalık yoğun iş.
+- **ORM kaybı:** SQLAlchemy ORM → `pgx`/`sqlx` ile raw SQL. Daha hızlı ama daha fazla boilerplate.
+- **Kütüphaneler:** AbuseIPDB/GreyNoise entegrasyonu, GeoIP, PBKDF2 hashing — Go karşılıkları var ama yeniden yazılması gerekir.
+- **Geliştirme hızı:** Python'da iterasyon çok hızlı. Go'da daha fazla kod yazılır ama daha sağlam çalışır.
+
+### Kademeli Geçiş Planı (Eğer yapılırsa)
+
+| Aşama | Kapsam | Gerekçe |
+|-------|--------|---------|
+| Faz 1 | Honeypot tuzak servisleri (`services/`) | En çok performans kazancı. Raw TCP/UDP dinleyiciler Go'nun güçlü yanı. |
+| Faz 2 | Web API (`server.py` + `handlers/`) | `net/http` + `chi` router. Python'daki custom HTTP parser'dan kurtulunur. |
+| Faz 3 | Orchestrator + system modülleri | iptables yönetimi, profil sistemi. |
+
+> Frontend (React SPA) aynen kalır — Go tarafından statik dosya olarak sunulur.
