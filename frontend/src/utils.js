@@ -142,6 +142,9 @@ export function pathToPage(pathname) {
   if (pathname === "/settings/users") {
     return "users";
   }
+  if (pathname === "/settings/siem") {
+    return "siem";
+  }
   return "dashboard";
 }
 
