@@ -204,8 +204,30 @@ export function AppLayout(props) {
       props.children,
       h("div", { id: "toast", className: "toast", hidden: true })
     ),
-    h(NotificationBell, null)
+    h(NotificationBellPortal, null)
   );
+}
+
+export function NotificationBellPortal() {
+  const [portalTarget, setPortalTarget] = useState(null);
+
+  useEffect(() => {
+    const updateTarget = () => {
+      const target = document.querySelector(".page-actions, .topbar-actions");
+      setPortalTarget(target);
+    };
+
+    updateTarget();
+
+    const observer = new MutationObserver(updateTarget);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, []);
+
+  if (!portalTarget) return null;
+
+  return ReactDOM.createPortal(h(NotificationBell, null), portalTarget);
 }
 
 export function NotificationBell() {
@@ -236,11 +258,11 @@ export function NotificationBell() {
     return () => es.close();
   }, []);
 
-  return h("div", { className: "notification-bell-container", style: { position: "fixed", top: "18px", right: "20px", zIndex: 9999 } },
+  return h("div", { className: "notification-bell-container", style: { position: "relative", zIndex: 999 } },
     h("button", { 
       className: "bell-btn", 
       onClick: () => { setOpen(!open); setUnreadCount(0); },
-      style: { background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "50%", width: "42px", height: "42px", cursor: "pointer", position: "relative", fontSize: "18px", display: "flex", alignItems: "center", justifyContent: "center" }
+      style: { background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "50%", width: "38px", height: "38px", cursor: "pointer", position: "relative", fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center" }
     },
       "🔔",
       unreadCount > 0 ? h("span", { 
@@ -250,7 +272,7 @@ export function NotificationBell() {
     ),
     open ? h("div", { 
       className: "dropdown-menu", 
-      style: { position: "absolute", top: "52px", right: "0", width: "320px", background: "#1e1e1e", border: "1px solid #333", borderRadius: "8px", padding: "0", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: "400px", overflowY: "auto", overflowX: "hidden" } 
+      style: { position: "absolute", top: "48px", right: "0", width: "320px", background: "#1e1e1e", border: "1px solid #333", borderRadius: "8px", padding: "0", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: "400px", overflowY: "auto", overflowX: "hidden" } 
     },
       h("div", { style: { padding: "12px 16px", borderBottom: "1px solid #333", background: "rgba(0,0,0,0.2)", fontWeight: "600", fontSize: "14px" } }, "Notifications"),
       alerts.length === 0 ? h("p", { style: { textAlign: "center", color: "#888", margin: "20px 0" } }, "No recent alerts.") : null,
