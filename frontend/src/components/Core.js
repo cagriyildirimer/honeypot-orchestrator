@@ -118,11 +118,27 @@ export function AppLayout(props) {
           href: "/dashboard",
           onClick: (e) => {
             setMobileMenuOpen(false);
-            props.navigateClick("/dashboard")(e);
-          },
+        props.navigateClick("/dashboard")(e);
+      },
+    },
+    h(
+      "span",
+      { className: "brand-mark" },
+      h(
+        "svg",
+        {
+          viewBox: "0 0 100 100",
+          fill: "none",
+          stroke: "currentColor",
+          strokeWidth: "8px",
+          style: { width: "18px", height: "18px", display: "block" }
         },
-        h("span", { className: "brand-mark" }, "HD"),
-        h("span", { className: "brand-text" }, "Honeypot Director")
+        h("polygon", { points: "50,14 65.6,23 65.6,41 50,50 34.4,41 34.4,23" }),
+        h("polygon", { points: "34.4,41 50,50 50,68 34.4,77 18.8,68 18.8,50" }),
+        h("polygon", { points: "65.6,41 81.2,50 81.2,68 65.6,77 50,68 50,50" })
+      )
+    ),
+    h("span", { className: "brand-text" }, "Honeypot Director")
       )
     ),
     mobileMenuOpen
@@ -141,12 +157,28 @@ export function AppLayout(props) {
           href: "/dashboard",
           onClick: (e) => {
             setMobileMenuOpen(false);
-            props.navigateClick("/dashboard")(e);
-          },
-          "aria-label": "Honeypot Director dashboard",
+        props.navigateClick("/dashboard")(e);
+      },
+      "aria-label": "Honeypot Director dashboard",
+    },
+    h(
+      "span",
+      { className: "brand-mark" },
+      h(
+        "svg",
+        {
+          viewBox: "0 0 100 100",
+          fill: "none",
+          stroke: "currentColor",
+          strokeWidth: "8px",
+          style: { width: "18px", height: "18px", display: "block" }
         },
-        h("span", { className: "brand-mark" }, "HD"),
-        h("span", { className: "brand-text" }, "Honeypot Director")
+        h("polygon", { points: "50,14 65.6,23 65.6,41 50,50 34.4,41 34.4,23" }),
+        h("polygon", { points: "34.4,41 50,50 50,68 34.4,77 18.8,68 18.8,50" }),
+        h("polygon", { points: "65.6,41 81.2,50 81.2,68 65.6,77 50,68 50,50" })
+      )
+    ),
+    h("span", { className: "brand-text" }, "Honeypot Director")
       ),
       h(
         "nav",

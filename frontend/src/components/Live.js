@@ -1,7 +1,6 @@
 const h = React.createElement;
 const { useEffect, useState, useRef, useMemo } = React;
 import { usePolling } from '../utils.js';
-import { App } from './App.js';
 import { PageSkeleton, EventDrawer } from './Core.js';
 export function LiveActivityPage(props) {
   const [events, setEvents] = useState([]);

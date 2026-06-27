@@ -448,7 +448,7 @@ export function SystemPage(props) {
       h("div", { className: "section-heading compact" }, h("div", null, h("h2", null, "System Resources"), h("p", null, "Real-time CPU, Memory, and Disk usage status."))),
       h(
         "div",
-        { className: "resources-grid", style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "24px", marginTop: "16px" } },
+        { className: "resources-grid" },
         h(ResourceGauge, { label: "CPU Usage", percent: payload.resources?.cpu?.percent || 0, note: "Processor utilization", colorClass: "--accent" }),
         h(ResourceGauge, { 
           label: "RAM Usage", 
@@ -490,159 +490,93 @@ export function SystemPage(props) {
   );
 }
 
-export function ResourceGauge({ label, percent, note }) {
-  const r_inner = 48;
-  const circumference_inner = 2 * Math.PI * r_inner; // 301.6
-  const arc_length_inner = circumference_inner * 0.5; // 150.8
-  const gap_inner = circumference_inner - arc_length_inner; // 150.8
-  const strokeDashoffset = arc_length_inner - (percent / 100) * arc_length_inner;
+export function ResourceGauge({ label, percent, note, colorClass }) {
+  const size = 120;
+  const strokeWidth = 10;
+  const r = (size - strokeWidth) / 2; // 55
+  const circumference = 2 * Math.PI * r; // ~345.6
+  const offset = circumference - (percent / 100) * circumference;
 
-  const r_outer = 60;
-  const circumference_outer = 2 * Math.PI * r_outer; // 377
-  const arc_length_outer = circumference_outer * 0.5; // 188.5
-  const gap_outer = circumference_outer - arc_length_outer; // 188.5
+  // Color palette per gauge type
+  const colorMap = {
+    "--accent":       { start: "#0075ff", end: "#21d4fd", glow: "rgba(0, 117, 255, 0.35)" },
+    "--accent-focus": { start: "#7b2ff7", end: "#c471f5", glow: "rgba(123, 47, 247, 0.35)" },
+    "--success":      { start: "#01b574", end: "#38ef7d", glow: "rgba(1, 181, 116, 0.35)" },
+  };
 
-  const green_len = arc_length_outer * 0.7; // 132.0
-  const orange_len = arc_length_outer * 0.2; // 37.7
-  const red_len = arc_length_outer * 0.1; // 18.9
+  // Override with danger/warning colors at thresholds
+  const colors = percent >= 90
+    ? { start: "#e31a1a", end: "#ff6b6b", glow: "rgba(227, 26, 26, 0.45)" }
+    : percent >= 75
+      ? { start: "#ff8c00", end: "#ffb547", glow: "rgba(255, 181, 71, 0.4)" }
+      : (colorMap[colorClass] || colorMap["--accent"]);
 
-  // Determine status color based on value thresholds
-  const statusColor = percent >= 90 
-    ? "var(--danger, #e31a1a)" 
-    : (percent >= 70 ? "var(--warning, #ffb547)" : "var(--success, #01b574)");
-  
-  const statusGlow = percent >= 90
-    ? "rgba(227, 26, 26, 0.4)"
-    : (percent >= 70 ? "rgba(255, 181, 71, 0.4)" : "rgba(1, 181, 116, 0.4)");
+  const gradientId = `gauge-grad-${label.replace(/\s/g, "")}`;
 
   return h(
     "div",
-    { 
-      className: "resource-gauge-card", 
-      style: { 
-        display: "flex", 
-        flexDirection: "column", 
-        alignItems: "center", 
-        padding: "20px", 
-        background: "rgba(255, 255, 255, 0.02)", 
-        border: "1px solid rgba(255, 255, 255, 0.05)", 
-        borderRadius: "14px",
-        textAlign: "center",
-        boxSizing: "border-box",
-        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)"
-      } 
-    },
+    { className: "resource-gauge-card" },
+
+    // SVG Gauge
     h(
       "div",
-      { className: "gauge-svg-wrap", style: { width: "180px", height: "95px", position: "relative", marginBottom: "8px" } },
+      { className: "gauge-ring-wrap" },
       h(
         "svg",
-        { width: "180", height: "95", viewBox: "0 0 180 95", style: { display: "block" } },
-        
-        // 1. Inner Thick Arc Background Track (Strict 180-Degree Half-Circle)
+        { width: size, height: size, viewBox: `0 0 ${size} ${size}`, className: "gauge-ring-svg" },
+
+        // Gradient definition
+        h("defs", null,
+          h("linearGradient", { id: gradientId, x1: "0%", y1: "0%", x2: "100%", y2: "100%" },
+            h("stop", { offset: "0%", stopColor: colors.start }),
+            h("stop", { offset: "100%", stopColor: colors.end })
+          )
+        ),
+
+        // Background track
         h("circle", {
-          cx: "90",
-          cy: "85",
-          r: String(r_inner),
+          cx: size / 2,
+          cy: size / 2,
+          r: r,
           fill: "none",
-          stroke: "rgba(255, 255, 255, 0.03)",
-          strokeWidth: "16",
-          strokeDasharray: `${arc_length_inner} ${gap_inner}`,
-          strokeLinecap: "round",
-          style: {
-            transform: "rotate(-180deg)",
-            transformOrigin: "90px 85px"
-          }
+          stroke: "rgba(255, 255, 255, 0.06)",
+          strokeWidth: strokeWidth
         }),
-        
-        // 2. Inner Thick Arc Progress Fill (Fills Clockwise from Left to Right)
+
+        // Progress arc
         h("circle", {
-          cx: "90",
-          cy: "85",
-          r: String(r_inner),
+          cx: size / 2,
+          cy: size / 2,
+          r: r,
           fill: "none",
-          stroke: statusColor,
-          strokeWidth: "16",
-          strokeDasharray: `${arc_length_inner} ${gap_inner}`,
-          strokeDashoffset: String(strokeDashoffset),
+          stroke: `url(#${gradientId})`,
+          strokeWidth: strokeWidth,
+          strokeDasharray: circumference,
+          strokeDashoffset: offset,
           strokeLinecap: "round",
+          className: "gauge-ring-progress",
           style: {
-            transform: "rotate(-180deg)",
-            transformOrigin: "90px 85px",
-            transition: "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
-            filter: `drop-shadow(0 0 5px ${statusGlow})`
+            filter: `drop-shadow(0 0 6px ${colors.glow})`,
+            transform: "rotate(-90deg)",
+            transformOrigin: "center"
           }
-        }),
-        
-        // 3. Outer Thin Arc - Green Segment (0% - 70%)
-        h("circle", {
-          cx: "90",
-          cy: "85",
-          r: String(r_outer),
-          fill: "none",
-          stroke: "var(--success, #01b574)",
-          strokeWidth: "3",
-          strokeDasharray: `${green_len} ${circumference_outer - green_len}`,
-          strokeLinecap: "round",
-          style: {
-            transform: "rotate(-180deg)",
-            transformOrigin: "90px 85px"
-          }
-        }),
-        
-        // 4. Outer Thin Arc - Orange Segment (70% - 90%)
-        h("circle", {
-          cx: "90",
-          cy: "85",
-          r: String(r_outer),
-          fill: "none",
-          stroke: "var(--warning, #ffb547)",
-          strokeWidth: "3",
-          strokeDasharray: `${orange_len} ${circumference_outer - orange_len}`,
-          strokeDashoffset: String(-green_len),
-          strokeLinecap: "round",
-          style: {
-            transform: "rotate(-180deg)",
-            transformOrigin: "90px 85px"
-          }
-        }),
-        
-        // 5. Outer Thin Arc - Red Segment (90% - 100%)
-        h("circle", {
-          cx: "90",
-          cy: "85",
-          r: String(r_outer),
-          fill: "none",
-          stroke: "var(--danger, #e31a1a)",
-          strokeWidth: "3",
-          strokeDasharray: `${red_len} ${circumference_outer - red_len}`,
-          strokeDashoffset: String(-(green_len + orange_len)),
-          strokeLinecap: "round",
-          style: {
-            transform: "rotate(-180deg)",
-            transformOrigin: "90px 85px"
-          }
-        }),
-        
-        // 6. Centered Percentage Text (Centered Inside the Arch)
-        h("text", {
-          x: "90",
-          y: "80",
-          textAnchor: "middle",
-          style: {
-            fill: statusColor,
-            fontSize: "22px",
-            fontWeight: "850",
-            fontFamily: "inherit",
-            filter: `drop-shadow(0 0 2px ${statusGlow})`
-          }
-        }, `${percent}%`)
+        })
+      ),
+
+      // Center content (percentage)
+      h("div", { className: "gauge-ring-center" },
+        h("span", { className: "gauge-ring-value", style: { color: colors.start } }, `${percent}%`)
       )
     ),
-    h("strong", { style: { display: "block", fontSize: "14px", color: "var(--text, #e2e8f0)", marginBottom: "4px" } }, label),
-    h("small", { style: { fontSize: "12px", color: "var(--muted, #888)", fontWeight: "500" } }, note)
+
+    // Label + Note
+    h("div", { className: "gauge-ring-info" },
+      h("strong", { className: "gauge-ring-label" }, label),
+      h("span", { className: "gauge-ring-note" }, note)
+    )
   );
 }
+
 
 export function DetailPanel(props) {
   return h(

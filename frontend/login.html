@@ -13,56 +13,107 @@
         document.documentElement.dataset.theme = "vision";
       }
     </script>
+    <!-- Honeycomb SVG Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='none' stroke='%230075ff' stroke-width='8'><polygon points='50,14 65.6,23 65.6,41 50,50 34.4,41 34.4,23' fill='rgba(0,117,255,0.15)'/><polygon points='34.4,41 50,50 50,68 34.4,77 18.8,68 18.8,50' fill='rgba(0,117,255,0.15)'/><polygon points='65.6,41 81.2,50 81.2,68 65.6,77 50,68 50,50' fill='rgba(0,117,255,0.15)'/></svg>">
     <link rel="stylesheet" href="/src/styles.css">
   </head>
   <body class="login-page">
-    <main class="login-shell">
-      <section class="login-spotlight">
-        <div class="brand-block large">
-          <div class="brand-mark">HD</div>
-          <div>
-            <div class="eyebrow">Secure Console</div>
-            <h1 class="brand-title xl">Honeypot Director</h1>
-          </div>
+    
+    <!-- High-Tech Animated Splash Screen (Boot-up sequence) -->
+    <div id="splashScreen" class="splash-screen">
+      <div class="splash-content">
+        <div class="splash-logo-wrap">
+          <svg class="splash-emblem" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Glowing Honeycomb cells with drawing animation -->
+            <polygon class="hex-cell hex-top" points="50,14 65.6,23 65.6,41 50,50 34.4,41 34.4,23" stroke="currentColor" stroke-width="3" stroke-linejoin="round" />
+            <polygon class="hex-cell hex-left" points="34.4,41 50,50 50,68 34.4,77 18.8,68 18.8,50" stroke="currentColor" stroke-width="3" stroke-linejoin="round" />
+            <polygon class="hex-cell hex-right" points="65.6,41 81.2,50 81.2,68 65.6,77 50,68 50,50" stroke="currentColor" stroke-width="3" stroke-linejoin="round" />
+          </svg>
         </div>
-        <h2 class="login-title">A sharper control surface for decoy infrastructure.</h2>
-        <p class="login-copy">
-          Launch realistic personas, expose only the listeners you need, and review traffic from a modern
-          defensive operations console.
-        </p>
-        <div class="feature-strip">
-          <div class="feature-card">
-            <span>Profiles</span>
-            <strong>One-click persona switching</strong>
-          </div>
-          <div class="feature-card">
-            <span>Visibility</span>
-            <strong>Dedicated control room and log center</strong>
-          </div>
-          <div class="feature-card">
-            <span>Signals</span>
-            <strong>Human-readable event stream with protocol context</strong>
-          </div>
+        <h1 class="splash-title">HONEYPOT DIRECTOR</h1>
+        <div class="splash-loader-bar">
+          <div class="splash-loader-progress"></div>
         </div>
-      </section>
+        <p class="splash-status">Initializing secure operations console...</p>
+      </div>
+    </div>
 
-      <section class="login-panel">
-        <div class="section-kicker">Authentication</div>
-        <h2>Enter the control room</h2>
-        <p class="support-text">Use the configured dashboard credentials to continue.</p>
+    <!-- Main Login Shell (Centered Glass Card Layout, rendered in background for seamless fade) -->
+    <main id="loginShell" class="login-shell centered-glass-layout">
+      
+      <!-- Premium Glassmorphic Login Card -->
+      <section class="login-card-glass">
+        
+        <!-- Brand identity header inside the card with Honeycomb Logo -->
+        <div class="card-brand-header">
+          <div class="card-brand-mark">
+            <svg class="brand-honeycomb" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="8" xmlns="http://www.w3.org/2000/svg" style="width: 18px; height: 18px;">
+              <polygon points="50,14 65.6,23 65.6,41 50,50 34.4,41 34.4,23" />
+              <polygon points="34.4,41 50,50 50,68 34.4,77 18.8,68 18.8,50" />
+              <polygon points="65.6,41 81.2,50 81.2,68 65.6,77 50,68 50,50" />
+            </svg>
+          </div>
+          <span class="card-brand-name">Honeypot Director</span>
+        </div>
+        
+        <h2 class="glass-login-title">Login</h2>
+        
         <form id="loginForm" class="login-form">
-          <label class="field-block">
-            <span>Username</span>
-            <input id="usernameInput" name="username" type="text" autocomplete="username" required>
-          </label>
-          <label class="field-block">
-            <span>Password</span>
-            <input id="passwordInput" name="password" type="password" autocomplete="current-password" required>
-          </label>
-          <button id="loginButton" type="submit">Enter Dashboard</button>
+          
+          <!-- Username Field -->
+          <div class="input-group">
+            <label for="usernameInput" class="input-label">Username</label>
+            <input id="usernameInput" name="username" type="text" autocomplete="username" required placeholder="Enter your username">
+          </div>
+          
+          <!-- Password Field with Show/Hide Toggle -->
+          <div class="input-group">
+            <label for="passwordInput" class="input-label">Password</label>
+            <div class="password-input-wrapper">
+              <input id="passwordInput" name="password" type="password" autocomplete="current-password" required placeholder="Enter your password">
+              <button type="button" id="togglePasswordBtn" class="toggle-password-btn" aria-label="Toggle password visibility">
+                <!-- SVG Eye Icon -->
+                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Yellow/Orange Gradient Button (interactive theme-highlight) -->
+          <button id="loginButton" class="gradient-login-btn" type="submit">Login</button>
+          
         </form>
+        
+        <!-- Error Display -->
         <p id="loginError" class="error-text" hidden></p>
+        
       </section>
+      
+      <!-- Decorative Background Elements (Styled & animated in CSS, color-compatible) -->
+      
+      <!-- Dynamic Floating 3D Spheres (Liquid-like shading) -->
+      <div class="bg-glass-orbs">
+        <div class="glass-orb orb-1"></div>
+        <div class="glass-orb orb-2"></div>
+        <div class="glass-orb orb-3"></div>
+        <div class="glass-orb orb-4"></div>
+      </div>
+
+      <!-- Glowing Theme-colored Liquid Blobs -->
+      <div class="bg-liquid-blobs">
+        <div class="liquid-blob blob-1"></div>
+        <div class="liquid-blob blob-2"></div>
+        <div class="liquid-blob blob-3"></div>
+      </div>
+      
+      <!-- Retro-futuristic Striped Accents -->
+      <div class="bg-grid-patterns">
+        <div class="pattern-circle circle-1"></div>
+        <div class="pattern-circle circle-2"></div>
+      </div>
+      
     </main>
 
     <script type="module" src="/src/common.js"></script>

@@ -8,25 +8,8 @@
 
 ### 🔴 KRİTİK HATALAR
 
-1. **`Live.js` — Döngüsel Import**  
-   - **Dosya:** `frontend/src/components/Live.js:4`  
-   - **Sorun:** `import { App } from './App.js';` satırı var ama `App` hiçbir yerde kullanılmıyor. `App.js` zaten `Live.js`'i import ettiği için bu potansiyel bir döngüsel bağımlılık oluşturur. Vite bunu şimdilik tolere ediyor ama modül init sırası karışabilir.  
-   - **Çözüm:** Bu import satırını sil.
+> ✅ **Tümü çözüldü** (2026-06-27)
 
-2. **`styles.css` — Çift `.toast` Tanımı (CSS Çakışması)**  
-   - **Dosya:** `frontend/src/styles.css` — Satır 1873-1897 ve 3363-3414  
-   - **Sorun:** `.toast` sınıfı iki ayrı yerde tanımlanmış. Satır 1873'teki eski tanım `position: sticky; bottom: 16px` kullanıyor. Satır 3363'teki yeni tanım `position: fixed !important; top: 24px !important` ve `display: none !important` kullanıyor. Yeni tanım `!important` sayesinde baskın geliyor ama eski tanımdaki bazı stil kuralları (font-weight: 800 vs.) hâlâ cascade'de kalıyor ve debug'u zorlaştırıyor.  
-   - **Çözüm:** Satır 1873-1897 arasındaki eski `.toast`, `.toast.success`, `.toast.error` bloklarını tamamen sil.
-
-3. **`ResourceGauge` — `colorClass` prop'u kullanılmıyor**  
-   - **Dosya:** `frontend/src/components/Settings.js:452-464` (çağıran) ve `:493` (bileşen)  
-   - **Sorun:** `SystemPage` bileşeni her gauge'e `colorClass` prop'u gönderiyor (`--accent`, `--accent-focus`, `--success`) ama `ResourceGauge` bileşeninin fonksiyon imzasında `colorClass` destructure edilmiyor ve hiçbir yerde kullanılmıyor. Bu ölü prop.  
-   - **Çözüm:** Ya prop gönderimini kaldır ya da gauge'de renk olarak kullan.
-
-4. **`ResourceGauge` — Yarım Daire Yön Sorunu**  
-   - **Dosya:** `frontend/src/components/Settings.js:493-645`  
-   - **Sorun:** Kullanıcı, gauge bar'ın **soldan sağa** doğru dolmasını istiyor. Şu anki SVG implementasyonu `strokeDashoffset` mantığı nedeniyle yanlış yönde doluyor olabilir. SVG circle'da `rotate(-180deg)` ile başlayan bir half-circle'da, `strokeDashoffset = arc_length - (percent / 100) * arc_length` formülü, dolu kısmı soldan başlatıp sağa doğru ilerletir ama görsel test gerekiyor.  
-   - **Çözüm:** Tarayıcıda test edip doğrulanmalı. Gerekirse rotation ve offset mantığı ayarlanmalı.
 
 ### 🟠 ORTA ÖNCELİK SORUNLARI
 
@@ -216,6 +199,11 @@ honeypot-orchestrator/
 ## Completed
 
 ### Bug Fixes & Technical Debt (Recently Completed)
+1. **Kritik: `Live.js` Döngüsel Import Silindi:** Kullanılmayan `import { App } from './App.js';` satırı kaldırıldı. App.js zaten Live.js'i import ettiğinden döngüsel bağımlılık riski ortadan kalktı.
+2. **Kritik: `styles.css` Çift `.toast` Tanımı Temizlendi:** Satır 1873-1897 arasındaki eski `.toast`, `.toast.success`, `.toast.error` blokları silindi. Yalnızca yeni (fixed, top) tanım kaldı.
+3. **Kritik: `ResourceGauge` `colorClass` Prop Aktifleştirildi:** Ölü olan `colorClass` prop'u artık destructure ediliyor ve gauge arka plan track renginde (opacity 0.15) kullanılıyor.
+4. **Kritik: `ResourceGauge` Gauge Yönü Doğrulandı:** SVG `rotate(-180deg)` + `strokeDashoffset` formülü soldan sağa dolduruyor — yön doğru, kod değişikliği gerekmedi.
+5. **Görsel: Login Ekranı Glassmorphism & Splash Animasyonu:** Giriş ekranı, referans tasarımla tam uyumlu olacak şekilde baştan tasarlandı. `backdrop-filter: blur(35px) saturate(1.5)` ile buzlu cam (glassmorphism) etkisi uygulandı. Arka plana 3D küreler (derinlikli radial gölgelendirmelerle), hareket eden neon sıvı küreler (tüm temalarla uyumlu renklerde), çizgili retro-fütüristik desenler eklendi. Şifre göster/gizle ikonu, stilize checkbox, ve başlangıçta siber temalı boot-up animasyonu yapan yükleme ekranı (durum mesajları ve "Intro Geç" butonuyla) entegre edildi.
 1. **Live Activity Monitor Akış Yönü:** En yeni log en üstte olacak şekilde tersine çevrildi.
 2. **Unit Test Kapsamı Artırma:** `config.py`, `orchestrator.py` ve `services/base.py` modülleri için temel testler eklendi.
 3. **.gitignore Güncelleme:** `.env`, `*.db`, `node_modules/`, `dist/` dosyaları eklendi ve git cache'den temizlendi.
