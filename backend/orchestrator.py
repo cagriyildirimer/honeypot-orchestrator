@@ -192,11 +192,7 @@ class Orchestrator:
             if not service.running or self.mode == "system":
                 if self.mode in ("all", "daemon", "decoy"):
                     await service.start()
-                if self.mode in ("all", "daemon", "system"):
-                    # We have to fetch target_services from DB because system mode doesnt know running
-                    pass # We actually rely on DB sync loop for this. start_service API call just sets override in DB!
-                    # So we don't need to manually apply it here if we are web. If we are daemon/decoy/system, DB loop will pick it up.
-
+                
                 await self.logger.log({
                     "service": "orchestrator",
                     "event_type": "service_started",

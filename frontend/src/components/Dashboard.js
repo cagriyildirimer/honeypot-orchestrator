@@ -151,7 +151,7 @@ export function DashboardPage(props) {
             h(
               "div",
               { className: "risk-summary-item tilt-effect" },
-              h("span", null, "Suspicios Events"),
+              h("span", null, "Suspicious Events"),
               h("strong", null, String(suspiciousOverview.totalCount || 0)),
               h("small", null, "Total suspicious events in the last 24 hours")
             ),

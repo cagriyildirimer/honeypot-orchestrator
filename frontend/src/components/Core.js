@@ -244,19 +244,26 @@ export function NotificationBellPortal(props) {
   const [portalTarget, setPortalTarget] = useState(null);
 
   useEffect(() => {
+    let debounceTimer;
     const updateTarget = () => {
       const target = document.querySelector(".page-actions, .topbar-actions");
       setPortalTarget(target);
     };
 
+    const debouncedUpdate = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(updateTarget, 100);
+    };
+
     updateTarget();
     const timer = setTimeout(updateTarget, 50);
 
-    const observer = new MutationObserver(updateTarget);
+    const observer = new MutationObserver(debouncedUpdate);
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => {
       clearTimeout(timer);
+      clearTimeout(debounceTimer);
       observer.disconnect();
     };
   }, [props.page]);
@@ -321,16 +328,16 @@ export function NotificationBell() {
     ),
     open ? h("div", { 
       className: "dropdown-menu", 
-      style: { position: "absolute", top: "48px", right: "0", width: "320px", background: "#1e1e1e", border: "1px solid #333", borderRadius: "8px", padding: "0", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", maxHeight: "400px", overflowY: "auto", overflowX: "hidden" } 
+      style: { position: "absolute", top: "48px", right: "0", width: "320px", background: "var(--surface-strong, #131c44)", border: "1px solid var(--border)", borderRadius: "8px", padding: "0", boxShadow: "var(--shadow)", maxHeight: "400px", overflowY: "auto", overflowX: "hidden" } 
     },
-      h("div", { style: { padding: "12px 16px", borderBottom: "1px solid #333", background: "rgba(0,0,0,0.2)", fontWeight: "600", fontSize: "14px" } }, "Notifications"),
-      alerts.length === 0 ? h("p", { style: { textAlign: "center", color: "#888", margin: "20px 0" } }, "No recent alerts.") : null,
-      alerts.map((a, i) => h("div", { key: i, style: { padding: "12px 16px", borderBottom: "1px solid #333", fontSize: "13px", background: a.type === "aggregated" ? "rgba(255, 68, 68, 0.05)" : "transparent" } },
-        h("strong", { style: { color: "#ff4444", display: "block", marginBottom: "4px" } }, a.type === "aggregated" ? "Aggregated Alert" : "Critical Alert"),
-        h("div", { style: { color: "#ccc", lineHeight: "1.4" } }, a.summary),
-        h("div", { style: { color: "#888", marginTop: "6px", fontSize: "11px", display: "flex", justifyContent: "space-between" } }, 
+      h("div", { style: { padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "rgba(0,0,0,0.2)", fontWeight: "600", fontSize: "14px" } }, "Notifications"),
+      alerts.length === 0 ? h("p", { style: { textAlign: "center", color: "var(--muted)", margin: "20px 0" } }, "No recent alerts.") : null,
+      alerts.map((a, i) => h("div", { key: i, style: { padding: "12px 16px", borderBottom: "1px solid var(--border)", fontSize: "13px", background: a.type === "aggregated" ? "var(--danger-soft, rgba(227, 26, 26, 0.16))" : "transparent" } },
+        h("strong", { style: { color: "var(--danger)", display: "block", marginBottom: "4px" } }, a.type === "aggregated" ? "Aggregated Alert" : "Critical Alert"),
+        h("div", { style: { color: "var(--muted-strong)", lineHeight: "1.4" } }, a.summary),
+        h("div", { style: { color: "var(--muted)", marginTop: "6px", fontSize: "11px", display: "flex", justifyContent: "space-between" } }, 
           h("span", null, `IP: ${a.src_ip || "Unknown"}`),
-          a.service ? h("span", { style: { background: "rgba(255,255,255,0.1)", padding: "2px 6px", borderRadius: "4px" } }, a.service) : null
+          a.service ? h("span", { style: { background: "var(--tag-neutral-bg)", padding: "2px 6px", borderRadius: "4px" } }, a.service) : null
         )
       ))
     ) : null

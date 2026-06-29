@@ -42,18 +42,19 @@ export function LiveActivityPage(props) {
       h(
         "div",
         { className: "topbar-actions" },
+        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h(
           "button",
           {
             type: "button",
-            className: "button",
+            className: "button secondary",
             onClick: () => loadEvents(),
           },
-          "Force Sync"
+          "Refresh"
         ),
         h(
           "button",
-          { type: "button", className: "button secondary", onClick: props.onLogout },
+          { type: "button", className: "button", onClick: props.onLogout },
           "Log out"
         )
       )

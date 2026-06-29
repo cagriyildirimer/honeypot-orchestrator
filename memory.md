@@ -23,134 +23,36 @@
 **🔴 BUG-02: `styles.css` — Çift `.toast` Tanımı**
 - **Dosya:** `frontend/src/styles.css` — Satır 1873-1897 ve 3363-3414
 - **Sorun:** `.toast` CSS sınıfı iki farklı yerde tanımlı. Eski tanım `position: sticky; bottom: 16px`, yeni tanım `position: fixed !important; top: 24px !important`. Eski tanımdaki `font-weight: 800` ve border/background stilleri cascade'de kalıyor.
-- **Çözüm:** Satır 1873-1897 arasındaki eski `.toast`, `.toast.success`, `.toast.error` bloklarını tamamen sil.
-
-**🟢 BUG-03: `common.js` — CSRF Token Tek Kullanımlık Olmalı (ÇÖZÜLDÜ)**
-- **Dosya:** `frontend/src/common.js:1-50`
-- **Sorun:** CSRF token bir kez fetch edilip global `csrfToken` değişkeninde saklanıyor ve her POST isteğinde tekrar kullanılıyor. Backend tarafında token'lar 24 saat geçerli kalıyor (`overview.py:24`). CSRF token'lar normalde tek kullanımlık (nonce) olmalıdır.
-- **Etki:** Token replay saldırısına açık. Bir saldırgan tek bir CSRF token'ı yakalasa 24 saat boyunca kullanabilir.
-- **Çözüm:** Her POST isteği öncesi yeni token al, ya da backend'de kullanılan token'ları geçersiz kıl.
-
-**🟢 BUG-04: `_save_users` — Tüm Kullanıcıları Sil-Yaz Paterni (Race Condition) (ÇÖZÜLDÜ)**
-- **Dosya:** `backend/web/utils.py:127-139`
-- **Sorun:** `_save_users()` önce `DELETE FROM users` yapıp sonra yeniden INSERT ediyor. İki admin aynı anda kullanıcı oluşturma/silme yaparsa birinin değişiklikleri kaybolur.
-- **Etki:** Veri kaybı riski.
-- **Çözüm:** DELETE-all yerine upsert (MERGE) veya tek satır DELETE/INSERT kullan.
-
+- **Çözüm:** Satır 1873-1897 arasındaki eski
 ---
 
 ### 2. GÜVENLİK AÇIKLARI
 
-**🟢 SEC-01: SIEM Endpoint'lerinde Admin Kontrolü Yok (ÇÖZÜLDÜ)**
-- **Dosya:** `backend/api/handlers/settings.py:33-54`
-- **Sorun:** `/api/settings/siem` POST ve `/api/settings/siem/test` POST endpoint'leri sadece `_is_authenticated` kontrolü yapıyor. `_is_admin` kontrolü eksik.
-- **Etki:** "viewer" rolündeki bir kullanıcı SIEM ayarlarını değiştirebilir ve dışarıya veri sızdırabilir.
-- **Çözüm:** Her iki handler'a `if not server._is_admin(request["cookies"]): return server._forbidden_response()` ekle.
-
-**🟢 SEC-02: API Anahtarları Kaynak Kodda Gömülü (ÇÖZÜLDÜ)**
-- **Dosya:** `backend/core/config.py:97-98`
-- **Sorun:** AbuseIPDB API key ve GreyNoise API key, `config.py` içinde default value olarak hardcoded yazılmış. Git repo'sunda açıkta.
-- **Etki:** API key'lerin kötüye kullanılma riski. Public repo'ya konulursa ciddi sorun.
-- **Çözüm:** Default value olarak boş string koy, sadece `.env` üzerinden yükle.
-
-**🟢 SEC-03: Cookie'de `Secure` Flag Eksik (ÇÖZÜLDÜ)**
-- **Dosya:** `backend/web/utils.py:178-182`
-- **Sorun:** Session cookie `HttpOnly` ve `SameSite=Strict` içeriyor ama `Secure` flag eksik.
-- **Etki:** Man-in-the-middle saldırısıyla session hijacking riski.
-- **Çözüm:** HTTPS kullanıldığında `Secure` flag'i ekle.
-
-
-**🟢 SEC-04: `is_blacklisted` — Her Sorguda `resolve_mac` Çağırılıyor (ÇÖZÜLDÜ)**
-- **Dosya:** `backend/database/repository.py:75-91`
-- **Sorun:** `is_blacklisted()` her çağrıda `resolve_mac(ip)` çalıştırıyor. Bu fonksiyon `subprocess.check_output(["arp", ...])` ile dış komut çalıştırıyor. Her gelen honeypot event'inde çağrılıyor olabilir.
-- **Etki:** Performans darboğazı + her event'te subprocess fork'u.
-- **Çözüm:** MAC sonuçlarını cache'le veya blacklist kontrolünde MAC aramasını kaldır.
-
-**⚠️ UYARI: Web Arayüzünde MAC Adreslerinin Görünmeme Sorunu**
-- **Sorun:** Web arayüzünde bazı listelerde veya loglarda MAC adresleri gösterilmiyor/görünmüyor.
-- **Yapılacak İşlem:** frontend tarafındaki tablo bileşenleri ve backend'in gönderdiği event payload'ları incelenerek MAC adreslerinin UI'a ulaşıp ulaşmadığı tespit edilecek ve düzeltilecek.
-
-
-**🟢 SEC-05: `read_recent_events` — `r.details.update()` ile Kontrol Edilmemiş Alanlar (ÇÖZÜLDÜ)**
-- **Dosya:** `backend/web/utils.py:35-36`
-- **Sorun:** `event_data.update(r.details)` satırı, DB'deki JSON `details` alanının tüm key-value çiftlerini ana event dict'ine karıştırıyor. `details` içinde `"service"`, `"event_type"` gibi key'ler varsa, üst seviye değerleri override eder.
-- **Etki:** Veri bütünlüğü sorunu.
-- **Çözüm:** `details` alanını ayrı bir key altında döndür veya çakışan key'leri filtrele.
+(Bu kategoride aktif başka bir bulgu kalmamıştır.)
 
 ---
 
 ### 3. ÖLÜ KOD ve KALINTI
 
-**DEAD-01: `common.js` — `setText` Fonksiyonu**
-- **Dosya:** `frontend/src/common.js:121-128`
-- **Sorun:** `setText()` fonksiyonu `window.setText` olarak dışa aktarılmış ama React SPA'da hiçbir yerde çağrılmıyor. Eski vanilla JS kalıntısı.
-- **Çözüm:** Sil.
-
-**DEAD-02: `common.js` — `applyRoleVisibility` Fonksiyonu**
-- **Dosya:** `frontend/src/common.js:195-200`
-- **Sorun:** `applyRoleVisibility()` fonksiyonu `[data-admin-only]` DOM elementlerini arıyor ama React SPA'da böyle elementler yok.
-- **Çözüm:** Sil veya login.js'e taşı.
-
-**DEAD-03: `common.js` — `initializeThemeControls` Gereksiz Listener**
-- **Dosya:** `frontend/src/common.js:100-112`
-- **Sorun:** `[data-theme-toggle]` butonları için click listener ekliyor. React SPA'da böyle butonlar yok. `AppearancePage` kendi state yönetimini yapıyor.
-- **Çözüm:** Login.html'de kullanılmıyorsa sil.
-
-**DEAD-04: `test_cpu.py` — Geçici Test Dosyası**
-- **Dosya:** `backend/test_cpu.py`
-- **Sorun:** Root seviyede gereksiz test dosyası. Production'a deploy edilebilir.
-- **Çözüm:** Sil veya `tests/` dizinine taşı.
+(Bu kategoride aktif başka bir bulgu kalmamıştır.)
 
 ---
 
 ### 4. ÇALIŞMAYAN / BOŞ MANTIK
 
-**EMPTY-01: `siem_forwarder.py` — HTTP URL Mantık Hatası**
-- **Dosya:** `backend/core/siem_forwarder.py:57-65`
-- **Sorun:** HTTP protokolü dalında URL oluşturma mantığı hatalı. İlk `url = f"http://..."` ataması yapılıp hemen ardından aynı koşul kontrol ediliyor — ilk atama gereksiz.
-- **Çözüm:** Tekrar eden atamayı kaldır, sadece if/else bırak.
-
-**EMPTY-02: `orchestrator.py` — `start_service` Boş `pass` Bloğu**
-- **Dosya:** `backend/orchestrator.py:196-198`
-- **Sorun:** `start_service` metodu içinde `pass` ile boş bırakılmış bir blok var. System mode'da servis başlatma talebi gelmesine rağmen network ayarları anında uygulanmaz.
-- **Etki:** System mode'da 3 saniyelik sync döngüsünü beklemek zorunda.
-- **Çözüm:** Pass'ı kaldır, açık yorum bırak veya sync'i tetikle.
-
-**EMPTY-03: `defense.py` — `_suspicious_counters` Hiç Resetlenmiyor**
-- **Dosya:** `backend/defense.py:92-93` ve `:105-106`
-- **Sorun:** Ban edilen IP'nin counter'ı sıfırlanmıyor. Counter 101, 102... devam ediyor. Her event'te tekrar `add_to_blacklist` çağrılır (gereksiz DB sorguları).
-- **Etki:** Bellek sızıntısı + gereksiz DB yükü.
-- **Çözüm:** Ban sonrası counter'ı sıfırla veya sil.
+(Bu kategoride aktif başka bir bulgu kalmamıştır.)
 
 ---
 
 ### 5. KOD KALİTESİ SORUNLARI
 
-**QUALITY-01:** `Dashboard.js:154` — `"Suspicios Events"` yazım hatası → `"Suspicious Events"` olmalı.
-
-**QUALITY-02:** `Live.js:43-60` — User Pill Eksik. Diğer tüm sayfalarda topbar'da "Signed in as admin" pill'i var. Live sayfasında yok.
-
-**QUALITY-03:** `Live.js` — Logout Butonu Stil Tutarsızlığı. Live sayfasında `"button secondary"`, diğer sayfalarda `"button"` (primary).
-
-**QUALITY-04:** `Core.js:322-336` — NotificationBell Hardcoded Renkler. Dropdown menüsü `background: "#1e1e1e"`, `color: "#888"` gibi hardcoded renkler kullanıyor. Tema değişkenlerini (`var(--surface)`, `var(--border)`) kullanmıyor.
-
-**QUALITY-05:** `index.html:22` — CSP İhlali Riski. `<script src="https://unpkg.com/globe.gl">` harici CDN. Backend CSP `script-src 'self'` diyor. Ayrıca inline script de `unsafe-inline` olmadan çalışmaz.
-
-**QUALITY-06:** `styles.css` — 3416 Satır / 70KB. Tek CSS dosyası. İçinde duplike tema tanımları var.
-
-**QUALITY-07:** `Settings.js:516-577` — ResourceGauge bileşeni tüm stillerini inline style olarak tanımlıyor. CSS dosyasında karşılığı yok.
+(Bu kategoride aktif başka bir bulgu kalmamıştır.)
 
 ---
 
 ### 6. PERFORMANS
 
-**PERF-01:** `server.py:378-379` — CPU Ölçümü 200ms Blokaj. Her settings API isteğinde `await asyncio.sleep(0.2)` çağrılıyor. 5 saniyede bir poll = her poll'de 200ms blokaj. **Çözüm:** Arka plan task'ıyla periyodik ölç, cache'le.
-
-**PERF-02:** `Core.js:255-256` — MutationObserver Tüm DOM İzleniyor. `observer.observe(document.body, { childList: true, subtree: true })` — her DOM mutasyonunda `querySelector` çalışıyor. **Çözüm:** Daha dar scope veya debounce.
-
-**PERF-03:** `utils.py:19-41` — Her API İsteğinde DB Sorgusu. Overview, analyze, threat-intel, stats, events — hepsi ayrı DB sorgusu. Dashboard 5 saniyede bir poll yapıyor. **Çözüm:** Kısa süreli (5-10 sn) bellekte cache.
-
-**PERF-04:** `siem_forwarder.py:51-56` — Her Event İçin TCP Bağlantısı. TCP modunda her event için yeni bağlantı açılıp kapatılıyor. **Çözüm:** Persistent TCP connection veya batching.
+(Bu kategoride aktif başka bir bulgu kalmamıştır.)
 
 ---
 
@@ -200,8 +102,7 @@ honeypot-orchestrator/
 ├── docker-compose.yml                # Prodüksiyon (WAN) ortamı için Docker mikroservis yapılandırması
 ├── memory.md                         # Projenin genel işleyiş, yol haritası ve arşivi
 ├── README.md                         # Kurulum ve projenin kullanım talimatları
-├── logs/                             # (Dışa aktarılan log dizini)
-│   └── honeypot.db                   # Eski SQLite veritabanı (Artık kullanılmıyor, kaldırılabilir)
+├── setup.sh                          # İnteraktif ağ kurulumu, şifreleme anahtarı üretimi ve .env yapılandırıcı betik
 ├── backend/                          # Honeypot tuzakları, tehdit istihbaratı ve API (Python)
 │   ├── cli.py                        # Sistemin komut satırı giriş noktası (--mode decoy|system|web|ti)
 │   ├── config.yaml                   # Uygulamanın temel ağ, port ve profil yapılandırması
@@ -209,26 +110,30 @@ honeypot-orchestrator/
 │   ├── Dockerfile                    # Tüm backend modülleri için ortak olan Python 3.12 imajı
 │   ├── orchestrator.py               # Konteynerler arası senkronizasyon ve servis yöneticisi
 │   ├── requirements.txt              # Backend için gerekli Python pip paket listesi
-│   ├── test_threat_intel.py          # Threat Intel (TI) modülü için özel geliştirilmiş testler
 │   ├── threat_intel.py               # AbuseIPDB, GreyNoise, ASN, rDNS ve Tor zenginleştirme modülü
 │   ├── ti_worker.py                  # İstihbarat sorgularını arka planda asenkron çalıştıran worker
 │   ├── __init__.py                   # Modül tanım dosyası
 │   ├── api/                          # REST API endpoint dizini
 │   │   ├── router.py                 # API yönlendiricileri ve genel tanımlamalar
 │   │   └── handlers/                 # Endpoint logic'leri (Handler katmanı)
+│   │       ├── alerts.py             # Server-Sent Events (SSE) tabanlı gerçek zamanlı uyarılar ve akış kontrolü
+│   │       ├── analyze.py            # Tehdit ısı haritası ve MITRE ATT&CK matrisi veri sağlayıcı
 │   │       ├── auth.py               # Login, session kontrolü ve doğrulama işlemleri
 │   │       ├── blacklist.py          # IP Karaliste/Beyazliste yönetim endpointleri
 │   │       ├── overview.py           # Dashboard istatistik verilerini sağlayan endpoint
-│   │       └── services.py           # Servis durumlarını izleme ve yönetme endpointleri
+│   │       ├── services.py           # Servis durumlarını izleme ve yönetme endpointleri
+│   │       └── settings.py           # SIEM log iletimi ve sistem ayarları endpointleri
 │   ├── certs/                        # Sertifikalar
 │   │   └── dummy.pem                 # LDAPS ve diğer SSL destekli tuzaklar için sahte SSL sertifikası
 │   ├── core/                         # Sistem çekirdeği araçları
 │   │   ├── config.py                 # config.yaml dosyasını parse edip objeye dönüştüren sınıf
 │   │   ├── crypto_utils.py           # PBKDF2 hashleme ve AES-GCM şifreleme/çözme fonksiyonları
 │   │   ├── event_logger.py           # Olayları DB'ye asenkron kaydeden logger (Lazy init destekli)
-│   │   └── geo.py                    # Cache destekli offline/lokal IP Coğrafi Konum çözücü
+│   │   ├── geo.py                    # Cache destekli offline/lokal IP Coğrafi Konum çözücü
+│   │   ├── mitre.py                  # Olay tiplerini MITRE ATT&CK taktik ve teknikleriyle eşleştiren motor
+│   │   └── siem_forwarder.py         # Log olaylarını UDP, TCP veya HTTP ile harici SIEM'e ileten entegrasyon
 │   ├── database/                     # Veritabanı katmanı (PostgreSQL)
-│   │   ├── database.py               # SQLAlchemy (PostgreSQL / aiosqlite) asenkron veritabanı motoru
+│   │   ├── database.py               # SQLAlchemy asenkron veritabanı motoru
 │   │   ├── models.py                 # DB tablo şemaları (Events, Sessions, Users, vb.)
 │   │   └── repository.py             # API için CRUD operasyonlarını (DB sorgularını) yürüten katman
 │   ├── logs/                         # Konteyner içi log dizini
@@ -265,7 +170,7 @@ honeypot-orchestrator/
 │   │   └── test_utils.py             # Yardımcı araç testleri
 │   └── web/                          # Honeypot-web mikroservis altyapısı
 │       ├── __init__.py               # Modül tanım dosyası
-│       ├── server.py                 # aiohttp tabanlı web sunucusu (API ve statik sunucu)
+│       ├── server.py                 # aiohttp tabanlı web sunucusu (API sunucusu)
 │       └── utils.py                  # Authentication, CSRF token ve rate-limit sağlayan web middleware'leri
 └── frontend/                         # Görsel kontrol paneli (React.js SPA)
     ├── Dockerfile                    # Nginx tabanlı frontend sunucu Docker imajı
@@ -275,6 +180,7 @@ honeypot-orchestrator/
     ├── package.json                  # Frontend npm bağımlılık listesi
     ├── vite.config.js                # React uygulaması için Vite yapılandırması
     ├── public/                       # Statik açık dosyalar
+    │   └── vendor/                   # Üçüncü parti statik kütüphaneler (React, globe.gl, theme-loader)
     └── src/                          # React kaynak kodları dizini
         ├── common.js                 # Backend ile fetch() wrapper (CSRF ve Session hatalarını çözer)
         ├── login.js                  # Arayüzden bağımsız giriş işlemlerinin yapıldığı logic
@@ -282,13 +188,14 @@ honeypot-orchestrator/
         ├── styles.css                # CSS Variable tabanlı 6 farklı temayı barındıran stil
         ├── utils.js                  # Veri formatlama ve ortak yardımcı fonksiyonlar
         └── components/               # React Komponentleri
+            ├── Analyze.js            # Tehdit ısı haritası ve MITRE ATT&CK matrisi ekranı
             ├── App.js                # Ana çerçeve, Sidebar, Header ve sayfa geçişleri
-            ├── Core.js               # Sistem istatistikleri ve Threat Intel ayarları (Settings alt paneli)
+            ├── Core.js               # Sistem istatistikleri, bildirimler ve ortak bileşenler
             ├── Dashboard.js          # 3D Tehdit haritası ve genel servis ekranı
             ├── Live.js               # Anlık akan terminal tabanlı log analiz ekranı
             ├── Logs.js               # Veritabanı filtreli detaylı log arama ekranı
             ├── Profiles.js           # Profil değiştirme ve IP Kara/Beyaz liste yönetimi
-            └── Settings.js           # Yönetici ayarları, parola ve tema değiştirme ekranı
+            └── Settings.js           # Yönetici ayarları, parola, tema ve SIEM yapılandırma ekranı
 ```
 
 ---
@@ -321,8 +228,33 @@ honeypot-orchestrator/
 19. **setup.sh & start-lan.sh Macvlan .env Hatası:** `start-lan.sh` içindeki `REPO_ROOT` değişkeninin yanlışlıkla `backend` dizinini göstermesi nedeniyle `HONEYPOT_LAN_IP` değerinin yanlış `.env` dosyasına (repository root yerine `backend/.env` içine) yazılması sorunu giderildi. `REPO_ROOT` iki üst dizine (`../../`) yönlendirilerek hem `.env` dosyasının hem de `docker-compose` dosyalarının doğru dizinde çalışması sağlandı. Ayrıca `setup.sh` içindeki varsayılan seçim, arayüzdeki öneriyle uyumlu olarak 2 (Macvlan) olarak güncellendi.
 20. **SIEM / aiohttp Bağımlılık ve 502 Hatası Düzeltildi:** SIEM entegrasyonu (Phase 11) kapsamında geliştirilen `siem_forwarder.py` içindeki `aiohttp` kütüphanesinin `requirements.txt` dosyasında eksik olması nedeniyle, backend konteyneri ayağa kalkarken `ModuleNotFoundError` hatası fırlatarak çöküyor ve bu durum Nginx üzerinde **502 Bad Gateway** hatasına yol açıyordu. `aiohttp` bağımlılığı `requirements.txt` dosyasına eklendi, tüm backend imajları yeniden derlendi ve konteynerler sorunsuz şekilde çalışır hale getirildi.
 21. **Bildirim Çanı Konumlandırması Düzeltildi:** Arayüzün sağ üstünde sabit (fixed) olarak duran Bildirim Çanı (`NotificationBell`), React Portal altyapısına geçirilerek (`NotificationBellPortal`) her sayfanın kendi `page-actions` veya `topbar-actions` alanına dinamik olarak dahil edildi. Çan butonu boyutu `38px`'e düşürülerek "Refresh" ve "Log out" butonlarıyla mükemmel şekilde hizalandı. Bu sayede sayfa geçişlerinde oturum ve SSE bağlantı durumu kesilmeden çanın görsel konumu her sayfanın kendi aksiyon alanına taşınmış oldu.
+22. **Kritik: CSRF Token Tek Kullanımlık Yapıldı (BUG-03):** CSRF token artık her POST isteğinde frontend tarafından taze çekiliyor ve backend tarafında doğrulandıktan hemen sonra listeden pop edilerek tek kullanımlık (nonce) hale getiriliyor.
+23. **Kritik: `_save_users` Race Condition Çözüldü (BUG-04):** Tüm kullanıcıları sil-yaz (`DELETE` + `INSERT`) yöntemi yerine, veritabanı ile RAM'deki listeyi senkronize eden güvenli insert/update/delete mantığına geçildi.
+24. **Güvenlik: SIEM Endpoint'lerinde Admin Yetki Kontrolü Eklendi (SEC-01):** `/api/settings/siem` (POST) ve `/api/settings/siem/test` (POST) endpoint'lerine `_is_admin` kontrolü eklendi, viewer yetkili kullanıcıların ayar değiştirmesi engellendi.
+25. **Güvenlik: Hardcoded API Anahtarları Kaldırıldı (SEC-02):** `config.py` içinde varsayılan olarak gömülü duran AbuseIPDB ve GreyNoise API anahtarları temizlendi, varsayılan boş string yapıldı ve sadece çevre değişkenleri/DB üzerinden beslenmesi sağlandı.
+26. **Güvenlik: Çerezler için Secure Flag Desteği Eklendi (SEC-03):** Session çerezi oluşturulurken `x-forwarded-proto` başlığı ile HTTPS protokolü tespit edilip çereze otomatik olarak `Secure` bayrağı eklendi.
+27. **Performans/Güvenlik: resolve_mac için ARP Caching Eklendi (SEC-04):** Her `is_blacklisted` çağrısında çalışan ARP subprocess fork yükünü azaltmak amacıyla bellek tabanlı 1 saatlik IP-MAC önbellekleme (caching) mekanizması kuruldu.
+28. **Güvenlik: read_recent_events details Alanı Filtrelendi (SEC-05):** details nesnesinin içerisindeki veriler ana event objesine birleştirilirken kritik alanların (`service`, `event_type`, `id` vb.) manipüle edilmesini önlemek amacıyla filtreleme mantığı eklendi.
+29. **Ölü Kod: common.js setText Fonksiyonu Kaldırıldı (DEAD-01):** React mimarisine geçildikten sonra kullanılmayan eski vanilya JS kalıntısı `setText` fonksiyonu kod tabanından temizlendi.
+30. **Ölü Kod: common.js applyRoleVisibility ve ensureAuthenticated Kaldırıldı (DEAD-02):** React state ve props tabanlı rol yönetimine geçildiği için işlevsiz kalan `applyRoleVisibility` ve `ensureAuthenticated` fonksiyonları temizlendi.
+31. **Ölü Kod: common.js initializeThemeControls Sadeleştirildi (DEAD-03):** Projede click listener'ı gerektiren bir `[data-theme-toggle]` butonu kalmadığı için tema değiştirme dinleyici döngüleri silindi, fonksiyon sadece sayfa açılışında temayı yükleyen `initializeTheme()` fonksiyonuna indirgendi.
+32. **Ölü Kod: test_cpu.py Dosyası Silindi (DEAD-04):** İşlemci ölçüm mantığını test etmek için backend dizini altında root seviyesinde unutulmuş olan ve production imajlarında yer kaplayan geçici `test_cpu.py` betiği temizlendi.
+33. **Boş Mantık: siem_forwarder.py HTTP URL Yapılandırması Düzeltildi (EMPTY-01):** HTTP protokolünde SIEM'e olay iletilirken oluşan mükerrer URL atama mantığı sadeleştirilerek if/else kontrolüyle tek seferde temiz URL üretimi sağlandı.
+34. **Boş Mantık: orchestrator.py Boş start_service Dalları Temizlendi (EMPTY-02):** `start_service` fonksiyonunun içinde bulunan ve hiçbir işlevi olmayan boş `if` ile `pass` bloğu kaldırılarak kod sadeleştirildi. Ağ ayarları zaten arka plan veritabanı eşitleme döngüsü üzerinden düzgünce uygulanmaktadır.
+35. **Boş Mantık: defense.py Sayaç Sıfırlama Düzeltildi (EMPTY-03):** Bir IP otomatik olarak banlandığı anda, bu IP'ye ait `_suspicious_counters` ve `_rate_limits` sayaçları bellekten temizlenerek mükerrer DB yazma/banlama işlemlerinin önüne geçildi ve bellek tasarrufu sağlandı.
+36. **Kod Kalitesi: Dashboard.js Yazım Hatası Düzeltildi (QUALITY-01):** Kontrol panelinde bulunan `"Suspicios Events"` başlığı, doğru imla olan `"Suspicious Events"` olarak düzeltildi.
+37. **Kod Kalitesi: Live.js User Pill Eklendi (QUALITY-02):** Canlı izleme sayfasında (`Live.js`) eksik olan kullanıcı giriş bilgisi kutusu (`user-pill`) diğer tüm sayfalarla hizalanacak şekilde eklendi.
+38. **Kod Kalitesi: Live.js Logout Butonu Düzenlendi (QUALITY-03):** Canlı izleme sayfasındaki oturum kapatma butonunun sınıfı `"button secondary"` yerine, projedeki genel stil uyumluluğu için `"button"` (primary) olarak güncellendi. Ayrıca "Force Sync" butonu "Refresh" adıyla ikincil buton stiline çekildi.
+39. **Kod Kalitesi: NotificationBell Dropdown Renk Değişkenleri Bağlandı (QUALITY-04):** `Core.js` bildirim çanı bileşenindeki dropdown menünün arayüz renkleri (`background`, `border`, `shadow`, `text` vb.) hardcoded renk kodlarından temizlenerek projenin CSS tema değişkenlerine dinamik olarak bağlandı.
+40. **Kod Kalitesi: Yerel globe.gl ve theme-loader Entegrasyonu ile CSP Güvenliği (QUALITY-05):** unpkg.com üzerinden yüklenen `globe.gl` kütüphanesi yerel `/vendor/globe.gl.js` dizinine indirildi. `index.html` and `login.html` dosyalarındaki inline script'ler, tarayıcının katı CSP (Content-Security-Policy) kurallarına takılmaması için yerel `/vendor/theme-loader.js` dosyasına taşınarak CSP ihlalleri tamamen giderildi.
+41. **Kod Kalitesi: ResourceGauge Statik Stilleri styles.css'e Taşındı (QUALITY-07):** `Settings.js` altındaki `ResourceGauge` bileşeninin inline styles içinde tanımladığı statik `transform` ve `transformOrigin` özellikleri temizlendi ve `styles.css` dosyası altındaki `.gauge-ring-progress` sınıfına aktarıldı.
+42. **Kod Kalitesi: styles.css Temizliği ve Mükerrer Temanın Kaldırılması (QUALITY-06):** CSS dosyasında yer alan ve `:root` değişkenleriyle tamamen aynı olan, arayüzde ise hiç kullanılmayan atıl `:root[data-theme="dark"]` tema tanımı kaldırılarak CSS dosyasındaki duplikasyon giderildi.
+43. **Performans: CPU Ölçümü Caching Mekanizması ile İstek Gecikmesi Giderildi (PERF-01):** Her `/api/overview` isteğinde CPU ölçmek için çağrılan ve HTTP yanıtını 200ms geciktiren senkron `asyncio.sleep(0.2)` bloğu kaldırıldı. CPU kullanım yüzdesi, sunucu başlangıcında devreye giren 5 saniyelik bir arka plan monitor görevi (`_monitor_cpu`) üzerinden periyodik ölçülüp bellek değişkeninde önbelleklendi ve istekler anında cevaplanır hale getirildi.
+44. **Performans: MutationObserver DOM Dinleyicisi Debounce Edildi (PERF-02):** `Core.js` altındaki `NotificationBellPortal` bileşeninde, tüm sayfa gövdesini (`document.body`) izleyen ve her DOM mutasyonunda (özellikle saniyede onlarca olay akan gerçek zamanlı dashboard ekranlarında) senkron `document.querySelector` araması çalıştıran MutationObserver callback'i 100ms debounce edilerek arayüzün CPU tüketimi ve render yükü minimize edildi.
+45. **Performans: read_recent_events DB Sorgusu Bellek Cache Mekanizması ile İyileştirildi (PERF-03):** Dashboard poll isteklerinin ve istatistik panellerinin PostgreSQL veritabanına getirdiği aşırı yükü engellemek amacıyla `read_recent_events` sorguları limit bazlı olarak 3 saniyelik bir TTL ile bellekte önbelleklendi (caching). Böylelikle eş zamanlı veya ardışık overview/analyze istekleri mükerrer veritabanı sorguları çalıştırmadan doğrudan bellekten hızlıca döndürüldü.
+46. **Performans: Kalıcı TCP Soket Bağlantısı ile SIEM Forwarder İyileştirildi (PERF-04):** `siem_forwarder.py` içinde TCP protokolüyle log iletilirken her olay için sıfırdan TCP bağlantısı açıp kapatan (socket exhaustion ve gecikme yaratan) mantık değiştirildi. Bellek üzerinde kalıcı tek bir TCP socket bağlantısı (`self._tcp_writer`) tutulması, bağlantı kopmalarında otomatik yeniden bağlanma (reconnect) altyapısı ve yapılandırma değişikliklerinde bağlantının güvenli şekilde sonlandırılması sağlanarak log aktarım performansı optimize edildi.
 
-### Phase 0 - 9
+### Project Phases & Milestones (Historical)
 - **Phase 0:** `start_service` / `stop_service` signature bugs fixed. Toggle buttons working.
 - **Phase 1 & 2:** GeoIP integration (batching, caching), 3D Interactive World Map (globe.gl), Real-time Events Counter (events/min), Dashboard Event Detail Drawer (Slide-out JSON view).
 - **Phase 3:** IP Rate Limiting (Sliding Window, 10 events/sec), Log Rotation (events.jsonl 50MB limit), Session Persistence (survives Docker restarts).
@@ -330,18 +262,18 @@ honeypot-orchestrator/
 - **Phase 5:** Threat Intelligence Enrichment — `threat_intel.py` modülü (rDNS, ASN/Org, Tor Exit Node, Cloud Provider CIDR, AbuseIPDB, GreyNoise), TI Dashboard Panel (summary pills + top 10 attacker tablosu), `config.yaml` TI key desteği, kapsamlı `test_threat_intel.py` test suite.
 - **Phase 6:** Güvenlik Hardening & Teknik Borç — Secret management (`.env`), session TTL & frontend oto-logout, memory leak fix (`defense.py` cleanup), GeoIP kod duplikasyonu çözümü, lazy import temizliği.
 - **Phase 7:** Kontrol Paneli Güvenlik Güncellemeleri — Brute Force koruması (5 hata/5 dk), POST istekleri için CSRF Token, HTTP güvenlik başlıkları eklendi.
-- **Phase 9:** IOC Export (CSV + STIX 2.1) — Tehdit istihbarat verilerinin dışa aktarımı eklendi.
 - **Phase 8 (Adım 1):** Mikroservis İzolasyonu — Backend servisi `honeypot-daemon` (tuzaklar) ve `honeypot-web` (API) olarak ikiye bölündü. Frontend portu 80'e alındı. Docker compose ağ yapılandırmaları ayrıldı.
 - **Phase 8 (Adım 2):** PostgreSQL Veritabanı Migrasyonu — Dosya tabanlı mimariden PostgreSQL'e geçiş, SQL tablolarının oluşturulması (Events, Sessions, Users, ThreatIntelCache) ve veri taşıma betiği.
+- **Phase 9:** IOC Export (CSV + STIX 2.1) — Tehdit istihbarat verilerinin dışa aktarımı eklendi.
 - **Phase 10:** Mimari Sadeleştirme, Frontend Split ve Mikroservis İzolasyonu — Arka plan dizin yapısı katmanlara ayrıldı. `server.py` temizlenerek router-handler yapısına geçildi. 3000+ satırlık devasa `app-react.js` modüler ES bileşenlerine bölündü. Sistem tek parça yerine tam bağımsız 4 mikroservise (`decoy`, `system`, `web`, `ti`) ayrıldı. `honeypot-system` root/NET_ADMIN yetkileriyle network ayarlarını (iptables) devralırken, `honeypot-web` ve `honeypot-ti` tam yetkisiz (non-root) şekilde çalıştırılarak izolasyon sağlandı. Servisler arası iletişim ve state yönetimi PostgreSQL veritabanı üzerinden senkronize hale getirildi. Decoy servisleri `SERVICE_REGISTRY` üzerinden modüler Plug-and-Play altyapısına geçirildi. Dashboard 3D Globe CSS bugı giderildi.
+- **Phase 11:** Web UI Alerts & SIEM Integration — Sağ üst köşeye okunmamış bildirimleri gösteren rozetli bir Bildirim Çanı eklendi. Hız ve yoğunluğa dayalı akıllı kümeleme (rate-based throttling) yapan Server-Sent Events (SSE) tabanlı gerçek zamanlı uyarı sistemi kuruldu. Ayrıca `siem_forwarder.py` yazılarak honeypot loglarının eşzamanlı olarak UDP, TCP veya HTTP üzerinden dış bir SIEM sistemine (Wazuh, Splunk vb.) iletilmesi sağlandı. Kullanıcı için "SIEM Integration" ayarlar arayüzü kodlandı.
+- **Phase 12:** MITRE ATT&CK Mapping + Analyze Sayfası — Honeypot verilerinin profesyonel güvenlik çerçevesinde analiz edilebilmesi için `mitre.py` modülü yazıldı. Event type'lar MITRE taktik ve tekniklerine eşlendi. Frontend tarafında `/analyze` route'u ve `/api/analyze` endpoint'i tamamlanarak Threat Heatmap, MITRE ATT&CK Matrix ve Country Breakdown başarıyla sisteme entegre edildi.
+- **Öncelikli Görev - İnteraktif `.env` Kurulum Betiği & Gömülü TI Anahtarları:** Tehdit istihbaratı API anahtarları doğrudan yazılım çekirdeğine (`config.py`) gömülerek `.env` sadeleştirildi. `setup.sh` betiği yazıldı; ağ kurulumunu tetikler, şifreleme anahtarını otomatik üretir, kullanıcı adı/şifreyi alır ve `.env` dosyasını hazırlar. Ayrıca `cli.py` içerisinde key rotation mantığı eklenerek şifreleme anahtarı değiştiğinde veritabanındaki şifreli anahtarların otomatik olarak yeni anahtarla yeniden şifrelenip güncellenmesi sağlandı.
 - **Attacker Origins Paneli Taşma & Sidebar Üzerine Gelme Bugı Düzeltildi:** Masaüstü modunda `.sidebar`'a `z-index: 99;` eklenerek panellerin üzerine binmesi engellendi. `.geo-map-panel` (harita paneli) üzerindeki beyaz parlama (shine effect) WebGL uyumluluğu nedeniyle devredışı bırakıldı (`display: none !important;`) ve `isolation: isolate;` eklenerek tarayıcılardaki taşma ve scrollbar tetikleme hatası tamamen çözüldü.
 - **3D Harita Durumu:** Kullanıcı tercihi doğrultusunda harita, topoğrafya/bump map ve varsayılan sürekli auto-rotate özellikleri aktif olacak şekilde orijinal ve kararlı varsayılan haline geri döndürüldü.
 - **UI & Bugfix Serisi:** `Live.js` üzerindeki liste sıralama (reverse) hatası giderildi. Dashboard'daki "Recent Events" paneli sadece şüpheli olayları (src_ip içeren) gösterecek şekilde filtrelendi ve adı "Recent Suspicious Events" olarak güncellendi.
 - **Threat Intel & Test Suite Düzeltmeleri:** `test_threat_intel.py`'nin yerel ortamda SQLite'a düşme hatası giderilip doğrudan Docker Postgres'e (test verileri) yönlendirmesi sağlandı. API key'lerin `.env` değişimi sonrası şifrelenme çakışması (InvalidToken) veritabanı senkronizasyonu ile çözülerek AbuseIPDB ve Greynoise skorlarının `N/A` dönmesi hatası giderildi.
 - **Analyze Sayfası Eklendi:** Phase 12'nin hazırlığı olarak, Frontend SPA mimarisine uygun şekilde `/analyze` route'u eklendi ve Threat Intel tablosu Dashboard'dan çıkartılarak bu özel sayfaya taşındı.
-- **Öncelikli Görev - İnteraktif `.env` Kurulum Betiği & Gömülü TI Anahtarları:** Tehdit istihbaratı API anahtarları doğrudan yazılım çekirdeğine (`config.py`) gömülerek `.env` sadeleştirildi. `setup.sh` betiği yazıldı; ağ kurulumunu tetikler, şifreleme anahtarını otomatik üretir, kullanıcı adı/şifreyi alır ve `.env` dosyasını hazırlar. Ayrıca `cli.py` içerisinde key rotation mantığı eklenerek şifreleme anahtarı değiştiğinde veritabanındaki şifreli anahtarların otomatik olarak yeni anahtarla yeniden şifrelenip güncellenmesi sağlandı.
-- **Phase 12:** MITRE ATT&CK Mapping + Analyze Sayfası — Honeypot verilerinin profesyonel güvenlik çerçevesinde analiz edilebilmesi için `mitre.py` modülü yazıldı. Event type'lar MITRE taktik ve tekniklerine eşlendi. Frontend tarafında `/analyze` route'u ve `/api/analyze` endpoint'i tamamlanarak Threat Heatmap, MITRE ATT&CK Matrix ve Country Breakdown başarıyla sisteme entegre edildi.
-- **Phase 11:** Web UI Alerts & SIEM Integration — Sağ üst köşeye okunmamış bildirimleri gösteren rozetli bir Bildirim Çanı eklendi. Hız ve yoğunluğa dayalı akıllı kümeleme (rate-based throttling) yapan Server-Sent Events (SSE) tabanlı gerçek zamanlı uyarı sistemi kuruldu. Ayrıca `siem_forwarder.py` yazılarak honeypot loglarının eşzamanlı olarak UDP, TCP veya HTTP üzerinden dış bir SIEM sistemine (Wazuh, Splunk vb.) iletilmesi sağlandı. Kullanıcı için "SIEM Integration" ayarlar arayüzü kodlandı.
 
 ---
 

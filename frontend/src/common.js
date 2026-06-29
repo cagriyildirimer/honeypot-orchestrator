@@ -95,19 +95,12 @@ function applyTheme(theme) {
   });
 }
 
-function initializeThemeControls() {
+function initializeTheme() {
   const savedTheme = storedTheme();
   applyTheme(savedTheme);
-  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const currentIndex = THEME_OPTIONS.findIndex((option) => option.key === currentTheme());
-      const next = THEME_OPTIONS[(currentIndex + 1) % THEME_OPTIONS.length];
-      applyTheme(next.key);
-    });
-  });
 }
 
-initializeThemeControls();
+initializeTheme();
 
 function text(value) {
   if (value === undefined || value === null || value === "") {
@@ -116,14 +109,6 @@ function text(value) {
   return String(value);
 }
 
-function setText(selector, value) {
-  const element = document.querySelector(selector);
-  if (!element) {
-    return false;
-  }
-  element.textContent = value;
-  return true;
-}
 
 function showToast(message, tone = "neutral") {
   const toast = document.querySelector("#toast");
@@ -180,22 +165,6 @@ function summarizeEvent(event) {
   return text(event.summary || event.path || event.command || event.error || event.detail);
 }
 
-async function ensureAuthenticated() {
-  const session = await requestJson("/api/session");
-  if (!session.authenticated) {
-    window.location.replace("/login");
-    throw new Error("Authentication required.");
-  }
-  applyRoleVisibility(session);
-  return session;
-}
-
-function applyRoleVisibility(session) {
-  const isAdmin = session && session.role === "admin";
-  document.querySelectorAll("[data-admin-only]").forEach((element) => {
-    element.hidden = !isAdmin;
-  });
-}
 
 async function logoutAndRedirect() {
   try {
@@ -212,10 +181,8 @@ window.THEME_OPTIONS = THEME_OPTIONS;
 window.currentTheme = currentTheme;
 window.applyTheme = applyTheme;
 window.text = text;
-window.setText = setText;
 window.showToast = showToast;
 window.formatTimestamp = formatTimestamp;
 window.formatEventSource = formatEventSource;
 window.summarizeEvent = summarizeEvent;
-window.ensureAuthenticated = ensureAuthenticated;
 window.logoutAndRedirect = logoutAndRedirect;

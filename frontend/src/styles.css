@@ -60,46 +60,7 @@
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #030c1d;
-  --surface: rgba(6, 11, 40, 0.74);
-  --surface-subtle: rgba(10, 14, 35, 0.71);
-  --surface-strong: rgba(15, 21, 53, 0.96);
-  --border: rgba(226, 232, 240, 0.18);
-  --border-strong: rgba(226, 232, 240, 0.32);
-  --text: #ffffff;
-  --muted: #a0aec0;
-  --muted-strong: #cbd5e0;
-  --accent: #0075ff;
-  --accent-focus: #21d4fd;
-  --accent-soft: rgba(0, 117, 255, 0.16);
-  --blue: #21d4fd;
-  --blue-soft: rgba(33, 212, 253, 0.14);
-  --warning: #ffb547;
-  --warning-soft: rgba(255, 181, 71, 0.16);
-  --danger: #e31a1a;
-  --danger-soft: rgba(227, 26, 26, 0.16);
-  --danger-border: rgba(227, 26, 26, 0.45);
-  --success: #01b574;
-  --success-soft: rgba(1, 181, 116, 0.16);
-  --success-border: rgba(1, 181, 116, 0.44);
-  --live-surface: rgba(1, 181, 116, 0.1);
-  --tag-neutral-bg: rgba(255, 255, 255, 0.08);
-  --table-head-bg: rgba(15, 21, 53, 0.76);
-  --row-accent-bg: rgba(0, 117, 255, 0.08);
-  --glass-gradient: linear-gradient(126.97deg, rgba(6, 11, 40, 0.45) 28.26%, rgba(10, 14, 35, 0.38) 91.2%);
-  --glass-gradient-soft: linear-gradient(127.09deg, rgba(24, 29, 60, 0.42) 19.41%, rgba(10, 14, 35, 0.32) 76.65%);
-  --shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-  --risk-shell: var(--glass-gradient);
-  --risk-inner: rgba(15, 21, 53, 0.7);
-  --risk-copy-surface: rgba(15, 21, 53, 0.62);
-  --risk-gauge-start: #0075ff;
-  --risk-gauge-end: #21d4fd;
-  --risk-grid-line: rgba(255, 255, 255, 0.045);
-  --risk-heat-base: rgba(0, 117, 255, 0.12);
-  --risk-heat-glow: rgba(33, 212, 253, 0.2);
-}
+
 
 :root[data-theme="nebula"] {
   --accent: #8b5cf6;
@@ -3998,6 +3959,8 @@ input:checked + .toggle-slider:before {
 /* Animated progress stroke */
 .gauge-ring-progress {
   transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: rotate(-90deg);
+  transform-origin: center;
 }
 
 /* Center overlay (icon + percentage) */

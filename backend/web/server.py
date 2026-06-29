@@ -58,6 +58,8 @@ class WebDashboard:
         self._started_at = time.monotonic()
         self._login_attempts: dict[str, list[float]] = {}
         self._csrf_tokens: dict[str, float] = {}
+        self._cpu_percent = 0.0
+        self._cpu_task: asyncio.Task | None = None
 
     async def _load_sessions(self) -> dict[str, dict[str, Any]]:
         try:
@@ -111,14 +113,58 @@ class WebDashboard:
         
         # Tarayici istekleri handle_client metoduna yonlendirilir.
         self._server = await asyncio.start_server(self.handle_client, self.host, self.port)
+        self._cpu_task = asyncio.create_task(self._monitor_cpu())
 
     async def stop(self) -> None:
+        if self._cpu_task:
+            self._cpu_task.cancel()
+            try:
+                await self._cpu_task
+            except asyncio.CancelledError:
+                pass
+            self._cpu_task = None
+
         if self._server is None:
             return
         self._server.close()
         await self._server.wait_closed()
         self._server = None
         self._sessions.clear()
+
+    async def _monitor_cpu(self) -> None:
+        def read_cpu():
+            try:
+                with open("/proc/stat", "r") as f:
+                    line = f.readline()
+                parts = line.split()
+                times = [float(x) for x in parts[1:]]
+                idle = times[3] + times[4]
+                total = sum(times)
+                return idle, total
+            except Exception:
+                return 0.0, 0.0
+
+        while True:
+            try:
+                idle1, total1 = read_cpu()
+                await asyncio.sleep(0.5)
+                idle2, total2 = read_cpu()
+
+                idle_diff = idle2 - idle1
+                total_diff = total2 - total1
+                if total_diff > 0:
+                    self._cpu_percent = round((1.0 - idle_diff / total_diff) * 100, 1)
+                else:
+                    self._cpu_percent = 0.0
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"Error in CPU monitor task: {e}")
+            
+            try:
+                await asyncio.sleep(4.5)
+            except asyncio.CancelledError:
+                break
 
     async def handle_client(
         self,
@@ -361,31 +407,9 @@ class WebDashboard:
         uptime_seconds = int(time.monotonic() - self._started_at)
         
         # Collect system resource metrics
-        cpu_metrics = {"percent": 0.0}
+        cpu_metrics = {"percent": self._cpu_percent}
         ram_metrics = {"total_mb": 0.0, "used_mb": 0.0, "percent": 0.0}
         disk_metrics = {"total_gb": 0.0, "used_gb": 0.0, "percent": 0.0}
-        
-        try:
-            # CPU calculation via /proc/stat
-            def read_cpu():
-                with open("/proc/stat", "r") as f:
-                    line = f.readline()
-                parts = line.split()
-                times = [float(x) for x in parts[1:]]
-                idle = times[3] + times[4]
-                total = sum(times)
-                return idle, total
-
-            idle1, total1 = read_cpu()
-            await asyncio.sleep(0.2)
-            idle2, total2 = read_cpu()
-
-            idle_diff = idle2 - idle1
-            total_diff = total2 - total1
-            if total_diff > 0:
-                cpu_metrics["percent"] = round((1.0 - idle_diff / total_diff) * 100, 1)
-        except Exception as e:
-            print(f"Error reading CPU usage: {e}")
 
         try:
             # RAM calculation via /proc/meminfo

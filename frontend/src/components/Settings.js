@@ -556,9 +556,7 @@ export function ResourceGauge({ label, percent, note, colorClass }) {
           strokeLinecap: "round",
           className: "gauge-ring-progress",
           style: {
-            filter: `drop-shadow(0 0 6px ${colors.glow})`,
-            transform: "rotate(-90deg)",
-            transformOrigin: "center"
+            filter: `drop-shadow(0 0 6px ${colors.glow})`
           }
         })
       ),

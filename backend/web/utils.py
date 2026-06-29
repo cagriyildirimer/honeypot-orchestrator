@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import hashlib
 import secrets
 from http import HTTPStatus
@@ -12,11 +13,19 @@ from sqlalchemy import select, delete, desc
 from database.database import async_session
 from database.models import Event, User
 
+_recent_events_cache: dict[int, tuple[float, list[dict[str, Any]]]] = {}
+
 ROLE_ADMIN = "admin"
 ROLE_VIEWER = "viewer"
 USER_ROLES = {ROLE_ADMIN, ROLE_VIEWER}
 
 async def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
+    now = time.monotonic()
+    if limit in _recent_events_cache:
+        cached_time, cached_val = _recent_events_cache[limit]
+        if now - cached_time < 3.0:  # 3 seconds TTL
+            return cached_val
+
     try:
         async with async_session() as session:
             stmt = select(Event).order_by(desc(Event.timestamp)).limit(max(1, min(limit, 10000)))
@@ -31,7 +40,11 @@ async def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
                     "src_ip": r.src_ip,
                     "src_port": r.src_port,
                     "summary": r.summary,
+                    "src_mac": "N/A",
                 }
+                if r.src_ip and r.src_ip not in {"127.0.0.1", "::1", "localhost", "unknown"}:
+                    from defense import resolve_mac
+                    event_data["src_mac"] = resolve_mac(r.src_ip)
                 if r.details:
                     if isinstance(r.details, dict):
                         safe_details = {
@@ -40,6 +53,7 @@ async def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
                         }
                         event_data.update(safe_details)
                 records.append(event_data)
+            _recent_events_cache[limit] = (now, records)
             return records
     except Exception as e:
         print(f"DB read events error: {e}")

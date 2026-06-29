@@ -6,22 +6,14 @@
     <title>Honeypot Director</title>
     <!-- Honeycomb SVG Favicon -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' fill='none' stroke='%230075ff' stroke-width='8'><polygon points='50,14 65.6,23 65.6,41 50,50 34.4,41 34.4,23' fill='rgba(0,117,255,0.15)'/><polygon points='34.4,41 50,50 50,68 34.4,77 18.8,68 18.8,50' fill='rgba(0,117,255,0.15)'/><polygon points='65.6,41 81.2,50 81.2,68 65.6,77 50,68 50,50' fill='rgba(0,117,255,0.15)'/></svg>">
-    <script>
-      try {
-        var savedTheme = localStorage.getItem("honeypot-director-theme");
-        var themes = ["vision", "nebula", "aurora", "emerald", "sunset", "slate"];
-        document.documentElement.dataset.theme = themes.indexOf(savedTheme) >= 0 ? savedTheme : "vision";
-      } catch (error) {
-        document.documentElement.dataset.theme = "vision";
-      }
-    </script>
+    <script src="/vendor/theme-loader.js"></script>
     <link rel="stylesheet" href="/src/styles.css">
   </head>
   <body class="app-page">
     <div id="app-root"></div>
     <script src="/vendor/react.production.min.js"></script>
     <script src="/vendor/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/globe.gl"></script>
+    <script src="/vendor/globe.gl.js"></script>
     <script src="/src/common.js" type="module"></script>
     <script type="module" src="/src/main.js"></script>
   </body>
