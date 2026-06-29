@@ -1,17 +1,5 @@
 # Honeypot Orchestrator - Memory & Next Steps
 
----
-## 🔍 TAM KOD DENETİM RAPORU
-
-> **Tarih:** 2026-06-29  
-> **Kapsam:** Tüm frontend (JS/CSS/HTML) + backend (Python) + Docker/CI kaynak kodları  
-> **Toplam dosya:** ~45 kaynak dosya, ~15.000 satır backend + ~7.000 satır frontend  
-> **Toplam bulgu:** 29 sorun + 10 öneri
-
-
-
----
-
 ### 1. KRİTİK HATALAR
 
 **🔴 BUG-01: `Live.js` — Döngüsel Import**
@@ -25,70 +13,6 @@
 - **Sorun:** `.toast` CSS sınıfı iki farklı yerde tanımlı. Eski tanım `position: sticky; bottom: 16px`, yeni tanım `position: fixed !important; top: 24px !important`. Eski tanımdaki `font-weight: 800` ve border/background stilleri cascade'de kalıyor.
 - **Çözüm:** Satır 1873-1897 arasındaki eski
 ---
-
-### 2. GÜVENLİK AÇIKLARI
-
-(Bu kategoride aktif başka bir bulgu kalmamıştır.)
-
----
-
-### 3. ÖLÜ KOD ve KALINTI
-
-(Bu kategoride aktif başka bir bulgu kalmamıştır.)
-
----
-
-### 4. ÇALIŞMAYAN / BOŞ MANTIK
-
-(Bu kategoride aktif başka bir bulgu kalmamıştır.)
-
----
-
-### 5. KOD KALİTESİ SORUNLARI
-
-(Bu kategoride aktif başka bir bulgu kalmamıştır.)
-
----
-
-### 6. PERFORMANS
-
-(Bu kategoride aktif başka bir bulgu kalmamıştır.)
-
----
-
-### 7. ÖNERİLER ve FİKİRLER
-
-1. **Credential Harvest Raporu** — Tüm login denemelerinden `username/password` çiftlerini toplayan panel. "En çok denenen şifreler", "Saldırganların kullandığı username'ler".
-2. **IP Bazlı Attack Timeline** — Bir IP seçildiğinde tüm hareketlerinin kronolojik zaman çizelgesi.
-3. **Dashboard Light Mode** — Şu an 6 koyu tema var. Bir de açık (light) tema eklenebilir.
-4. **Log Arama İyileştirmesi** — Alan bazlı arama (IP, service, event_type) ve regex desteği.
-5. **Honeypot Decoy Dosyaları** — FTP ve SMB'ye sahte dosya sistemleri (`passwords.xlsx`, `backup.sql`, `.ssh/id_rsa`). Canary token mantığı.
-6. **Email/Webhook Alert** — Kritik alert'ler için email veya webhook (Slack, Discord, Telegram) entegrasyonu.
-7. **Rate Limiting Dashboard** — Hangi IP'lerin rate limit'e takıldığını gösteren panel.
-8. **Custom Profile Builder UI** — GUI ile yeni profil oluşturma. Kullanıcı hangi servislerin açık olacağını seçip kendi profilini kaydeder.
-9. **GeoIP Heatmap (2D)** — SVG bazlı 2D dünya haritası üzerinde ülke bazlı renk yoğunluk haritası. 3D Globe'a hafif alternatif.
-10. **Otomatik Backup ve Export** — Zamanlanmış otomatik log export (günlük/haftalık JSONL veya CSV backup).
-
----
-
-### 📊 Özet Tablo
-
-| Kategori | Kritik | Orta | Düşük | Toplam |
-|----------|--------|------|-------|--------|
-| Hatalar (Bug) | 4 | 0 | 0 | **4** |
-| Güvenlik | 2 | 3 | 0 | **5** |
-| Ölü Kod | 0 | 4 | 0 | **4** |
-| Boş Mantık | 0 | 3 | 0 | **3** |
-| Kod Kalitesi | 0 | 0 | 7 | **7** |
-| Performans | 0 | 2 | 2 | **4** |
-| **TOPLAM** | **6** | **12** | **9** | **27** |
-
-> **Önerilen Aksiyon Sırası:**
-> 1. SEC-01 (SIEM admin kontrolü) + SEC-02 (API key'leri koda gömme) — **hemen düzelt**
-> 2. BUG-01 (döngüsel import) + BUG-02 (çift toast) — **kolay düzeltme**
-> 3. BUG-03 (CSRF token reuse) + BUG-04 (user save race) — **güvenlik iyileştirmesi**
-> 4. EMPTY-01/02/03 — **mantık düzeltmeleri**
-> 5. Ölü kod temizliği — **bakım**
 
 ## 🏗️ Proje Mimari ve Dosya Yapısı
 
@@ -253,6 +177,8 @@ honeypot-orchestrator/
 44. **Performans: MutationObserver DOM Dinleyicisi Debounce Edildi (PERF-02):** `Core.js` altındaki `NotificationBellPortal` bileşeninde, tüm sayfa gövdesini (`document.body`) izleyen ve her DOM mutasyonunda (özellikle saniyede onlarca olay akan gerçek zamanlı dashboard ekranlarında) senkron `document.querySelector` araması çalıştıran MutationObserver callback'i 100ms debounce edilerek arayüzün CPU tüketimi ve render yükü minimize edildi.
 45. **Performans: read_recent_events DB Sorgusu Bellek Cache Mekanizması ile İyileştirildi (PERF-03):** Dashboard poll isteklerinin ve istatistik panellerinin PostgreSQL veritabanına getirdiği aşırı yükü engellemek amacıyla `read_recent_events` sorguları limit bazlı olarak 3 saniyelik bir TTL ile bellekte önbelleklendi (caching). Böylelikle eş zamanlı veya ardışık overview/analyze istekleri mükerrer veritabanı sorguları çalıştırmadan doğrudan bellekten hızlıca döndürüldü.
 46. **Performans: Kalıcı TCP Soket Bağlantısı ile SIEM Forwarder İyileştirildi (PERF-04):** `siem_forwarder.py` içinde TCP protokolüyle log iletilirken her olay için sıfırdan TCP bağlantısı açıp kapatan (socket exhaustion ve gecikme yaratan) mantık değiştirildi. Bellek üzerinde kalıcı tek bir TCP socket bağlantısı (`self._tcp_writer`) tutulması, bağlantı kopmalarında otomatik yeniden bağlanma (reconnect) altyapısı ve yapılandırma değişikliklerinde bağlantının güvenli şekilde sonlandırılması sağlanarak log aktarım performansı optimize edildi.
+47. **Arayüz: Matrix Tema Sistemi (Base Mode + Color Accents) (Phase 14):** Arayüzün sadece koyu tema seçimiyle sınırlı kalmaması için "Base Mode" (Koyu/Açık Tema) ve "Color Accent" (Vision Blue, Nebula Violet, Aurora Cyan, Emerald Ops, Sunset Alert, Slate Mono) kombinasyonlarından oluşan matris yapılı bir tema yönetim sistemi kuruldu. CSS değişkenleri hem açık hem koyu mod için dinamik ve uyumlu paletlerle ayrıştırıldı. Settings.js altındaki Appearance sekmesine Base Mode seçicisi entegre edilerek local storage ve senkron boot-loader desteğiyle sorunsuz geçiş sağlandı.
+48. **SIEM Entegrasyonu: Çoklu Hedef (Multi-Target) Desteği (Phase 11):** Tek bir SIEM sunucusu desteği yerine, birden fazla SIEM hedefini (Splunk, Wazuh, Syslog vb.) aynı anda ekleme, düzenleme, silme ve bağımsız protokoller (UDP, TCP, HTTP POST) ve filtreleme kapsamları (tüm loglar / sadece kritik alarmlar) tanımlama desteği eklendi. `siem_forwarder.py` ve backend endpoint'leri çoklu hedef listesini veritabanı/RAM üzerinde eşzamanlı yönetecek ve her hedefin TCP bağlantısını bağımsız cache'leyecek şekilde baştan yazıldı.
 
 ### Project Phases & Milestones (Historical)
 - **Phase 0:** `start_service` / `stop_service` signature bugs fixed. Toggle buttons working.
@@ -281,19 +207,42 @@ honeypot-orchestrator/
 
 **Amaç:** Saldırgan davranışlarını detaylı izleyebilmek.
 
-1. **Credential Harvest Raporu (Backend + Frontend):** Tüm login denemelerinden `username/password` çiftlerini toplayan liste ve Dashboard paneli.
+1. **Credential Harvest Raporu (Backend + Frontend):** Tüm login denemelerinden `username/password` çiftlerini toplayan liste ve Dashboard paneli ("En çok denenen şifreler", "Saldırganların kullandığı username'ler").
 2. **Attack Timeline Replay (Frontend):** Belirli bir IP seçildiğinde o IP'nin tüm aktivitelerinin kronolojik zaman çizelgesi.
 3. **API Endpoint:** `/api/attacker/<ip>` — Tek IP'nin tüm event'leri + TI enrichment + timeline verileri.
 
 ---
 
-## To-Do: Phase 14 — Custom Profile Builder & Honeypot File Traps
+## To-Do: Phase 14 — Honeypot Decoy Files & Canary Tokens
 
-**Amaç:** Kullanılabilirliği artırmak ve daha sofistike tuzak mekanizmaları eklemek.
+**Amaç:** Daha gerçekçi tuzak dosyalarıyla sızma girişimlerini tespit etmek.
 
-1. **Custom Profile Builder (Frontend + Backend):** Dashboard üzerinden yeni profil oluşturma GUI'si.
-2. **Honeypot File Traps (FTP + SMB):** FTP ve SMB servislerine sahte ama gerçekçi görünen dosya/dizin yapısı ekleme (`passwords.xlsx` vb.). Canary token mantığı.
-3. **Light Mode (Frontend):** CSS variable tabanlı modern light theme.
+1. Sahte Dosya Sistemi: FTP ve SMB servislerine sahte dosya yapıları (`passwords.xlsx`, `backup.sql`, `.ssh/id_rsa`) yüklenmesi.
+2. Canary Tokens: Bu decoy dosyalara erişildiğinde tetiklenen özel kritik alarm mekanizması.
+
+---
+
+## To-Do: Phase 15 — Log Search & Search Improvements
+
+**Amaç:** Log geçmişinde daha rahat analiz yapabilmek.
+
+1. Gelişmiş Log Arama: Alan bazlı filtreleme (IP, Service, Event Type) ve Regex arama desteği.
+
+---
+
+## To-Do: Phase 16 — Rate Limiting Dashboard
+
+**Amaç:** Rate limit engellemelerini izlemek.
+
+1. Throttling Paneli: Hangi IP'lerin hangi limitlere takıldığını gösteren arayüz.
+
+---
+
+## To-Do: Phase 17 — Automated Backup & Export
+
+**Amaç:** Log verilerini yedeklemek ve taşınabilir kılmak.
+
+1. Zamanlanmış Export: Günlük/haftalık JSONL veya CSV biçiminde otomatik yedekleme/dışa aktarma.
 
 ---
 

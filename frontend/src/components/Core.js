@@ -323,14 +323,14 @@ export function NotificationBell() {
       ),
       unreadCount > 0 ? h("span", { 
         className: "badge", 
-        style: { position: "absolute", top: "0px", right: "0px", background: "#ff4444", color: "white", borderRadius: "10px", padding: "2px 6px", fontSize: "11px", fontWeight: "bold", border: "2px solid #121212" } 
+        style: { position: "absolute", top: "0px", right: "0px", background: "var(--danger)", color: "#ffffff", borderRadius: "10px", padding: "2px 6px", fontSize: "11px", fontWeight: "bold", border: "2px solid var(--surface-strong)" } 
       }, unreadCount > 99 ? "99+" : unreadCount) : null
     ),
     open ? h("div", { 
       className: "dropdown-menu", 
       style: { position: "absolute", top: "48px", right: "0", width: "320px", background: "var(--surface-strong, #131c44)", border: "1px solid var(--border)", borderRadius: "8px", padding: "0", boxShadow: "var(--shadow)", maxHeight: "400px", overflowY: "auto", overflowX: "hidden" } 
     },
-      h("div", { style: { padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "rgba(0,0,0,0.2)", fontWeight: "600", fontSize: "14px" } }, "Notifications"),
+      h("div", { style: { padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "var(--glass-header-bg)", fontWeight: "600", fontSize: "14px" } }, "Notifications"),
       alerts.length === 0 ? h("p", { style: { textAlign: "center", color: "var(--muted)", margin: "20px 0" } }, "No recent alerts.") : null,
       alerts.map((a, i) => h("div", { key: i, style: { padding: "12px 16px", borderBottom: "1px solid var(--border)", fontSize: "13px", background: a.type === "aggregated" ? "var(--danger-soft, rgba(227, 26, 26, 0.16))" : "transparent" } },
         h("strong", { style: { color: "var(--danger)", display: "block", marginBottom: "4px" } }, a.type === "aggregated" ? "Aggregated Alert" : "Critical Alert"),

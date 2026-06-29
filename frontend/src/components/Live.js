@@ -61,7 +61,7 @@ export function LiveActivityPage(props) {
     ),
     h(
       "section",
-      { className: "panel raw-panel", style: { border: "1px solid var(--border)", background: "#060b28" } },
+      { className: "panel raw-panel", style: { border: "1px solid var(--border)", background: "var(--console-panel-bg)" } },
       h(
         "div",
         { className: "section-heading" },
@@ -73,9 +73,9 @@ export function LiveActivityPage(props) {
         {
           className: "json-viewer",
           style: {
-            background: "#020410",
-            color: "#38f8c4",
-            border: "1px solid rgba(56, 248, 196, 0.25)",
+            background: "var(--console-bg)",
+            color: "var(--console-text)",
+            border: "1px solid var(--console-border)",
             boxShadow: "0 0 15px rgba(56, 248, 196, 0.08)",
             fontFamily: "'JetBrains Mono', monospace",
             padding: "18px",
@@ -83,7 +83,7 @@ export function LiveActivityPage(props) {
           }
         },
         events.length === 0
-          ? h("div", { style: { color: "#a0aec0", textAlign: "center", paddingTop: "120px" } }, "📡 Listening for target activity... Expose decoy services to start receiving live logs.")
+          ? h("div", { style: { color: "var(--console-muted)", textAlign: "center", paddingTop: "120px" } }, "📡 Listening for target activity... Expose decoy services to start receiving live logs.")
           : events.map((event, idx) => {
               const timestamp = event.timestamp || "";
               const src = `${event.src_ip}:${event.src_port || 0}`;
@@ -160,14 +160,14 @@ export function LiveActivityPage(props) {
                   style: {
                     cursor: "pointer",
                     marginBottom: "12px",
-                    borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
+                    borderBottom: "1px solid var(--console-line-border)",
                     paddingBottom: "8px"
                   }
                 },
-                h("span", { style: { color: "rgba(255,255,255,0.4)", marginRight: "10px" } }, `[${window.formatTimestamp(event.timestamp)}]`),
-                h("span", { style: { color: "#00d4ff", fontWeight: "bold", marginRight: "10px" } }, `[${src}]`),
-                h("span", { style: { color: "#ffb547", fontWeight: "bold", marginRight: "10px" } }, `[${service}]`),
-                h("span", { style: { color: "#ffffff" } }, detailText)
+                h("span", { style: { color: "var(--console-muted)", marginRight: "10px" } }, `[${window.formatTimestamp(event.timestamp)}]`),
+                h("span", { style: { color: "var(--accent-focus)", fontWeight: "bold", marginRight: "10px" } }, `[${src}]`),
+                h("span", { style: { color: "var(--warning)", fontWeight: "bold", marginRight: "10px" } }, `[${service}]`),
+                h("span", { style: { color: "var(--text)" } }, detailText)
               );
             })
       )

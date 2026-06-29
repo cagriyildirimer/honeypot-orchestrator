@@ -48,6 +48,8 @@ async function requestJson(url, options = {}) {
 }
 
 const THEME_STORAGE_KEY = "honeypot-director-theme";
+const SCHEME_STORAGE_KEY = "honeypot-director-scheme";
+
 const THEME_OPTIONS = [
   { key: "vision", label: "Vision Blue" },
   { key: "nebula", label: "Nebula Violet" },
@@ -57,16 +59,30 @@ const THEME_OPTIONS = [
   { key: "slate", label: "Slate Mono" },
 ];
 
+const SCHEME_OPTIONS = [
+  { key: "dark", label: "Dark Mode" },
+  { key: "light", label: "Light Mode" },
+];
+
 function normalizeTheme(theme) {
-  if (theme === "dark" || theme === "light") {
-    return "vision";
-  }
   return THEME_OPTIONS.some((option) => option.key === theme) ? theme : "vision";
+}
+
+function normalizeScheme(scheme) {
+  return SCHEME_OPTIONS.some((option) => option.key === scheme) ? scheme : "dark";
 }
 
 function storedTheme() {
   try {
     return localStorage.getItem(THEME_STORAGE_KEY);
+  } catch (error) {
+    return "";
+  }
+}
+
+function storedScheme() {
+  try {
+    return localStorage.getItem(SCHEME_STORAGE_KEY);
   } catch (error) {
     return "";
   }
@@ -81,23 +97,40 @@ function saveTheme(theme) {
   return true;
 }
 
+function saveScheme(scheme) {
+  try {
+    localStorage.setItem(SCHEME_STORAGE_KEY, scheme);
+  } catch (error) {
+    return false;
+  }
+  return true;
+}
+
 function currentTheme() {
   return normalizeTheme(document.documentElement.dataset.theme || "vision");
+}
+
+function currentScheme() {
+  return normalizeScheme(document.documentElement.dataset.scheme || "dark");
 }
 
 function applyTheme(theme) {
   const normalized = normalizeTheme(theme);
   document.documentElement.dataset.theme = normalized;
   saveTheme(normalized);
-  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
-    button.textContent = THEME_OPTIONS.find((option) => option.key === normalized).label;
-    button.setAttribute("aria-label", "Change appearance theme");
-  });
+}
+
+function applyScheme(scheme) {
+  const normalized = normalizeScheme(scheme);
+  document.documentElement.dataset.scheme = normalized;
+  saveScheme(normalized);
 }
 
 function initializeTheme() {
   const savedTheme = storedTheme();
   applyTheme(savedTheme);
+  const savedScheme = storedScheme();
+  applyScheme(savedScheme);
 }
 
 initializeTheme();
@@ -180,6 +213,9 @@ window.requestJson = requestJson;
 window.THEME_OPTIONS = THEME_OPTIONS;
 window.currentTheme = currentTheme;
 window.applyTheme = applyTheme;
+window.SCHEME_OPTIONS = SCHEME_OPTIONS;
+window.currentScheme = currentScheme;
+window.applyScheme = applyScheme;
 window.text = text;
 window.showToast = showToast;
 window.formatTimestamp = formatTimestamp;

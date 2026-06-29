@@ -356,11 +356,20 @@ export function BlacklistPage(props) {
 
 export function AppearancePage(props) {
   const [theme, setTheme] = useState(window.currentTheme());
+  const [scheme, setScheme] = useState(window.currentScheme());
 
   function selectTheme(nextTheme) {
     window.applyTheme(nextTheme);
     setTheme(nextTheme);
   }
+
+  function selectScheme(nextScheme) {
+    window.applyScheme(nextScheme);
+    setScheme(nextScheme);
+  }
+
+  const schemeLabel = scheme === "light" ? "Light Mode" : "Dark Mode";
+  const accentLabel = (APPEARANCE_THEMES.find((item) => item.key === theme) || APPEARANCE_THEMES[0]).label;
 
   return h(
     React.Fragment,
@@ -382,8 +391,39 @@ export function AppearancePage(props) {
       h(
         "div",
         { className: "section-heading" },
-        h("div", null, h("h2", null, "Theme"), h("p", null, "Choose a coordinated color system for the web panel.")),
-        h("span", { className: "status-counter" }, (APPEARANCE_THEMES.find((item) => item.key === theme) || APPEARANCE_THEMES[0]).label)
+        h("div", null, h("h2", null, "Base Mode"), h("p", null, "Choose a light or dark foundation for the interface.")),
+        h("span", { className: "status-counter" }, schemeLabel)
+      ),
+      h(
+        "div",
+        { className: "scheme-selector" },
+        h(
+          "button",
+          {
+            type: "button",
+            className: `scheme-btn${scheme === "dark" ? " active" : ""}`,
+            onClick: () => selectScheme("dark"),
+          },
+          h("span", { className: "scheme-icon" }, "\u{1F319}"),
+          "Dark Mode"
+        ),
+        h(
+          "button",
+          {
+            type: "button",
+            className: `scheme-btn${scheme === "light" ? " active" : ""}`,
+            onClick: () => selectScheme("light"),
+          },
+          h("span", { className: "scheme-icon" }, "\u2600\uFE0F"),
+          "Light Mode"
+        )
+      ),
+      h("hr", { className: "appearance-divider" }),
+      h(
+        "div",
+        { className: "section-heading" },
+        h("div", null, h("h2", null, "Color Accent"), h("p", null, "Pick a color palette that pairs with your base mode.")),
+        h("span", { className: "status-counter" }, accentLabel)
       ),
       h(
         "div",
@@ -539,7 +579,7 @@ export function ResourceGauge({ label, percent, note, colorClass }) {
           cy: size / 2,
           r: r,
           fill: "none",
-          stroke: "rgba(255, 255, 255, 0.06)",
+          stroke: "var(--gauge-track)",
           strokeWidth: strokeWidth
         }),
 
@@ -845,22 +885,20 @@ export function UsersPage(props) {
 }
 
 export function SiemSettingsPage(props) {
-  const [config, setConfig] = useState({
-    enabled: false,
-    host: "",
-    port: 514,
-    protocol: "udp",
-    scope: "all"
-  });
+  const emptyForm = { id: "", name: "", enabled: true, host: "", port: 514, protocol: "udp", scope: "all" };
+  const [configs, setConfigs] = useState([]);
+  const [mode, setMode] = useState("idle");
+  const [activeId, setActiveId] = useState("");
+  const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
+  const [testingId, setTestingId] = useState("");
 
   async function loadConfig() {
     try {
       const next = await window.requestJson("/api/settings/siem");
       if (next) {
-        setConfig(next);
+        setConfigs(Array.isArray(next.configs) ? next.configs : []);
       }
     } catch (e) {
       window.showToast("Failed to load SIEM settings: " + e.message, "error");
@@ -873,46 +911,95 @@ export function SiemSettingsPage(props) {
     loadConfig();
   }, []);
 
-  async function handleSave(e) {
-    e.preventDefault();
+  function beginCreate() {
+    setMode("create");
+    setActiveId("");
+    setForm({ ...emptyForm, id: `siem-${Date.now().toString(36)}` });
+  }
+
+  function beginEdit(config) {
+    setMode("edit");
+    setActiveId(config.id);
+    setForm({ ...emptyForm, ...config });
+  }
+
+  async function saveConfigs(nextConfigs, message) {
     if (props.session.role !== "admin") {
       window.showToast("Admin access required.", "error");
       return;
     }
-    if (config.enabled && !config.host) {
-      window.showToast("Host address is required when enabled.", "error");
-      return;
-    }
-
     setSaving(true);
     try {
-      await window.requestJson("/api/settings/siem", {
+      const payload = await window.requestJson("/api/settings/siem", {
         method: "POST",
-        body: JSON.stringify(config)
+        body: JSON.stringify({ configs: nextConfigs })
       });
-      window.showToast("SIEM settings saved.", "success");
+      setConfigs(payload.configs || nextConfigs);
+      window.showToast(message || "SIEM settings saved.", "success");
+      return true;
     } catch (e) {
       window.showToast("Save failed: " + e.message, "error");
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleTest() {
-    if (!config.enabled) {
-      window.showToast("Please enable and save SIEM settings before testing.", "error");
+  async function handleSave(e) {
+    e.preventDefault();
+    const clean = {
+      ...form,
+      name: String(form.name || "").trim(),
+      host: String(form.host || "").trim(),
+      port: parseInt(form.port, 10) || 514,
+    };
+    if (!clean.name) {
+      window.showToast("SIEM name is required.", "error");
       return;
     }
-    setTesting(true);
+    if (clean.enabled && !clean.host) {
+      window.showToast("Host address is required when enabled.", "error");
+      return;
+    }
+
+    const nextConfigs = mode === "edit"
+      ? configs.map((item) => item.id === activeId ? clean : item)
+      : [...configs, clean];
+    const saved = await saveConfigs(nextConfigs, mode === "edit" ? `${clean.name} updated.` : `${clean.name} added.`);
+    if (!saved) {
+      return;
+    }
+    setMode("idle");
+    setActiveId("");
+    setForm(emptyForm);
+  }
+
+  async function removeConfig(config) {
+    await saveConfigs(configs.filter((item) => item.id !== config.id), `${config.name || config.host} deleted.`);
+    if (activeId === config.id) {
+      setMode("idle");
+      setActiveId("");
+    }
+  }
+
+  async function handleTest(config) {
+    if (!config.enabled || !config.host) {
+      window.showToast("Enable this SIEM target and set a host before testing.", "error");
+      return;
+    }
+    setTestingId(config.id);
     try {
-      const res = await window.requestJson("/api/settings/siem/test", { method: "POST" });
+      const res = await window.requestJson("/api/settings/siem/test", {
+        method: "POST",
+        body: JSON.stringify({ id: config.id })
+      });
       if (res.ok) {
-        window.showToast("Test event sent to SIEM successfully.", "success");
+        window.showToast(`Test event sent to ${config.name || config.host}.`, "success");
       }
     } catch (e) {
       window.showToast("Test failed: " + e.message, "error");
     } finally {
-      setTesting(false);
+      setTestingId("");
     }
   }
 
@@ -921,6 +1008,105 @@ export function SiemSettingsPage(props) {
   }
 
   const isAdmin = props.session.role === "admin";
+  const activeConfig = configs.find((item) => item.id === activeId);
+  const tableRows = configs.length
+    ? configs.map((config) =>
+        h(
+          "tr",
+          { key: config.id },
+          h("td", null, h("span", { className: "table-strong" }, window.text(config.name))),
+          h("td", null, `${window.text(config.host)}:${window.text(config.port)}`),
+          h("td", null, String(config.protocol || "udp").toUpperCase()),
+          h("td", null, config.scope === "alerts" ? "Critical Alerts" : "All Events"),
+          h("td", null, h("span", { className: `status-pill ${config.enabled ? "running" : "stopped"}` }, config.enabled ? "Enabled" : "Disabled")),
+          h(
+            "td",
+            { className: "table-actions-cell" },
+            h("button", { type: "button", className: "button secondary", disabled: !isAdmin || testingId === config.id, onClick: () => handleTest(config) }, testingId === config.id ? "Testing..." : "Test"),
+            h("button", { type: "button", className: "button secondary", disabled: !isAdmin, onClick: () => beginEdit(config) }, "Edit"),
+            h("button", { type: "button", className: "button danger secondary", disabled: !isAdmin || saving, onClick: () => removeConfig(config) }, "Delete")
+          )
+        )
+      )
+    : [h("tr", { key: "empty" }, h("td", { colSpan: 6, className: "empty-row" }, "No SIEM targets configured."))];
+
+  const targetsPanel = h(
+    "section",
+    { className: "panel" },
+    h("div", { className: "section-heading" }, h("div", null, h("h2", null, "SIEM Targets"), h("p", null, "Create, test, edit, and remove external log destinations."))),
+    h(
+      "div",
+      { className: "table-shell" },
+      h(
+        "table",
+        null,
+        h("thead", null, h("tr", null, h("th", null, "Name"), h("th", null, "Destination"), h("th", null, "Protocol"), h("th", null, "Scope"), h("th", null, "Status"), h("th", { className: "table-actions-head" }, "Actions"))),
+        h("tbody", null, tableRows)
+      )
+    ),
+    isAdmin
+      ? h(
+          "div",
+          { className: "button-row users-add-row" },
+          h("button", { type: "button", className: "button secondary icon-button", "aria-label": "Create SIEM target", onClick: beginCreate }, "+")
+        )
+      : null
+  );
+
+  const editorPanel = isAdmin && mode !== "idle"
+    ? h(
+        "section",
+        { className: "panel" },
+        h("div", { className: "section-heading" }, h("div", null, h("h2", null, mode === "create" ? "Create SIEM Target" : `Edit ${activeConfig ? activeConfig.name : "SIEM Target"}`), h("p", null, "Define where and how honeypot events are forwarded."))),
+        h(
+          "form",
+          { className: "settings-form siem-editor-form", onSubmit: handleSave },
+          h("label", { className: "field-block" }, h("span", null, "SIEM Name"), h("input", { value: form.name, onChange: (event) => setForm({ ...form, name: event.target.value }), placeholder: "SOC Collector", required: true })),
+          h("label", { className: "field-block" }, h("span", null, "Host / URL"), h("input", { value: form.host, onChange: (event) => setForm({ ...form, host: event.target.value }), placeholder: "192.168.1.50 or http://siem.local", required: form.enabled })),
+          h("label", { className: "field-block" }, h("span", null, "Port"), h("input", { type: "number", min: "1", max: "65535", value: String(form.port), onChange: (event) => setForm({ ...form, port: event.target.value }) })),
+          h(
+            "label",
+            { className: "field-block" },
+            h("span", null, "Protocol"),
+            h(
+              "select",
+              { value: form.protocol, onChange: (event) => setForm({ ...form, protocol: event.target.value }) },
+              h("option", { value: "udp" }, "UDP Syslog"),
+              h("option", { value: "tcp" }, "TCP Syslog"),
+              h("option", { value: "http" }, "HTTP POST")
+            )
+          ),
+          h(
+            "label",
+            { className: "field-block" },
+            h("span", null, "Forwarding Scope"),
+            h(
+              "select",
+              { value: form.scope, onChange: (event) => setForm({ ...form, scope: event.target.value }) },
+              h("option", { value: "all" }, "All Events"),
+              h("option", { value: "alerts" }, "Critical Alerts Only")
+            )
+          ),
+          h(
+            "label",
+            { className: "siem-enabled-row" },
+            h("span", null, "Enabled"),
+            h(
+              "span",
+              { className: "toggle-switch" },
+              h("input", { type: "checkbox", checked: form.enabled, onChange: (event) => setForm({ ...form, enabled: event.target.checked }) }),
+              h("span", { className: "toggle-slider" })
+            )
+          ),
+          h(
+            "div",
+            { className: "button-row" },
+            h("button", { type: "submit", className: "button", disabled: saving }, saving ? "Saving..." : mode === "create" ? "Create Target" : "Save Target"),
+            h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Cancel")
+          )
+        )
+      )
+    : null;
 
   return h(
     React.Fragment,
@@ -941,82 +1127,7 @@ export function SiemSettingsPage(props) {
         h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
       )
     ),
-    h(
-      "section",
-      { className: "panel" },
-      h("div", { className: "section-heading" }, h("div", null, h("h2", null, "SIEM Configuration"), h("p", null, "Define how logs should be exported."))),
-      h(
-        "form",
-        { className: "settings-form", onSubmit: handleSave, style: { maxWidth: "600px" } },
-        h(
-          "div",
-          { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" } },
-          h("span", null, h("strong", null, "Enable SIEM Forwarding")),
-          h(
-            "label",
-            { className: "toggle-switch" },
-            h("input", {
-              type: "checkbox",
-              checked: config.enabled,
-              disabled: !isAdmin,
-              onChange: (e) => setConfig({ ...config, enabled: e.target.checked })
-            }),
-            h("span", { className: "toggle-slider" })
-          )
-        ),
-        h(
-          "div",
-          { style: { opacity: config.enabled ? 1 : 0.5, pointerEvents: config.enabled ? "auto" : "none" } },
-          h(
-            "label",
-            { className: "field-block" },
-            h("span", null, "SIEM Host (IP or Domain)"),
-            h("input", { type: "text", value: config.host, onChange: (e) => setConfig({ ...config, host: e.target.value }), placeholder: "e.g. 192.168.1.50 or http://siem:8080" })
-          ),
-          h(
-            "div",
-            { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" } },
-            h(
-              "label",
-              { className: "field-block" },
-              h("span", null, "Port"),
-              h("input", { type: "number", value: config.port, onChange: (e) => setConfig({ ...config, port: parseInt(e.target.value) || 514 }) })
-            ),
-            h(
-              "label",
-              { className: "field-block" },
-              h("span", null, "Protocol"),
-              h(
-                "select",
-                { value: config.protocol, onChange: (e) => setConfig({ ...config, protocol: e.target.value }) },
-                h("option", { value: "udp" }, "UDP"),
-                h("option", { value: "tcp" }, "TCP"),
-                h("option", { value: "http" }, "HTTP POST")
-              )
-            )
-          ),
-          h(
-            "label",
-            { className: "field-block" },
-            h("span", null, "Forwarding Scope"),
-            h(
-              "select",
-              { value: config.scope, onChange: (e) => setConfig({ ...config, scope: e.target.value }) },
-              h("option", { value: "all" }, "All Events"),
-              h("option", { value: "alerts" }, "Critical Alerts Only")
-            ),
-            h("small", { style: { display: "block", marginTop: "4px", color: "#888" } }, "Select whether to send every log or only high-risk events.")
-          )
-        ),
-        isAdmin
-          ? h(
-              "div",
-              { className: "button-row", style: { marginTop: "24px" } },
-              h("button", { type: "submit", className: "button", disabled: saving }, saving ? "Saving..." : "Save Settings"),
-              h("button", { type: "button", className: "button secondary", disabled: testing || !config.enabled, onClick: handleTest }, testing ? "Testing..." : "Test Connection")
-            )
-          : null
-      )
-    )
+    targetsPanel,
+    editorPanel
   );
 }

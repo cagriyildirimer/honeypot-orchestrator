@@ -61,7 +61,7 @@ export function DashboardPage(props) {
         null,
         h("h1", { style: { display: "flex", alignItems: "center", gap: "12px" } }, "Dashboard", 
           h("span", { className: "status-pill running animate-pulse" }, "Live"),
-          h("span", { className: "status-counter", style: { fontSize: "14px", background: "rgba(255,255,255,0.05)", padding: "4px 8px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)" } }, `${eventsLastMinute} events/min`)
+          h("span", { className: "status-counter", style: { fontSize: "14px", background: "var(--accent-soft)", padding: "4px 8px", borderRadius: "12px", border: "1px solid var(--border)" } }, `${eventsLastMinute} events/min`)
         ),
         h("p", { className: "page-subtitle" }, "Recent activity and event volume overview.")
       ),

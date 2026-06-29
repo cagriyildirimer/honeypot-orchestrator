@@ -14,6 +14,20 @@ export function ProfilesPage(props) {
     setSelectedProfile(currentProfile);
   }
 
+  function setServiceRunning(serviceName, running) {
+    setPayload((currentPayload) => {
+      if (!currentPayload || !Array.isArray(currentPayload.services)) {
+        return currentPayload;
+      }
+      return {
+        ...currentPayload,
+        services: currentPayload.services.map((service) =>
+          service.name === serviceName ? { ...service, running } : service
+        ),
+      };
+    });
+  }
+
   useEffect(() => {
     loadProfiles().catch((error) => window.showToast(error.message, "error"));
   }, []);
@@ -130,16 +144,19 @@ export function ProfilesPage(props) {
                       onChange: async (e) => {
                         const enabled = e.target.checked;
                         const label = service.name.replace(/_/g, " ");
+                        setServiceRunning(service.name, enabled);
                         try {
                           await window.requestJson("/api/services/toggle", {
                             method: "POST",
                             body: JSON.stringify({ service: service.name, enabled: enabled })
                           });
                           window.showToast(enabled ? `${label} started` : `${label} stopped`, enabled ? "success" : "neutral");
-                          loadProfiles();
+                          window.setTimeout(() => {
+                            loadProfiles().catch((error) => window.showToast(error.message, "error"));
+                          }, 1200);
                         } catch (err) {
                           window.showToast(err.message || "Toggle failed", "error");
-                          loadProfiles();
+                          loadProfiles().catch((error) => window.showToast(error.message, "error"));
                         }
                       }
                     }),
