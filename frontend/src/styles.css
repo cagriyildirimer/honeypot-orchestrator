@@ -90,6 +90,18 @@
   --sidebar-link-active-border: var(--accent-glow);
 
   --input-bg: #0f1535;
+  --login-card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.03) 100%);
+  --login-card-border: rgba(255, 255, 255, 0.12);
+  --login-text: #ffffff;
+  --login-text-muted: rgba(255, 255, 255, 0.65);
+  --login-input-bg: rgba(8, 14, 36, 0.45);
+  --login-input-border: rgba(255, 255, 255, 0.1);
+  --login-input-placeholder: rgba(255, 255, 255, 0.3);
+  --login-checkmark-bg: rgba(255, 255, 255, 0.08);
+  --login-checkmark-border: rgba(255, 255, 255, 0.18);
+  --login-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  --login-orb-bg: rgba(10, 14, 35, 0.95);
+  --login-toggle-bg-hover: rgba(255, 255, 255, 0.05);
   --page-gradient: linear-gradient(159.02deg, #0f123b 14.25%, #090d2e 56.45%, #020515 86.14%);
 }
 
@@ -151,6 +163,18 @@
   --timeline-total-point: rgba(15, 23, 42, 0.8);
 
   --input-bg: #ffffff;
+  --login-card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(248, 250, 252, 0.7) 100%);
+  --login-card-border: rgba(15, 23, 42, 0.12);
+  --login-text: #0f172a;
+  --login-text-muted: rgba(15, 23, 42, 0.65);
+  --login-input-bg: rgba(255, 255, 255, 0.9);
+  --login-input-border: rgba(15, 23, 42, 0.15);
+  --login-input-placeholder: rgba(15, 23, 42, 0.4);
+  --login-checkmark-bg: rgba(15, 23, 42, 0.05);
+  --login-checkmark-border: rgba(15, 23, 42, 0.2);
+  --login-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --login-orb-bg: rgba(255, 255, 255, 0.95);
+  --login-toggle-bg-hover: rgba(15, 23, 42, 0.05);
   --page-gradient: linear-gradient(159.02deg, #f0f7ff 14.25%, #e6f0fa 56.45%, #ffffff 86.14%);
 }
 
@@ -2284,13 +2308,11 @@ tbody tr.selected {
   z-index: 10;
   width: 100%;
   max-width: 480px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.03) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--login-card-bg);
+  border: 1px solid var(--login-card-border);
   border-radius: 24px;
   padding: 44px 38px;
-  box-shadow: 
-    0 25px 50px -12px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  box-shadow: var(--login-shadow);
   backdrop-filter: blur(35px) saturate(1.5);
   -webkit-backdrop-filter: blur(35px) saturate(1.5);
   box-sizing: border-box;
@@ -2319,7 +2341,7 @@ tbody tr.selected {
 .card-brand-name {
   font-size: 14px;
   font-weight: 800;
-  color: #fff;
+  color: var(--login-text);
   letter-spacing: 1px;
   text-transform: uppercase;
 }
@@ -2327,7 +2349,7 @@ tbody tr.selected {
 .glass-login-title {
   font-size: 34px;
   font-weight: 850;
-  color: #fff;
+  color: var(--login-text);
   text-align: center;
   margin-bottom: 30px;
   letter-spacing: -0.5px;
@@ -2349,7 +2371,7 @@ tbody tr.selected {
 .input-label {
   font-size: 13px;
   font-weight: 750;
-  color: #fff;
+  color: var(--login-text);
   padding-left: 4px;
 }
 
@@ -2374,11 +2396,11 @@ tbody tr.selected {
 .input-group input[type="text"],
 .input-group input[type="password"] {
   width: 100%;
-  background: rgba(8, 14, 36, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--login-input-bg);
+  border: 1px solid var(--login-input-border);
   border-radius: 99px; /* Highly rounded pill inputs matching reference */
   padding: 13px 20px;
-  color: #fff;
+  color: var(--login-text);
   font-size: 14.5px;
   font-weight: 500;
   box-sizing: border-box;
@@ -2387,13 +2409,13 @@ tbody tr.selected {
 
 .input-group input[type="text"]::placeholder,
 .input-group input[type="password"]::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--login-input-placeholder);
 }
 
 .input-group input[type="text"]:focus,
 .input-group input[type="password"]:focus {
   outline: none;
-  background: rgba(8, 14, 36, 0.6);
+  background: var(--login-input-bg);
   border-color: var(--accent, #0075ff);
   box-shadow: 0 0 12px var(--accent-glow, rgba(0, 117, 255, 0.25));
 }
@@ -2415,7 +2437,7 @@ tbody tr.selected {
   transform: translateY(-50%);
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--login-text-muted);
   cursor: pointer;
   padding: 8px;
   display: flex;
@@ -2428,8 +2450,8 @@ tbody tr.selected {
 .toggle-password-btn:hover,
 .toggle-password-btn:focus,
 .toggle-password-btn:active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--login-text);
+  background: var(--login-toggle-bg-hover);
   transform: translateY(-50%) !important;
 }
 
@@ -2467,15 +2489,15 @@ tbody tr.selected {
   transform: translateY(-50%);
   height: 16px;
   width: 16px;
-  background-color: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: var(--login-checkmark-bg);
+  border: 1px solid var(--login-checkmark-border);
   border-radius: 4px;
   transition: all 0.2s;
 }
 
 .checkbox-container:hover input ~ .checkmark {
-  background-color: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
+  background-color: var(--login-toggle-bg-hover);
+  border-color: var(--login-checkmark-border);
 }
 
 .checkbox-container input:checked ~ .checkmark {
@@ -2506,7 +2528,7 @@ tbody tr.selected {
 .checkbox-label {
   font-size: 13px;
   font-weight: 750;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--login-text-muted);
 }
 
 /* Golden/Orange Button matching reference */
@@ -2563,11 +2585,11 @@ tbody tr.selected {
 .footer-text {
   font-size: 13.5px;
   font-weight: 750;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--login-text-muted);
 }
 
 .signup-link {
-  color: #fff;
+  color: var(--login-text);
   text-decoration: none;
   font-weight: 800;
   transition: color 0.2s;
@@ -2636,7 +2658,7 @@ tbody tr.selected {
 .glass-orb {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, var(--accent-focus, #21d4fd) 0%, var(--accent, #0075ff) 35%, rgba(10, 14, 35, 0.95) 80%, #000 100%);
+  background: radial-gradient(circle at 35% 35%, var(--accent-focus, #21d4fd) 0%, var(--accent, #0075ff) 35%, var(--login-orb-bg) 80%, #000 100%);
   box-shadow: 
     inset -12px -12px 36px rgba(0, 0, 0, 0.9), 
     inset 12px 12px 24px rgba(255, 255, 255, 0.22),
@@ -4117,12 +4139,13 @@ input:checked + .toggle-slider:before {
   justify-content: flex-start !important;
 }
 
-.toast:not([hidden]) {
+.toast:not([hidden]):not(.hiding) {
   display: flex !important;
   animation: toast-enter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
 }
 
 .toast.hiding {
+  display: flex !important;
   animation: toast-leave 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards !important;
 }
 

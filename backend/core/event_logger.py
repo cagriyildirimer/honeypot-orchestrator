@@ -38,7 +38,11 @@ class DBEventLogger:
                     batch.append(sanitize_null_bytes(item))
                 
                 while not self.queue.empty() and len(batch) < 100:
-                    batch.append(sanitize_null_bytes(self.queue.get_nowait()))
+                    try:
+                        item = self.queue.get_nowait()
+                        batch.append(sanitize_null_bytes(item))
+                    except asyncio.QueueEmpty:
+                        break
                 
                 async with async_session() as session:
                     events = []
@@ -66,23 +70,24 @@ class DBEventLogger:
                     session.add_all(events)
                     await session.commit()
                 
-                for _ in range(len(batch)):
-                    self.queue.task_done()
-                
                 # SIEM Forwarding
-                if siem_forwarder.enabled:
-                    for event in batch:
-                        # Copy the event to avoid mutating the original
-                        forward_evt = event.copy()
-                        forward_evt["timestamp"] = datetime.now(UTC).isoformat()
-                        asyncio.create_task(siem_forwarder.forward(forward_evt))
+                for event in batch:
+                    # Copy the event to avoid mutating the original
+                    forward_evt = event.copy()
+                    forward_evt["timestamp"] = datetime.now(UTC).isoformat()
+                    asyncio.create_task(siem_forwarder.forward(forward_evt))
                 
-                batch.clear()
-
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 print(f"Error in DBEventLogger queue: {e}")
                 await asyncio.sleep(1)
+            finally:
+                for _ in range(len(batch)):
+                    try:
+                        self.queue.task_done()
+                    except ValueError:
+                        pass
+                batch.clear()
 
 JSONLEventLogger = DBEventLogger  # Geriye donuk uyumluluk icin alias
