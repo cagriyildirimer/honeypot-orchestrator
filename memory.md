@@ -1,101 +1,197 @@
 # Honeypot Orchestrator - Memory & Next Steps
 
 ---
-## ⚠️ ÖNCELİKLİ YAPILACAKLAR (Kod Denetim Raporu)
+## 🔍 TAM KOD DENETİM RAPORU
 
-> **Tarih:** 2026-06-26  
-> **Kapsam:** Tüm frontend (JS/CSS) + backend (Python) kaynak kodları incelendi.
-
-### 🔴 KRİTİK HATALAR
-
-> ✅ **Tümü çözüldü** (2026-06-27)
+> **Tarih:** 2026-06-29  
+> **Kapsam:** Tüm frontend (JS/CSS/HTML) + backend (Python) + Docker/CI kaynak kodları  
+> **Toplam dosya:** ~45 kaynak dosya, ~15.000 satır backend + ~7.000 satır frontend  
+> **Toplam bulgu:** 29 sorun + 10 öneri
 
 
-### 🟠 ORTA ÖNCELİK SORUNLARI
 
-5. **`settings.py` Handler — Admin Yetkisi Kontrolü Eksik**  
-   - **Dosya:** `backend/api/handlers/settings.py:33-54`  
-   - **Sorun:** `/api/settings/siem` POST endpoint'i sadece `_is_authenticated` kontrolü yapıyor ama `_is_admin` kontrolü yapmıyor. Viewer rolündeki bir kullanıcı SIEM ayarlarını değiştirebilir. Aynı sorun `/api/settings/siem/test` için de geçerli.  
-   - **Çözüm:** `if not server._is_admin(request["cookies"]): return server._forbidden_response()` ekle.
+---
 
-6. **`server.py` — `_handle_clear_logs` Çağrılmıyor (Dead Code)**  
-   - **Dosya:** `backend/web/server.py:204-207`  
-   - **Sorun:** `_handle_clear_logs` metodu tanımlı ama hiçbir route tarafından çağrılmıyor. Eski bir kalıntı.  
-   - **Çözüm:** Ya bir route'a bağla ya da sil.
+### 1. KRİTİK HATALAR
 
-7. **`server.py` — `_export_logs_response` Çağrılmıyor (Dead Code)**  
-   - **Dosya:** `backend/web/server.py:456-467`  
-   - **Sorun:** `_export_logs_response` metodu tanımlı ama router'da kayıtlı bir endpoint yok. Log export fonksiyonu erişilemez durumda.  
-   - **Çözüm:** `/api/logs/export` gibi bir route kaydet veya sil.
+**🔴 BUG-01: `Live.js` — Döngüsel Import**
+- **Dosya:** `frontend/src/components/Live.js:4`
+- **Sorun:** `import { App } from './App.js';` satırı var ama `App` hiçbir yerde kullanılmıyor. `App.js` zaten `Live.js`'i import ettiği için döngüsel bağımlılık var.
+- **Etki:** Modül initialization sırası karışabilir, özellikle production build'de.
+- **Çözüm:** Import satırını sil.
 
-8. **`test_cpu.py` — Root Seviyede Test Dosyası**  
-   - **Dosya:** `backend/test_cpu.py`  
-   - **Sorun:** Bu geçici bir test dosyası. Proje root'unda gereksiz yer kaplıyor.  
-   - **Çözüm:** Sil veya `tests/` dizinine taşı.
+**🔴 BUG-02: `styles.css` — Çift `.toast` Tanımı**
+- **Dosya:** `frontend/src/styles.css` — Satır 1873-1897 ve 3363-3414
+- **Sorun:** `.toast` CSS sınıfı iki farklı yerde tanımlı. Eski tanım `position: sticky; bottom: 16px`, yeni tanım `position: fixed !important; top: 24px !important`. Eski tanımdaki `font-weight: 800` ve border/background stilleri cascade'de kalıyor.
+- **Çözüm:** Satır 1873-1897 arasındaki eski `.toast`, `.toast.success`, `.toast.error` bloklarını tamamen sil.
 
-9. **`Core.js` — `NotificationBell` Dropdown Menü Tema Uyumsuzluğu**  
-   - **Dosya:** `frontend/src/components/Core.js:290-304`  
-   - **Sorun:** Bildirim dropdown menüsü hardcoded renkler kullanıyor: `background: "#1e1e1e"`, `border: "1px solid #333"`, `color: "#888"` vs. Bu renkler tema CSS değişkenlerini kullanmıyor. Farklı temalarda (özellikle Slate Mono) kötü görünür.  
-   - **Çözüm:** `var(--surface)`, `var(--border)`, `var(--muted)` gibi CSS değişkenleri kullan.
+**🟢 BUG-03: `common.js` — CSRF Token Tek Kullanımlık Olmalı (ÇÖZÜLDÜ)**
+- **Dosya:** `frontend/src/common.js:1-50`
+- **Sorun:** CSRF token bir kez fetch edilip global `csrfToken` değişkeninde saklanıyor ve her POST isteğinde tekrar kullanılıyor. Backend tarafında token'lar 24 saat geçerli kalıyor (`overview.py:24`). CSRF token'lar normalde tek kullanımlık (nonce) olmalıdır.
+- **Etki:** Token replay saldırısına açık. Bir saldırgan tek bir CSRF token'ı yakalasa 24 saat boyunca kullanabilir.
+- **Çözüm:** Her POST isteği öncesi yeni token al, ya da backend'de kullanılan token'ları geçersiz kıl.
 
-10. **`Core.js` — `NotificationBell` MutationObserver Performans Riski**  
-    - **Dosya:** `frontend/src/components/Core.js:223-224`  
-    - **Sorun:** `MutationObserver` tüm `document.body`'yi `childList: true, subtree: true` ile izliyor. Her DOM değişikliğinde `querySelector` çalışıyor. Büyük sayfalarda (Dashboard, Analyze) her render'da tetiklenir.  
-    - **Çözüm:** `subtree: true` yerine daha dar bir hedef kullan veya debounce ekle.
+**🟢 BUG-04: `_save_users` — Tüm Kullanıcıları Sil-Yaz Paterni (Race Condition) (ÇÖZÜLDÜ)**
+- **Dosya:** `backend/web/utils.py:127-139`
+- **Sorun:** `_save_users()` önce `DELETE FROM users` yapıp sonra yeniden INSERT ediyor. İki admin aynı anda kullanıcı oluşturma/silme yaparsa birinin değişiklikleri kaybolur.
+- **Etki:** Veri kaybı riski.
+- **Çözüm:** DELETE-all yerine upsert (MERGE) veya tek satır DELETE/INSERT kullan.
 
-### 🟡 DÜŞÜK ÖNCELİK / KOD KALİTESİ
+---
 
-11. **`Dashboard.js:154` — Yazım Hatası**  
-    - **Sorun:** `"Suspicios Events"` yazıyor, doğrusu `"Suspicious Events"` olmalı.  
-    - **Çözüm:** Düzelt.
+### 2. GÜVENLİK AÇIKLARI
 
-12. **`index.html` — CSP İhlali Riski**  
-    - **Dosya:** `frontend/index.html:22`  
-    - **Sorun:** `<script src="https://unpkg.com/globe.gl">` harici bir CDN'den yükleniyor. Backend'in gönderdiği CSP header'ı (`script-src 'self'`) bu kaynağı engelliyor. Tarayıcı konsolunda CSP ihlal hatası üretir (Nginx proxy üzerinden sunulduğu için şu an sorun olmayabilir ama doğrudan backend'e bağlanıldığında çalışmaz).  
-    - **Çözüm:** Globe.js'i vendor dizinine indir veya CSP'ye `https://unpkg.com` ekle.
+**🟢 SEC-01: SIEM Endpoint'lerinde Admin Kontrolü Yok (ÇÖZÜLDÜ)**
+- **Dosya:** `backend/api/handlers/settings.py:33-54`
+- **Sorun:** `/api/settings/siem` POST ve `/api/settings/siem/test` POST endpoint'leri sadece `_is_authenticated` kontrolü yapıyor. `_is_admin` kontrolü eksik.
+- **Etki:** "viewer" rolündeki bir kullanıcı SIEM ayarlarını değiştirebilir ve dışarıya veri sızdırabilir.
+- **Çözüm:** Her iki handler'a `if not server._is_admin(request["cookies"]): return server._forbidden_response()` ekle.
 
-13. **`common.js` — `setText` ve `applyRoleVisibility` Kullanılmıyor**  
-    - **Dosya:** `frontend/src/common.js:121-128` ve `:195-200`  
-    - **Sorun:** `setText` fonksiyonu ve `applyRoleVisibility` fonksiyonu tanımlı ve `window`'a atanmış ama React SPA'da hiçbir yerde çağrılmıyor. Eski vanilya JS kalıntısı.  
-    - **Çözüm:** Sil.
+**🟢 SEC-02: API Anahtarları Kaynak Kodda Gömülü (ÇÖZÜLDÜ)**
+- **Dosya:** `backend/core/config.py:97-98`
+- **Sorun:** AbuseIPDB API key ve GreyNoise API key, `config.py` içinde default value olarak hardcoded yazılmış. Git repo'sunda açıkta.
+- **Etki:** API key'lerin kötüye kullanılma riski. Public repo'ya konulursa ciddi sorun.
+- **Çözüm:** Default value olarak boş string koy, sadece `.env` üzerinden yükle.
 
-14. **`common.js` — `initializeThemeControls` Gereksiz DOM Event Listener**  
-    - **Dosya:** `frontend/src/common.js:100-110`  
-    - **Sorun:** `[data-theme-toggle]` butonları için click listener ekliyor ama React SPA'da böyle butonlar yok. `AppearancePage` kendi state'ini yönetiyor. Bu kod hala sayfa yüklendiğinde çalışıyor ama hiçbir etkisi yok.  
-    - **Çözüm:** Bu fonksiyonu kaldır veya sadece login.html için bırak.
+**🟢 SEC-03: Cookie'de `Secure` Flag Eksik (ÇÖZÜLDÜ)**
+- **Dosya:** `backend/web/utils.py:178-182`
+- **Sorun:** Session cookie `HttpOnly` ve `SameSite=Strict` içeriyor ama `Secure` flag eksik.
+- **Etki:** Man-in-the-middle saldırısıyla session hijacking riski.
+- **Çözüm:** HTTPS kullanıldığında `Secure` flag'i ekle.
 
-15. **`Live.js:57` — Logout Butonu Stil Tutarsızlığı**  
-    - **Dosya:** `frontend/src/components/Live.js:56-59`  
-    - **Sorun:** Live sayfasındaki logout butonu `className: "button secondary"` kullanıyor. Diğer tüm sayfalarda logout butonu `className: "button"` (primary) kullanıyor. Tutarsız.  
-    - **Çözüm:** Diğer sayfalarla aynı yap: `className: "button"`.
 
-16. **`Live.js` — User Pill Eksik**  
-    - **Dosya:** `frontend/src/components/Live.js:43-60`  
-    - **Sorun:** Live sayfasının topbar-actions bölümünde `user-pill` (Signed in as) bileşeni yok. Diğer tüm sayfalarda var.  
-    - **Çözüm:** Ekle.
+**🟢 SEC-04: `is_blacklisted` — Her Sorguda `resolve_mac` Çağırılıyor (ÇÖZÜLDÜ)**
+- **Dosya:** `backend/database/repository.py:75-91`
+- **Sorun:** `is_blacklisted()` her çağrıda `resolve_mac(ip)` çalıştırıyor. Bu fonksiyon `subprocess.check_output(["arp", ...])` ile dış komut çalıştırıyor. Her gelen honeypot event'inde çağrılıyor olabilir.
+- **Etki:** Performans darboğazı + her event'te subprocess fork'u.
+- **Çözüm:** MAC sonuçlarını cache'le veya blacklist kontrolünde MAC aramasını kaldır.
 
-17. **`server.py` — `_build_settings_payload` CPU Ölçümü 200ms Blokaj**  
-    - **Dosya:** `backend/web/server.py:378-379`  
-    - **Sorun:** CPU kullanım yüzdesi hesaplamak için `await asyncio.sleep(0.2)` çağrılıyor. Her settings API isteğinde 200ms blokaj oluyor. System sayfası 5 saniyede bir poll yapıyor — sorun küçük ama gereksiz yavaşlatma.  
-    - **Çözüm:** Arka plan task'ı ile periyodik olarak CPU ölç ve cache'le. API isteğinde cache'ten dön.
+**⚠️ UYARI: Web Arayüzünde MAC Adreslerinin Görünmeme Sorunu**
+- **Sorun:** Web arayüzünde bazı listelerde veya loglarda MAC adresleri gösterilmiyor/görünmüyor.
+- **Yapılacak İşlem:** frontend tarafındaki tablo bileşenleri ve backend'in gönderdiği event payload'ları incelenerek MAC adreslerinin UI'a ulaşıp ulaşmadığı tespit edilecek ve düzeltilecek.
 
-18. **`styles.css` — 3416 Satır / 70KB Boyut**  
-    - **Sorun:** Tek bir CSS dosyası 70KB. İçinde duplike tanımlar var (eski/yeni toast, dark tema duplicate). Bakımı zorlaştırıyor.  
-    - **Çözüm:** İleride bileşen bazlı CSS'e bölünebilir.
 
-19. **`server.py:250` — CSP `script-src` Sorunu**  
-    - **Dosya:** `backend/web/server.py:250`  
-    - **Sorun:** CSP header `script-src 'self'` diyor ama `index.html` inline script (`<script>try { var savedTheme...`) içeriyor. Bu `unsafe-inline` olmadan çalışmaz. Frontend Nginx üzerinden sunulduğu için backend CSP bypass ediliyor ama güvenlik açısından tutarsız.  
-    - **Çözüm:** Inline script'i ayrı bir dosyaya taşı veya nonce-based CSP kullan.
+**🟢 SEC-05: `read_recent_events` — `r.details.update()` ile Kontrol Edilmemiş Alanlar (ÇÖZÜLDÜ)**
+- **Dosya:** `backend/web/utils.py:35-36`
+- **Sorun:** `event_data.update(r.details)` satırı, DB'deki JSON `details` alanının tüm key-value çiftlerini ana event dict'ine karıştırıyor. `details` içinde `"service"`, `"event_type"` gibi key'ler varsa, üst seviye değerleri override eder.
+- **Etki:** Veri bütünlüğü sorunu.
+- **Çözüm:** `details` alanını ayrı bir key altında döndür veya çakışan key'leri filtrele.
 
-20. **`ResourceGauge` — Inline Style Yığını**  
-    - **Dosya:** `frontend/src/components/Settings.js:518-644`  
-    - **Sorun:** Gauge bileşeni tüm stillerini inline style olarak tanımlıyor. CSS dosyasında karşılığı yok. Bu bakımı zorlaştırıyor ve tema değişikliklerinde sorun çıkarabilir.  
-    - **Çözüm:** CSS sınıflarına taşı.
+---
+
+### 3. ÖLÜ KOD ve KALINTI
+
+**DEAD-01: `common.js` — `setText` Fonksiyonu**
+- **Dosya:** `frontend/src/common.js:121-128`
+- **Sorun:** `setText()` fonksiyonu `window.setText` olarak dışa aktarılmış ama React SPA'da hiçbir yerde çağrılmıyor. Eski vanilla JS kalıntısı.
+- **Çözüm:** Sil.
+
+**DEAD-02: `common.js` — `applyRoleVisibility` Fonksiyonu**
+- **Dosya:** `frontend/src/common.js:195-200`
+- **Sorun:** `applyRoleVisibility()` fonksiyonu `[data-admin-only]` DOM elementlerini arıyor ama React SPA'da böyle elementler yok.
+- **Çözüm:** Sil veya login.js'e taşı.
+
+**DEAD-03: `common.js` — `initializeThemeControls` Gereksiz Listener**
+- **Dosya:** `frontend/src/common.js:100-112`
+- **Sorun:** `[data-theme-toggle]` butonları için click listener ekliyor. React SPA'da böyle butonlar yok. `AppearancePage` kendi state yönetimini yapıyor.
+- **Çözüm:** Login.html'de kullanılmıyorsa sil.
+
+**DEAD-04: `test_cpu.py` — Geçici Test Dosyası**
+- **Dosya:** `backend/test_cpu.py`
+- **Sorun:** Root seviyede gereksiz test dosyası. Production'a deploy edilebilir.
+- **Çözüm:** Sil veya `tests/` dizinine taşı.
+
+---
+
+### 4. ÇALIŞMAYAN / BOŞ MANTIK
+
+**EMPTY-01: `siem_forwarder.py` — HTTP URL Mantık Hatası**
+- **Dosya:** `backend/core/siem_forwarder.py:57-65`
+- **Sorun:** HTTP protokolü dalında URL oluşturma mantığı hatalı. İlk `url = f"http://..."` ataması yapılıp hemen ardından aynı koşul kontrol ediliyor — ilk atama gereksiz.
+- **Çözüm:** Tekrar eden atamayı kaldır, sadece if/else bırak.
+
+**EMPTY-02: `orchestrator.py` — `start_service` Boş `pass` Bloğu**
+- **Dosya:** `backend/orchestrator.py:196-198`
+- **Sorun:** `start_service` metodu içinde `pass` ile boş bırakılmış bir blok var. System mode'da servis başlatma talebi gelmesine rağmen network ayarları anında uygulanmaz.
+- **Etki:** System mode'da 3 saniyelik sync döngüsünü beklemek zorunda.
+- **Çözüm:** Pass'ı kaldır, açık yorum bırak veya sync'i tetikle.
+
+**EMPTY-03: `defense.py` — `_suspicious_counters` Hiç Resetlenmiyor**
+- **Dosya:** `backend/defense.py:92-93` ve `:105-106`
+- **Sorun:** Ban edilen IP'nin counter'ı sıfırlanmıyor. Counter 101, 102... devam ediyor. Her event'te tekrar `add_to_blacklist` çağrılır (gereksiz DB sorguları).
+- **Etki:** Bellek sızıntısı + gereksiz DB yükü.
+- **Çözüm:** Ban sonrası counter'ı sıfırla veya sil.
+
+---
+
+### 5. KOD KALİTESİ SORUNLARI
+
+**QUALITY-01:** `Dashboard.js:154` — `"Suspicios Events"` yazım hatası → `"Suspicious Events"` olmalı.
+
+**QUALITY-02:** `Live.js:43-60` — User Pill Eksik. Diğer tüm sayfalarda topbar'da "Signed in as admin" pill'i var. Live sayfasında yok.
+
+**QUALITY-03:** `Live.js` — Logout Butonu Stil Tutarsızlığı. Live sayfasında `"button secondary"`, diğer sayfalarda `"button"` (primary).
+
+**QUALITY-04:** `Core.js:322-336` — NotificationBell Hardcoded Renkler. Dropdown menüsü `background: "#1e1e1e"`, `color: "#888"` gibi hardcoded renkler kullanıyor. Tema değişkenlerini (`var(--surface)`, `var(--border)`) kullanmıyor.
+
+**QUALITY-05:** `index.html:22` — CSP İhlali Riski. `<script src="https://unpkg.com/globe.gl">` harici CDN. Backend CSP `script-src 'self'` diyor. Ayrıca inline script de `unsafe-inline` olmadan çalışmaz.
+
+**QUALITY-06:** `styles.css` — 3416 Satır / 70KB. Tek CSS dosyası. İçinde duplike tema tanımları var.
+
+**QUALITY-07:** `Settings.js:516-577` — ResourceGauge bileşeni tüm stillerini inline style olarak tanımlıyor. CSS dosyasında karşılığı yok.
+
+---
+
+### 6. PERFORMANS
+
+**PERF-01:** `server.py:378-379` — CPU Ölçümü 200ms Blokaj. Her settings API isteğinde `await asyncio.sleep(0.2)` çağrılıyor. 5 saniyede bir poll = her poll'de 200ms blokaj. **Çözüm:** Arka plan task'ıyla periyodik ölç, cache'le.
+
+**PERF-02:** `Core.js:255-256` — MutationObserver Tüm DOM İzleniyor. `observer.observe(document.body, { childList: true, subtree: true })` — her DOM mutasyonunda `querySelector` çalışıyor. **Çözüm:** Daha dar scope veya debounce.
+
+**PERF-03:** `utils.py:19-41` — Her API İsteğinde DB Sorgusu. Overview, analyze, threat-intel, stats, events — hepsi ayrı DB sorgusu. Dashboard 5 saniyede bir poll yapıyor. **Çözüm:** Kısa süreli (5-10 sn) bellekte cache.
+
+**PERF-04:** `siem_forwarder.py:51-56` — Her Event İçin TCP Bağlantısı. TCP modunda her event için yeni bağlantı açılıp kapatılıyor. **Çözüm:** Persistent TCP connection veya batching.
+
+---
+
+### 7. ÖNERİLER ve FİKİRLER
+
+1. **Credential Harvest Raporu** — Tüm login denemelerinden `username/password` çiftlerini toplayan panel. "En çok denenen şifreler", "Saldırganların kullandığı username'ler".
+2. **IP Bazlı Attack Timeline** — Bir IP seçildiğinde tüm hareketlerinin kronolojik zaman çizelgesi.
+3. **Dashboard Light Mode** — Şu an 6 koyu tema var. Bir de açık (light) tema eklenebilir.
+4. **Log Arama İyileştirmesi** — Alan bazlı arama (IP, service, event_type) ve regex desteği.
+5. **Honeypot Decoy Dosyaları** — FTP ve SMB'ye sahte dosya sistemleri (`passwords.xlsx`, `backup.sql`, `.ssh/id_rsa`). Canary token mantığı.
+6. **Email/Webhook Alert** — Kritik alert'ler için email veya webhook (Slack, Discord, Telegram) entegrasyonu.
+7. **Rate Limiting Dashboard** — Hangi IP'lerin rate limit'e takıldığını gösteren panel.
+8. **Custom Profile Builder UI** — GUI ile yeni profil oluşturma. Kullanıcı hangi servislerin açık olacağını seçip kendi profilini kaydeder.
+9. **GeoIP Heatmap (2D)** — SVG bazlı 2D dünya haritası üzerinde ülke bazlı renk yoğunluk haritası. 3D Globe'a hafif alternatif.
+10. **Otomatik Backup ve Export** — Zamanlanmış otomatik log export (günlük/haftalık JSONL veya CSV backup).
+
+---
+
+### 📊 Özet Tablo
+
+| Kategori | Kritik | Orta | Düşük | Toplam |
+|----------|--------|------|-------|--------|
+| Hatalar (Bug) | 4 | 0 | 0 | **4** |
+| Güvenlik | 2 | 3 | 0 | **5** |
+| Ölü Kod | 0 | 4 | 0 | **4** |
+| Boş Mantık | 0 | 3 | 0 | **3** |
+| Kod Kalitesi | 0 | 0 | 7 | **7** |
+| Performans | 0 | 2 | 2 | **4** |
+| **TOPLAM** | **6** | **12** | **9** | **27** |
+
+> **Önerilen Aksiyon Sırası:**
+> 1. SEC-01 (SIEM admin kontrolü) + SEC-02 (API key'leri koda gömme) — **hemen düzelt**
+> 2. BUG-01 (döngüsel import) + BUG-02 (çift toast) — **kolay düzeltme**
+> 3. BUG-03 (CSRF token reuse) + BUG-04 (user save race) — **güvenlik iyileştirmesi**
+> 4. EMPTY-01/02/03 — **mantık düzeltmeleri**
+> 5. Ölü kod temizliği — **bakım**
 
 ## 🏗️ Proje Mimari ve Dosya Yapısı
 
 ```text
+
 honeypot-orchestrator/
 ├── .dockerignore                     # Docker build işleminde dışarıda bırakılacak dosyalar
 ├── .env                              # Veritabanı parolası, API anahtarları ve şifreleme parolaları

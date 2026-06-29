@@ -63,9 +63,10 @@ async def handle_login(self, request: dict[str, Any]) -> dict[str, Any]:
             "summary": f"Dashboard login success for {username}.",
         }
     )
+    is_secure = request.get("headers", {}).get("x-forwarded-proto", "") == "https"
     return self._json_response(
         {"ok": True, "username": username, "role": self._user_role(username)},
-        cookies=[_build_cookie("session", token, max_age=86400)],
+        cookies=[_build_cookie("session", token, max_age=86400, secure=is_secure)],
     )
 
 @router.post("/api/logout")
@@ -75,9 +76,10 @@ async def handle_logout(self, request: dict[str, Any]) -> dict[str, Any]:
     if token:
         self._sessions.pop(token, None)
         await self._save_sessions()
+    is_secure = request.get("headers", {}).get("x-forwarded-proto", "") == "https"
     return self._json_response(
         {"ok": True},
-        cookies=[_build_cookie("session", "", max_age=0)],
+        cookies=[_build_cookie("session", "", max_age=0, secure=is_secure)],
     )
 
 @router.get("/api/session")

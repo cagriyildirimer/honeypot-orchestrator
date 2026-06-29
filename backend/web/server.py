@@ -179,6 +179,7 @@ class WebDashboard:
                     {"error": "Invalid or missing CSRF token."},
                     status=HTTPStatus.FORBIDDEN,
                 )
+            self._csrf_tokens.pop(client_token, None)
 
         # Authentication check for API routes (except auth/CSRF endpoints)
         if path.startswith("/api/") and not authenticated and path not in {"/api/login", "/api/session", "/api/csrf"}:

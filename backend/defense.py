@@ -46,9 +46,20 @@ async def set_auto_blacklist_enabled(enabled: bool) -> None:
     _auto_blacklist_enabled_cached = enabled
     _last_setting_check = time.time()
 
+_mac_cache: dict[str, tuple[str, float]] = {}
+
 def resolve_mac(ip: str) -> str:
+    global _mac_cache
     if ip in {"127.0.0.1", "::1", "localhost", "unknown"}:
         return "N/A"
+    
+    now = time.time()
+    if ip in _mac_cache:
+        mac, ts = _mac_cache[ip]
+        if now - ts < 3600.0:  # Cache for 1 hour
+            return mac
+
+    mac = "unknown"
     try:
         if platform.system() == "Windows":
             output = subprocess.check_output(["arp", "-a", ip], timeout=2.0).decode("utf-8", errors="ignore")
@@ -57,7 +68,7 @@ def resolve_mac(ip: str) -> str:
                 output,
             )
             if match:
-                return match.group(1).replace("-", ":").lower()
+                mac = match.group(1).replace("-", ":").lower()
         else:
             output = subprocess.check_output(["arp", "-n", ip], timeout=2.0).decode("utf-8", errors="ignore")
             match = re.search(
@@ -65,10 +76,12 @@ def resolve_mac(ip: str) -> str:
                 output,
             )
             if match:
-                return match.group(1).lower()
+                mac = match.group(1).lower()
     except Exception:
         pass
-    return "unknown"
+    
+    _mac_cache[ip] = (mac, now)
+    return mac
 
 
 # Whitelist and Blacklist operations are imported from database.repository

@@ -33,7 +33,12 @@ async def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
                     "summary": r.summary,
                 }
                 if r.details:
-                    event_data.update(r.details)
+                    if isinstance(r.details, dict):
+                        safe_details = {
+                            k: v for k, v in r.details.items()
+                            if k not in {"id", "timestamp", "service", "event_type", "src_ip", "src_port", "summary"}
+                        }
+                        event_data.update(safe_details)
                 records.append(event_data)
             return records
     except Exception as e:
@@ -127,13 +132,26 @@ async def _load_users(path: Path, default_users: dict[str, dict[str, str]]) -> d
 async def _save_users(path: Path, users: dict[str, dict[str, str]]) -> None:
     try:
         async with async_session() as session:
-            await session.execute(delete(User))
+            stmt = select(User)
+            result = await session.execute(stmt)
+            db_users = {u.username: u for u in result.scalars().all()}
+
             for username, data in users.items():
-                session.add(User(
-                    username=username,
-                    password_hash=data["password"],
-                    role=data["role"]
-                ))
+                if username in db_users:
+                    db_user = db_users[username]
+                    db_user.password_hash = data["password"]
+                    db_user.role = data["role"]
+                else:
+                    session.add(User(
+                        username=username,
+                        password_hash=data["password"],
+                        role=data["role"]
+                    ))
+
+            for username, db_user in db_users.items():
+                if username not in users:
+                    await session.delete(db_user)
+
             await session.commit()
     except Exception as e:
         print(f"DB save users error: {e}")
@@ -175,10 +193,12 @@ def _parse_cookies(cookie_header: str) -> dict[str, str]:
     return cookies
 
 
-def _build_cookie(name: str, value: str, *, max_age: int | None = None) -> str:
+def _build_cookie(name: str, value: str, *, max_age: int | None = None, secure: bool = False) -> str:
     parts = [f"{name}={value}", "Path=/", "HttpOnly", "SameSite=Strict"]
     if max_age is not None:
         parts.append(f"Max-Age={max_age}")
+    if secure:
+        parts.append("Secure")
     return "; ".join(parts)
 
 

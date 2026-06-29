@@ -34,6 +34,8 @@ async def get_siem_config_handler(server, request):
 async def set_siem_config_handler(server, request):
     if not server._is_authenticated(request["cookies"]):
         return {"status": 401, "body": b'{"error":"Unauthorized"}', "content_type": "application/json"}
+    if not server._is_admin(request["cookies"]):
+        return server._forbidden_response()
     
     try:
         body = json.loads(request["body"])
@@ -57,6 +59,8 @@ async def set_siem_config_handler(server, request):
 async def test_siem_config_handler(server, request):
     if not server._is_authenticated(request["cookies"]):
         return {"status": 401, "body": b'{"error":"Unauthorized"}', "content_type": "application/json"}
+    if not server._is_admin(request["cookies"]):
+        return server._forbidden_response()
     
     test_event = {
         "event_type": "siem_test",
