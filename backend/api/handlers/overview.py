@@ -50,6 +50,42 @@ async def handle_get_events(self, request: dict[str, Any]) -> dict[str, Any]:
     limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=200)
     service_filter = query.get("service", [""])[0].strip().lower()
     event_filter = query.get("event_type", [""])[0].strip().lower()
+    src_ip_filter = query.get("src_ip", [""])[0].strip()
+
+    if src_ip_filter:
+        try:
+            from sqlalchemy import select, desc
+            from database.database import async_session
+            from database.models import Event
+            from defense import resolve_mac
+            async with async_session() as session:
+                stmt = select(Event).where(Event.src_ip == src_ip_filter).order_by(desc(Event.timestamp)).limit(limit)
+                result = await session.execute(stmt)
+                records = []
+                for r in result.scalars().all():
+                    event_data = {
+                        "id": r.id,
+                        "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC") if r.timestamp else "",
+                        "service": r.service,
+                        "event_type": r.event_type,
+                        "src_ip": r.src_ip,
+                        "src_port": r.src_port,
+                        "summary": r.summary,
+                        "src_mac": "N/A",
+                    }
+                    if r.src_ip and r.src_ip not in {"127.0.0.1", "::1", "localhost", "unknown"}:
+                        event_data["src_mac"] = resolve_mac(r.src_ip)
+                    if r.details and isinstance(r.details, dict):
+                        safe_details = {
+                            k: v for k, v in r.details.items()
+                            if k not in {"id", "timestamp", "service", "event_type", "src_ip", "src_port", "summary"}
+                        }
+                        event_data.update(safe_details)
+                    records.append(event_data)
+                return self._json_response({"events": records})
+        except Exception as e:
+            return self._json_response({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
     events = await read_recent_events(self.orchestrator.config.logging.path, limit * 4)
     filtered = [
         event

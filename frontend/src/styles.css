@@ -594,7 +594,12 @@ pre {
 
 .button,
 button {
-  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  box-sizing: border-box;
+  text-decoration: none;
   padding: 0 16px;
   border: 1px solid color-mix(in srgb, var(--accent) 44%, transparent);
   border-radius: 10px;
@@ -4348,4 +4353,224 @@ input:checked + .toggle-slider:before {
   font-weight: 500;
   color: var(--muted, #a0aec0);
   font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Analyze Page Tabbed Layout & Attack Timeline / Credential Harvest
+   ═══════════════════════════════════════════════════════════════ */
+
+.analyze-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+.analyze-tab-btn {
+  background: none;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 10px 20px;
+  position: relative;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 8px 8px 0 0;
+}
+
+.analyze-tab-btn:hover {
+  color: var(--text);
+  background: var(--card-gradient-soft, rgba(255, 255, 255, 0.02));
+}
+
+.analyze-tab-btn.active {
+  color: var(--accent);
+  background: var(--card-gradient-soft, rgba(255, 255, 255, 0.04));
+}
+
+.analyze-tab-btn.active::after {
+  content: "";
+  position: absolute;
+  bottom: -5px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--accent);
+  border-radius: 99px;
+}
+
+/* Attack Timeline styles */
+.timeline-search-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 24px;
+  background: var(--card-gradient-soft, rgba(255, 255, 255, 0.02));
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  width: fit-content;
+}
+
+.timeline-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.select-input {
+  background: var(--surface-strong, #131c44);
+  color: var(--text, #f1f5f9);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+  min-width: 220px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.select-input:focus {
+  border-color: var(--accent);
+}
+
+.attacker-timeline {
+  position: relative;
+  padding-left: 28px;
+  margin-top: 20px;
+}
+
+.attacker-timeline::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--border);
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.timeline-item:last-child {
+  margin-bottom: 0;
+}
+
+.timeline-badge {
+  position: absolute;
+  left: -27px;
+  top: 14px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface-strong, #131c44);
+  border: 3px solid var(--accent);
+  box-shadow: 0 0 0 4px var(--surface-strong, #131c44);
+  z-index: 2;
+}
+
+.timeline-item-card {
+  background: var(--card-gradient-soft, rgba(255, 255, 255, 0.015));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 20px;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.timeline-item-card:hover {
+  transform: translateX(4px);
+  border-color: var(--border-strong);
+}
+
+.timeline-item-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.timeline-body-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.timeline-summary {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.timeline-service-tag {
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--tag-neutral-bg, rgba(255, 255, 255, 0.05));
+  color: var(--muted);
+  padding: 4px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+  border: 1px solid var(--border);
+}
+
+.timeline-details-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 13px;
+  color: var(--muted-strong);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.timeline-details-row code {
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--warning, #f59e0b);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+.timeline-loading,
+.timeline-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--card-gradient-soft, rgba(255, 255, 255, 0.01));
+}
+
+/* Credential Harvest layout styles */
+.harvest-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+}
+
+.empty-row {
+  text-align: center;
+  padding: 32px !important;
+  color: var(--muted);
+  font-size: 14px;
 }

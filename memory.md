@@ -181,6 +181,9 @@ honeypot-orchestrator/
 48. **SIEM Entegrasyonu: Çoklu Hedef (Multi-Target) Desteği (Phase 11):** Tek bir SIEM sunucusu desteği yerine, birden fazla SIEM hedefini (Splunk, Wazuh, Syslog vb.) aynı anda ekleme, düzenleme, silme ve bağımsız protokoller (UDP, TCP, HTTP POST) ve filtreleme kapsamları (tüm loglar / sadece kritik alarmlar) tanımlama desteği eklendi. `siem_forwarder.py` ve backend endpoint'leri çoklu hedef listesini veritabanı/RAM üzerinde eşzamanlı yönetecek ve her hedefin TCP bağlantısını bağımsız cache'leyecek şekilde baştan yazıldı.
 49. **Arayüz: Giriş Ekranı (Login Page) Açık Tema (Light Mode) Uyumsuzlukları Giderildi (Phase 14):** Giriş ekranı üzerindeki cam panel (`.login-card-glass`), metin etiketleri, girdi alanları (`input`), parola göster/gizle butonu ve onay kutusu (`checkbox`) gibi bileşenlerin açık temada beyaz zemin üstünde görünmez olması sorunu çözüldü. Giriş sayfasına özel `--login-*` CSS değişkenleri tanımlanarak koyu/açık şema geçişine göre dinamik ve yüksek okunabilirlikli bir görsellik sunması sağlandı.
 50. **Arayüz: Bildirim (Toast) Animasyon Çakışması Giderildi (QUALITY-08):** Sağ üstte açılan bildirim kutusunun (toast) kendi kendine kapanmaması ve animasyonsuz şekilde ekranda kalması sorunu giderildi. CSS tarafındaki `.toast:not([hidden])` kuralı ile `.toast.hiding` kuralının ikisinde birden kullanılan `!important` belirteçlerinin çakışması ve "enter" animasyonunun "leave" animasyonunu ezmesi önlendi. `.toast:not([hidden]):not(.hiding)` seçicisine geçilerek toast penceresinin zaman aşımı bitiminde süzülerek kaybolması sağlandı.
+51. **Analiz: Saldırgan Zaman Tüneli & Giriş Denemeleri (Credential Harvest) (Phase 13):** Analyze sayfasında tab yapısı kuruldu. "Threat Lifecycle & Attack Timeline" sekmesine dikey kronolojik zaman tüneli paneli eklenerek seçilen saldırgan IP'sinin tüm hareketleri detaylı dökümlendi (API events ucu IP filtresiyle genişletildi). "Credential Harvest" sekmesine en çok denenen kullanıcı adları/şifre tablosu ve tuzaklara girilen tüm credentials kayıtları dökülerek JSON ve CSV formatlarında dışa aktarma butonları entegre edildi.
+52. **Arayüz: İhracat Butonları & Buton Dikey Hizalama Düzeltmesi (QUALITY-09):** Saldırgan zaman tüneli paneline dinamik CSV ve JSON ihracat butonları eklendi. Ayrıca arayüzün sağ üstündeki ihraç butonlarının (a.button) dikey hizalamasının ve metin kaymalarının giderilmesi için `.button` ve `button` seçicileri inline-flex esnek kutusuna geçirilip dikey/yatay ortalandı; user-pill ile yükseklikleri eşitlendi.
+
 
 ### Project Phases & Milestones (Historical)
 - **Phase 0:** `start_service` / `stop_service` signature bugs fixed. Toggle buttons working.
@@ -204,14 +207,6 @@ honeypot-orchestrator/
 - **Analyze Sayfası Eklendi:** Phase 12'nin hazırlığı olarak, Frontend SPA mimarisine uygun şekilde `/analyze` route'u eklendi ve Threat Intel tablosu Dashboard'dan çıkartılarak bu özel sayfaya taşındı.
 
 ---
-
-## To-Do: Phase 13 — Credential Harvest & Attack Timeline Replay
-
-**Amaç:** Saldırgan davranışlarını detaylı izleyebilmek.
-
-1. **Credential Harvest Raporu (Backend + Frontend):** Tüm login denemelerinden `username/password` çiftlerini toplayan liste ve Dashboard paneli ("En çok denenen şifreler", "Saldırganların kullandığı username'ler").
-2. **Attack Timeline Replay (Frontend):** Belirli bir IP seçildiğinde o IP'nin tüm aktivitelerinin kronolojik zaman çizelgesi.
-3. **API Endpoint:** `/api/attacker/<ip>` — Tek IP'nin tüm event'leri + TI enrichment + timeline verileri.
 
 ---
 
