@@ -540,16 +540,33 @@ class WebDashboard:
     async def _build_overview_payload(self, request: dict[str, Any]) -> dict[str, Any]:
         display_host = _request_display_host(request)
         query = request["query"]
-        limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=2000)
+        limit_str = query.get("limit", ["50"])[0]
+        limit = -1 if limit_str == "-1" else _safe_int(limit_str, default=50, minimum=1, maximum=100000)
+        page = _safe_int(query.get("page", ["1"])[0], default=1, minimum=1)
+        search_query = query.get("search", [""])[0].strip().lower()
         service_filter = query.get("service", [""])[0].strip().lower()
         event_filter = query.get("event_type", [""])[0].strip().lower()
-        records = await read_recent_events(self.orchestrator.config.logging.path, max(1000, limit))
-        filtered = [
-            event
-            for event in records
-            if (not service_filter or str(event.get("service", "")).lower() == service_filter)
-            and (not event_filter or str(event.get("event_type", "")).lower() == event_filter)
-        ]
+
+        # Optimize fetch limit: if we are pagination-focused or search-focused, load all records.
+        # Otherwise (for standard dashboard), fetch up to 2000 events to maintain speed.
+        fetch_limit = -1 if (limit == -1 or page > 1 or search_query) else max(2000, limit)
+        records = await read_recent_events(self.orchestrator.config.logging.path, fetch_limit)
+
+        # Apply filtering
+        filtered = []
+        for event in records:
+            if service_filter and str(event.get("service", "")).lower() != service_filter:
+                continue
+            if event_filter and str(event.get("event_type", "")).lower() != event_filter:
+                continue
+            if search_query:
+                summary = str(event.get("summary", "")).lower()
+                src_ip = str(event.get("src_ip", "")).lower()
+                profile = str(event.get("profile", "")).lower()
+                if search_query not in summary and search_query not in src_ip and search_query not in profile:
+                    continue
+            filtered.append(event)
+
         by_service = Counter(record.get("service", "unknown") for record in records)
         by_type = Counter(record.get("event_type", "unknown") for record in records)
 
@@ -600,6 +617,21 @@ class WebDashboard:
             except Exception:
                 pass
 
+        # Determine slice of events to return
+        if limit == -1:
+            events_to_return = filtered
+        else:
+            start_idx = (page - 1) * limit
+            events_to_return = filtered[start_idx : start_idx + limit]
+
+        # Resolve MAC addresses ONLY for the page events we are returning
+        for event in events_to_return:
+            if event.get("src_ip") and event.get("src_ip") not in {"127.0.0.1", "::1", "localhost", "unknown"}:
+                event["src_mac"] = resolve_mac(event["src_ip"])
+
+        # Compute total suspicious events count
+        total_suspicious = sum(1 for r in records if r.get("src_ip") and r.get("src_ip") not in {"127.0.0.1", "::1", "localhost", "unknown"})
+
         return {
             "services": await self.orchestrator.service_status(display_host),
             "profile": await self.orchestrator.profile_status(),
@@ -611,13 +643,17 @@ class WebDashboard:
             },
             "stats": {
                 "total_recent_events": len(records),
+                "total_filtered": len(filtered),
+                "suspicious_events_count": total_suspicious,
                 "by_service": dict(by_service),
                 "by_type": dict(by_type),
+                "top_ip": top_ip if ip_totals else None,
+                "top_ip_count": ip_totals[top_ip] if ip_totals else 0,
                 "top_ip_mac": top_mac,
                 "top_ip_blocked": top_ip_blocked,
             },
             "geo_markers": geo_markers,
-            "events": filtered[:limit],
+            "events": events_to_return,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
         }
 

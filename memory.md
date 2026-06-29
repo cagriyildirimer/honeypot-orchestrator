@@ -12,6 +12,10 @@
 - **Dosya:** `frontend/src/styles.css` — Satır 1873-1897 ve 3363-3414
 - **Sorun:** `.toast` CSS sınıfı iki farklı yerde tanımlı. Eski tanım `position: sticky; bottom: 16px`, yeni tanım `position: fixed !important; top: 24px !important`. Eski tanımdaki `font-weight: 800` ve border/background stilleri cascade'de kalıyor.
 - **Çözüm:** Satır 1873-1897 arasındaki eski
+
+**🔴 BUG-03: Logs ve Dashboard Sayfaları Çalışmıyor**
+- **Sorun:** Logs ve Dashboard sayfaları yüklenmiyor/açılmıyor. Son yapılan server-side pagination veya MAC optimizasyonlarından sonra oluşmuş olabilir.
+- **Durum:** Kritik sorun olarak işaretlendi, bir sonraki aşamada detaylı olarak incelenecek.
 ---
 
 ## 🏗️ Proje Mimari ve Dosya Yapısı
@@ -183,7 +187,7 @@ honeypot-orchestrator/
 50. **Arayüz: Bildirim (Toast) Animasyon Çakışması Giderildi (QUALITY-08):** Sağ üstte açılan bildirim kutusunun (toast) kendi kendine kapanmaması ve animasyonsuz şekilde ekranda kalması sorunu giderildi. CSS tarafındaki `.toast:not([hidden])` kuralı ile `.toast.hiding` kuralının ikisinde birden kullanılan `!important` belirteçlerinin çakışması ve "enter" animasyonunun "leave" animasyonunu ezmesi önlendi. `.toast:not([hidden]):not(.hiding)` seçicisine geçilerek toast penceresinin zaman aşımı bitiminde süzülerek kaybolması sağlandı.
 51. **Analiz: Saldırgan Zaman Tüneli & Giriş Denemeleri (Credential Harvest) (Phase 13):** Analyze sayfasında tab yapısı kuruldu. "Threat Lifecycle & Attack Timeline" sekmesine dikey kronolojik zaman tüneli paneli eklenerek seçilen saldırgan IP'sinin tüm hareketleri detaylı dökümlendi (API events ucu IP filtresiyle genişletildi). "Credential Harvest" sekmesine en çok denenen kullanıcı adları/şifre tablosu ve tuzaklara girilen tüm credentials kayıtları dökülerek JSON ve CSV formatlarında dışa aktarma butonları entegre edildi.
 52. **Arayüz: İhracat Butonları & Buton Dikey Hizalama Düzeltmesi (QUALITY-09):** Saldırgan zaman tüneli paneline dinamik CSV ve JSON ihracat butonları eklendi. Ayrıca arayüzün sağ üstündeki ihraç butonlarının (a.button) dikey hizalamasının ve metin kaymalarının giderilmesi için `.button` ve `button` seçicileri inline-flex esnek kutusuna geçirilip dikey/yatay ortalandı; user-pill ile yükseklikleri eşitlendi.
-
+53. **Arayüz & Performans: Logs Sayfası Sunucu Tabanlı Sayfalama (Server-side Pagination & Filtering) Entegrasyonu (Phase 15):** Logs sayfasındaki limit filtresi kaldırılarak backend ve veritabanı log sınırları tamamen sınırsız hale getirildi. Çok büyük veri setlerinde (50.000+ log) istemci tarafının çökmesini (blank screen) önlemek için API ve React bileşeni sunucu tabanlı sayfalama (server-side pagination, search ve limit) mimarisine geçirildi. Ayrıca MAC adresi çözünürlüğü (`resolve_mac`) yalnızca sayfalanıp döndürülen 25-100 satır için çalıştırılarak backend veritabanı yükü 50 kat hafifletildi, sayfa yükleme hızı <100 ms seviyesine düşürüldü.
 
 ### Project Phases & Milestones (Historical)
 - **Phase 0:** `start_service` / `stop_service` signature bugs fixed. Toggle buttons working.

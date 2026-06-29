@@ -46,42 +46,58 @@ async def set_auto_blacklist_enabled(enabled: bool) -> None:
     _auto_blacklist_enabled_cached = enabled
     _last_setting_check = time.time()
 
-_mac_cache: dict[str, tuple[str, float]] = {}
+_arp_table_cache: dict[str, str] = {}
+_last_arp_load: float = 0.0
 
-def resolve_mac(ip: str) -> str:
-    global _mac_cache
-    if ip in {"127.0.0.1", "::1", "localhost", "unknown"}:
-        return "N/A"
-    
+def load_arp_table() -> None:
+    global _arp_table_cache, _last_arp_load
     now = time.time()
-    if ip in _mac_cache:
-        mac, ts = _mac_cache[ip]
-        if now - ts < 3600.0:  # Cache for 1 hour
-            return mac
-
-    mac = "unknown"
+    if now - _last_arp_load < 10.0:  # reload every 10 seconds at most
+        return
+    _last_arp_load = now
+    
+    from pathlib import Path
+    new_table = {}
     try:
         if platform.system() == "Windows":
-            output = subprocess.check_output(["arp", "-a", ip], timeout=2.0).decode("utf-8", errors="ignore")
-            match = re.search(
-                r"([0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2}[-:][0-9a-fA-F]{2})",
-                output,
-            )
-            if match:
-                mac = match.group(1).replace("-", ":").lower()
+            output = subprocess.check_output(["arp", "-a"], timeout=2.0).decode("utf-8", errors="ignore")
+            for line in output.splitlines():
+                parts = line.split()
+                if len(parts) >= 3:
+                    ip_candidate = parts[0]
+                    mac_candidate = parts[1].replace("-", ":").lower()
+                    if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip_candidate):
+                        new_table[ip_candidate] = mac_candidate
         else:
-            output = subprocess.check_output(["arp", "-n", ip], timeout=2.0).decode("utf-8", errors="ignore")
-            match = re.search(
-                r"([0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2})",
-                output,
-            )
-            if match:
-                mac = match.group(1).lower()
+            arp_path = Path("/proc/net/arp")
+            if arp_path.exists():
+                lines = arp_path.read_text(errors="ignore").splitlines()
+                if len(lines) > 1:
+                    for line in lines[1:]:
+                        parts = line.split()
+                        if len(parts) >= 4:
+                            ip_candidate = parts[0]
+                            mac_candidate = parts[3].lower()
+                            if mac_candidate != "00:00:00:00:00:00":
+                                new_table[ip_candidate] = mac_candidate
+            else:
+                output = subprocess.check_output(["arp", "-n"], timeout=2.0).decode("utf-8", errors="ignore")
+                for line in output.splitlines():
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        ip_candidate = parts[0]
+                        mac_candidate = parts[3].lower()
+                        if re.match(r"^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$", mac_candidate):
+                            new_table[ip_candidate] = mac_candidate
     except Exception:
         pass
-    
-    _mac_cache[ip] = (mac, now)
-    return mac
+    _arp_table_cache = new_table
+
+def resolve_mac(ip: str) -> str:
+    if ip in {"127.0.0.1", "::1", "localhost", "unknown"}:
+        return "N/A"
+    load_arp_table()
+    return _arp_table_cache.get(ip, "unknown")
 
 
 # Whitelist and Blacklist operations are imported from database.repository

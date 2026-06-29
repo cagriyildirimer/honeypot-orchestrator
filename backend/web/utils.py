@@ -28,7 +28,9 @@ async def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
 
     try:
         async with async_session() as session:
-            stmt = select(Event).order_by(desc(Event.timestamp)).limit(max(1, min(limit, 10000)))
+            stmt = select(Event).order_by(desc(Event.timestamp))
+            if limit > 0:
+                stmt = stmt.limit(limit)
             result = await session.execute(stmt)
             records = []
             for r in result.scalars().all():
@@ -42,9 +44,6 @@ async def read_recent_events(path: Path, limit: int) -> list[dict[str, Any]]:
                     "summary": r.summary,
                     "src_mac": "N/A",
                 }
-                if r.src_ip and r.src_ip not in {"127.0.0.1", "::1", "localhost", "unknown"}:
-                    from defense import resolve_mac
-                    event_data["src_mac"] = resolve_mac(r.src_ip)
                 if r.details:
                     if isinstance(r.details, dict):
                         safe_details = {

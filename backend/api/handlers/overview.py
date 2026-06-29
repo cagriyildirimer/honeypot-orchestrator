@@ -47,7 +47,8 @@ async def handle_get_overview(self, request: dict[str, Any]) -> dict[str, Any]:
 @router.get("/api/events")
 async def handle_get_events(self, request: dict[str, Any]) -> dict[str, Any]:
     query = request["query"]
-    limit = _safe_int(query.get("limit", ["50"])[0], default=50, minimum=1, maximum=200)
+    limit_str = query.get("limit", ["50"])[0]
+    limit = -1 if limit_str == "-1" else _safe_int(limit_str, default=50, minimum=1, maximum=100000)
     service_filter = query.get("service", [""])[0].strip().lower()
     event_filter = query.get("event_type", [""])[0].strip().lower()
     src_ip_filter = query.get("src_ip", [""])[0].strip()
@@ -59,7 +60,9 @@ async def handle_get_events(self, request: dict[str, Any]) -> dict[str, Any]:
             from database.models import Event
             from defense import resolve_mac
             async with async_session() as session:
-                stmt = select(Event).where(Event.src_ip == src_ip_filter).order_by(desc(Event.timestamp)).limit(limit)
+                stmt = select(Event).where(Event.src_ip == src_ip_filter).order_by(desc(Event.timestamp))
+                if limit > 0:
+                    stmt = stmt.limit(limit)
                 result = await session.execute(stmt)
                 records = []
                 for r in result.scalars().all():

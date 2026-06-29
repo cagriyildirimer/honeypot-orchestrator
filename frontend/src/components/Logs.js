@@ -3,25 +3,39 @@ const { useEffect, useState, useRef, useMemo } = React;
 import { parseEventTime, buildSuspiciousOverview, filterLogEvents, usePolling } from '../utils.js';
 import { PageSkeleton, MetricCard, EventDrawer } from './Core.js';
 import { EventsTable } from './Dashboard.js';
+
 export function LogsPage(props) {
   const [payload, setPayload] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [filters, setFilters] = useState({ service: "", eventType: "", limit: 100, search: "" });
+  const [filters, setFilters] = useState({ service: "", eventType: "", search: "" });
+  
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   async function loadLogs() {
     const query = new URLSearchParams();
-    query.set("limit", String(filters.limit));
+    query.set("limit", String(pageSize));
+    query.set("page", String(currentPage));
     if (filters.service) {
       query.set("service", filters.service);
     }
     if (filters.eventType) {
       query.set("event_type", filters.eventType);
     }
+    if (filters.search) {
+      query.set("search", filters.search);
+    }
     const next = await window.requestJson(`/api/overview?${query.toString()}`);
     setPayload(next);
   }
 
-  usePolling(loadLogs, 6000, [filters.service, filters.eventType, filters.limit]);
+  usePolling(loadLogs, 6000, [currentPage, pageSize, filters.service, filters.eventType, filters.search]);
+
+  // Reset page to 1 when filters are changed
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.service, filters.eventType, filters.search]);
 
   if (!payload) {
     return h(PageSkeleton, null);
@@ -29,13 +43,88 @@ export function LogsPage(props) {
 
   const profile = payload.profile && payload.profile.current ? payload.profile.current.name : "-";
   const events = payload.events || [];
-  const visibleEvents = filterLogEvents(events, filters);
   const services = payload.services || [];
   const stats = payload.stats || {};
   const eventTypes = Object.keys(stats.by_type || {}).sort();
-  const suspiciousEvents = events.filter((event) => event && event.src_ip).length;
-  const totalEvents = Number(stats.total_recent_events || events.length || 0);
-  const suspiciousOverview = buildSuspiciousOverview(events, parseEventTime(payload.generated_at));
+
+  const totalFiltered = stats.total_filtered !== undefined ? stats.total_filtered : stats.total_recent_events || events.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+
+  const suspiciousEvents = Number(stats.suspicious_events_count || 0);
+  const totalEvents = Number(stats.total_recent_events || 0);
+  const suspiciousOverview = stats.top_ip ? { topIp: { ip: stats.top_ip, count: stats.top_ip_count } } : { topIp: null };
+
+  // Render pagination bar
+  const paginationControls = h(
+    "div",
+    {
+      className: "pagination-controls-row",
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginTop: "20px",
+        paddingTop: "16px",
+        borderTop: "1px solid var(--border)",
+        flexWrap: "wrap",
+        gap: "12px"
+      }
+    },
+    h(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: "16px" } },
+      h(
+        "label",
+        { style: { display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "var(--muted)" } },
+        h("span", null, "Show:"),
+        h(
+          "select",
+          {
+            value: String(pageSize),
+            onChange: (e) => {
+              setPageSize(Number(e.target.value));
+              setCurrentPage(1);
+            },
+            className: "select-input",
+            style: { padding: "4px 8px", minWidth: "80px", height: "30px", fontSize: "13px" }
+          },
+          [10, 25, 50, 100].map(sz => h("option", { key: sz, value: String(sz) }, `${sz} per page`))
+        )
+      ),
+      h("span", { style: { fontSize: "13px", color: "var(--muted-strong)" } }, 
+        `Showing ${totalFiltered > 0 ? (currentPage - 1) * pageSize + 1 : 0} - ${Math.min(currentPage * pageSize, totalFiltered)} of ${totalFiltered} logs`
+      )
+    ),
+    h(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: "8px" } },
+      h(
+        "button",
+        {
+          type: "button",
+          className: "button secondary",
+          disabled: currentPage <= 1,
+          onClick: () => setCurrentPage(prev => Math.max(1, prev - 1)),
+          style: { height: "32px", padding: "0 12px", minHeight: "32px", fontSize: "13px" }
+        },
+        "Previous"
+      ),
+      h("span", { style: { fontSize: "13.5px", fontWeight: "600", padding: "0 8px", color: "var(--text)" } }, 
+        `Page ${currentPage} of ${totalPages}`
+      ),
+      h(
+        "button",
+        {
+          type: "button",
+          className: "button secondary",
+          disabled: currentPage >= totalPages,
+          onClick: () => setCurrentPage(prev => Math.min(totalPages, prev + 1)),
+          style: { height: "32px", padding: "0 12px", minHeight: "32px", fontSize: "13px" }
+        },
+        "Next"
+      )
+    )
+  );
 
   return h(
     React.Fragment,
@@ -93,16 +182,6 @@ export function LogsPage(props) {
             eventTypes.map((eventType) => h("option", { key: eventType, value: eventType }, eventType))
           )
         ),
-        h("label", { className: "field-block" }, h("span", null, "Limit"),
-          h(
-            "select",
-            {
-              value: String(filters.limit),
-              onChange: (event) => setFilters({ ...filters, limit: Number(event.target.value) || 100 }),
-            },
-            [100, 250, 500, 1000].map((limit) => h("option", { key: limit, value: String(limit) }, String(limit)))
-          )
-        ),
         h("label", { className: "field-block search-block" }, h("span", null, "Search"),
           h("input", {
             type: "search",
@@ -120,7 +199,7 @@ export function LogsPage(props) {
             {
               type: "button",
               className: "button secondary",
-              onClick: () => setFilters({ service: "", eventType: "", limit: 100, search: "" }),
+              onClick: () => setFilters({ service: "", eventType: "", search: "" }),
             },
             "Reset"
           )
@@ -131,7 +210,8 @@ export function LogsPage(props) {
       "section",
       { className: "panel" },
       h("div", { className: "section-heading" }, h("div", null, h("h2", null, "Events"), h("p", null, "Latest matching records from the event log."))),
-      h(EventsTable, { events: visibleEvents, fallbackProfile: profile, onSelect: setSelectedEvent })
+      h(EventsTable, { events: events, fallbackProfile: profile, onSelect: setSelectedEvent }),
+      paginationControls
     ),
     h(EventDrawer, { event: selectedEvent, onClose: () => setSelectedEvent(null) })
   );
