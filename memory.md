@@ -180,6 +180,7 @@ honeypot-orchestrator/
 55. **Performans & Veritabanı: SQL Düzeyinde Sayfalama ve Filtreleme Optimizasyonu (Logs Sayfası Kilitleme Hatası Çözüldü):** Logs sayfasında 2. sayfaya geçildiğinde veya filtre uygulandığında tüm veritabanı kayıtlarının (50.000+) Python belleğine yüklenip işlenmesi nedeniyle oluşan kilitlenme/donma hatası giderildi. Arama, filtreleme ve sayfalama işlemleri SQL düzeyine (`limit`, `offset` ve indexed WHERE sorguları ile) taşındı. Bu sayede veritabanındaki gerçek log sayısı (50.000+) sınırlandırılmadan arayüzde doğru gösterilebilir hale getirildi ve sayfa geçiş hızı 2 saniyeden <20 milisaniyeye indirildi.
 56. **Arama & Filtreleme: Şüpheli Olay Filtresi (Exclude System Logs):** Logs sayfasındaki filtre paneline "Exclude System Logs" (Sistem Loglarını Hariç Tut) checkbox kontrolü eklendi. Bu filtre işaretlendiğinde, sistem logları (web ve orchestrator servis kayıtları gibi kaynak IP'si bulunmayan veya local olan loglar) SQL sorgusu düzeyinde (`Event.src_ip != None` ve non-local IP kontrolleriyle) elenerek gizlendi ve arayüzde sadece dış kaynaklı şüpheli honeypot decoy olaylarının listelenmesi sağlandı.
 57. **Test Otomasyonu: Threat Intel Test Betiği Hataları Giderildi (test_threat_intel.py):** Python asenkron yapısında `asyncio.run()` çağrılarının birden fazla kez çalıştırılması sonucu SQLAlchemy/asyncpg bağlantı havuzunun kirletilmesi ve `InterfaceError: another operation is in progress` hatasıyla testlerin çökmesi sorunu çözüldü. Tüm test adımları tek bir event loop (`asyncio.run(main())`) altında birleştirildi ve test ortamında bağlantıların izole edilmesi için `NullPool` kullanımı entegre edildi. Testlerdeki bulut sağlayıcı isimlendirmeleri düzeltilerek tüm 28 test adımının başarıyla geçmesi sağlandı.
+58. **Arayüz & Performans: Şüpheli Olay İstatistiklerinin Dinamik ve Tutarlı Hale Getirilmesi:** Hem Dashboard hem de Logs sayfalarındaki "Suspicious Events" (Şüpheli Olaylar) sayaçlarının, 2000 satırlık ham liste diliminden filtrelenerek yanlış/eksik gösterilmesi sorunu giderildi. Bu sayaçlar, backend'den dönen gerçek `stats.suspicious_events_count` değerine bağlanarak aktif filtrelere (servis, regex arama vb.) göre dinamik güncellenen, tutarlı ve sınırsız veritabanı toplamını yansıtan bir yapıya kavuşturuldu.
 
 ### Project Phases & Milestones (Historical)
 - **Phase 0:** `start_service` / `stop_service` signature bugs fixed. Toggle buttons working.
@@ -195,6 +196,7 @@ honeypot-orchestrator/
 - **Phase 10:** Mimari Sadeleştirme, Frontend Split ve Mikroservis İzolasyonu — Arka plan dizin yapısı katmanlara ayrıldı. `server.py` temizlenerek router-handler yapısına geçildi. 3000+ satırlık devasa `app-react.js` modüler ES bileşenlerine bölündü. Sistem tek parça yerine tam bağımsız 4 mikroservise (`decoy`, `system`, `web`, `ti`) ayrıldı. `honeypot-system` root/NET_ADMIN yetkileriyle network ayarlarını (iptables) devralırken, `honeypot-web` ve `honeypot-ti` tam yetkisiz (non-root) şekilde çalıştırılarak izolasyon sağlandı. Servisler arası iletişim ve state yönetimi PostgreSQL veritabanı üzerinden senkronize hale getirildi. Decoy servisleri `SERVICE_REGISTRY` üzerinden modüler Plug-and-Play altyapısına geçirildi. Dashboard 3D Globe CSS bugı giderildi.
 - **Phase 11:** Web UI Alerts & SIEM Integration — Sağ üst köşeye okunmamış bildirimleri gösteren rozetli bir Bildirim Çanı eklendi. Hız ve yoğunluğa dayalı akıllı kümeleme (rate-based throttling) yapan Server-Sent Events (SSE) tabanlı gerçek zamanlı uyarı sistemi kuruldu. Ayrıca `siem_forwarder.py` yazılarak honeypot loglarının eşzamanlı olarak UDP, TCP veya HTTP üzerinden dış bir SIEM sistemine (Wazuh, Splunk vb.) iletilmesi sağlandı. Kullanıcı için "SIEM Integration" ayarlar arayüzü kodlandı.
 - **Phase 12:** MITRE ATT&CK Mapping + Analyze Sayfası — Honeypot verilerinin profesyonel güvenlik çerçevesinde analiz edilebilmesi için `mitre.py` modülü yazıldı. Event type'lar MITRE taktik ve tekniklerine eşlendi. Frontend tarafında `/analyze` route'u ve `/api/analyze` endpoint'i tamamlanarak Threat Heatmap, MITRE ATT&CK Matrix ve Country Breakdown başarıyla sisteme entegre edildi.
+- **Phase 15:** Log Search & Search Improvements — Gelişmiş log arama paneli, Regex arama ve sütun bazlı serbest metin araması desteği eklendi. Büyük veride çökme ve donmaları engellemek için tüm mimari veritabanı (SQL) seviyesinde sayfalama (limit/offset), sayma ve arama filtrelerine geçirilerek Logs sayfasının ve Dashboard'un performansı optimize edildi.
 - **Öncelikli Görev - İnteraktif `.env` Kurulum Betiği & Gömülü TI Anahtarları:** Tehdit istihbaratı API anahtarları doğrudan yazılım çekirdeğine (`config.py`) gömülerek `.env` sadeleştirildi. `setup.sh` betiği yazıldı; ağ kurulumunu tetikler, şifreleme anahtarını otomatik üretir, kullanıcı adı/şifreyi alır ve `.env` dosyasını hazırlar. Ayrıca `cli.py` içerisinde key rotation mantığı eklenerek şifreleme anahtarı değiştiğinde veritabanındaki şifreli anahtarların otomatik olarak yeni anahtarla yeniden şifrelenip güncellenmesi sağlandı.
 - **Attacker Origins Paneli Taşma & Sidebar Üzerine Gelme Bugı Düzeltildi:** Masaüstü modunda `.sidebar`'a `z-index: 99;` eklenerek panellerin üzerine binmesi engellendi. `.geo-map-panel` (harita paneli) üzerindeki beyaz parlama (shine effect) WebGL uyumluluğu nedeniyle devredışı bırakıldı (`display: none !important;`) ve `isolation: isolate;` eklenerek tarayıcılardaki taşma ve scrollbar tetikleme hatası tamamen çözüldü.
 - **3D Harita Durumu:** Kullanıcı tercihi doğrultusunda harita, topoğrafya/bump map ve varsayılan sürekli auto-rotate özellikleri aktif olacak şekilde orijinal ve kararlı varsayılan haline geri döndürüldü.
@@ -212,14 +214,6 @@ honeypot-orchestrator/
 
 1. Sahte Dosya Sistemi: FTP ve SMB servislerine sahte dosya yapıları (`passwords.xlsx`, `backup.sql`, `.ssh/id_rsa`) yüklenmesi.
 2. Canary Tokens: Bu decoy dosyalara erişildiğinde tetiklenen özel kritik alarm mekanizması.
-
----
-
-## To-Do: Phase 15 — Log Search & Search Improvements
-
-**Amaç:** Log geçmişinde daha rahat analiz yapabilmek.
-
-1. Gelişmiş Log Arama: Alan bazlı filtreleme (IP, Service, Event Type) ve Regex arama desteği.
 
 ---
 
