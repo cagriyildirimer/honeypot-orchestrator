@@ -542,7 +542,7 @@ class WebDashboard:
         query = request["query"]
         limit_str = query.get("limit", ["50"])[0]
         limit = -1 if limit_str == "-1" else _safe_int(limit_str, default=50, minimum=1, maximum=100000)
-        page = _safe_int(query.get("page", ["1"])[0], default=1, minimum=1)
+        page = _safe_int(query.get("page", ["1"])[0], default=1, minimum=1, maximum=10000000)
         search_query = query.get("search", [""])[0].strip().lower()
         service_filter = query.get("service", [""])[0].strip().lower()
         event_filter = query.get("event_type", [""])[0].strip().lower()
