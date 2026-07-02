@@ -7,7 +7,7 @@ import { EventsTable } from './Dashboard.js';
 export function LogsPage(props) {
   const [payload, setPayload] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [filters, setFilters] = useState({ service: "", eventType: "", search: "" });
+  const [filters, setFilters] = useState({ service: "", eventType: "", search: "", searchField: "", excludeSystem: false });
   
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,16 +26,22 @@ export function LogsPage(props) {
     if (filters.search) {
       query.set("search", filters.search);
     }
+    if (filters.searchField) {
+      query.set("search_field", filters.searchField);
+    }
+    if (filters.excludeSystem) {
+      query.set("exclude_system", "true");
+    }
     const next = await window.requestJson(`/api/overview?${query.toString()}`);
     setPayload(next);
   }
 
-  usePolling(loadLogs, 6000, [currentPage, pageSize, filters.service, filters.eventType, filters.search]);
+  usePolling(loadLogs, 6000, [currentPage, pageSize, filters.service, filters.eventType, filters.search, filters.searchField, filters.excludeSystem]);
 
   // Reset page to 1 when filters are changed
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters.service, filters.eventType, filters.search]);
+  }, [filters.service, filters.eventType, filters.search, filters.searchField, filters.excludeSystem]);
 
   if (!payload) {
     return h(PageSkeleton, null);
@@ -182,13 +188,37 @@ export function LogsPage(props) {
             eventTypes.map((eventType) => h("option", { key: eventType, value: eventType }, eventType))
           )
         ),
+        h("label", { className: "field-block" }, h("span", null, "Search Field"),
+          h(
+            "select",
+            {
+              value: filters.searchField,
+              onChange: (event) => setFilters({ ...filters, searchField: event.target.value }),
+            },
+            h("option", { value: "" }, "All Fields"),
+            h("option", { value: "src_ip" }, "Source IP"),
+            h("option", { value: "summary" }, "Summary"),
+            h("option", { value: "profile" }, "Profile"),
+            h("option", { value: "service" }, "Service"),
+            h("option", { value: "event_type" }, "Event Type")
+          )
+        ),
         h("label", { className: "field-block search-block" }, h("span", null, "Search"),
           h("input", {
             type: "search",
             value: filters.search,
-            placeholder: "Search summary, source, or profile",
+            placeholder: "Search summary, source, or profile (regex supported)",
             onChange: (event) => setFilters({ ...filters, search: event.target.value || "" }),
           })
+        ),
+        h("label", { className: "field-block", style: { display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", cursor: "pointer", height: "38px", marginTop: "24px" } },
+          h("input", {
+            type: "checkbox",
+            checked: filters.excludeSystem,
+            onChange: (event) => setFilters({ ...filters, excludeSystem: event.target.checked }),
+            style: { width: "16px", height: "16px", cursor: "pointer" }
+          }),
+          h("span", { style: { fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", color: "var(--text)" } }, "Exclude System Logs")
         ),
         h(
           "div",
@@ -199,7 +229,7 @@ export function LogsPage(props) {
             {
               type: "button",
               className: "button secondary",
-              onClick: () => setFilters({ service: "", eventType: "", search: "" }),
+              onClick: () => setFilters({ service: "", eventType: "", search: "", searchField: "", excludeSystem: false }),
             },
             "Reset"
           )

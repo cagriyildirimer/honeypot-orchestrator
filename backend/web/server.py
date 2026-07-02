@@ -544,60 +544,163 @@ class WebDashboard:
         limit = -1 if limit_str == "-1" else _safe_int(limit_str, default=50, minimum=1, maximum=100000)
         page = _safe_int(query.get("page", ["1"])[0], default=1, minimum=1, maximum=10000000)
         search_query = query.get("search", [""])[0].strip().lower()
+        search_field = query.get("search_field", [""])[0].strip().lower()
         service_filter = query.get("service", [""])[0].strip().lower()
         event_filter = query.get("event_type", [""])[0].strip().lower()
+        exclude_system = query.get("exclude_system", ["false"])[0].lower() == "true"
 
-        # Optimize fetch limit: if we are pagination-focused or search-focused, load all records.
-        # Otherwise (for standard dashboard), fetch up to 2000 events to maintain speed.
-        fetch_limit = -1 if (limit == -1 or page > 1 or search_query) else max(2000, limit)
-        records = await read_recent_events(self.orchestrator.config.logging.path, fetch_limit)
+        try:
+            import re
+            from sqlalchemy import func, or_
+            from datetime import timedelta, timezone
+            
+            async with async_session() as session:
+                # 1. Total unfiltered events count
+                total_unfiltered = (await session.execute(select(func.count(Event.id)))).scalar() or 0
+                
+                # 2. Build filter conditions
+                filter_conds = []
+                if service_filter:
+                    filter_conds.append(Event.service == service_filter)
+                if event_filter:
+                    filter_conds.append(Event.event_type == event_filter)
+                if exclude_system:
+                    filter_conds.append(Event.src_ip != None)
+                    filter_conds.append(Event.src_ip != "127.0.0.1")
+                    filter_conds.append(Event.src_ip != "::1")
+                    filter_conds.append(Event.src_ip != "localhost")
+                    filter_conds.append(Event.src_ip != "unknown")
+                    
+                if search_query:
+                    is_regex = False
+                    try:
+                        re.compile(search_query)
+                        is_regex = True
+                    except Exception:
+                        is_regex = False
+                    
+                    def get_match_cond(col_attr, val):
+                        if is_regex:
+                            return col_attr.op("~*")(val)
+                        else:
+                            return col_attr.ilike(f"%{val}%")
+                    
+                    if search_field == "src_ip":
+                        filter_conds.append(get_match_cond(Event.src_ip, search_query))
+                    elif search_field == "summary":
+                        filter_conds.append(get_match_cond(Event.summary, search_query))
+                    elif search_field == "profile":
+                        filter_conds.append(get_match_cond(Event.details["profile"].astext, search_query))
+                    elif search_field == "service":
+                        filter_conds.append(get_match_cond(Event.service, search_query))
+                    elif search_field == "event_type":
+                        filter_conds.append(get_match_cond(Event.event_type, search_query))
+                    else:  # all fields
+                        conds = [
+                            get_match_cond(Event.summary, search_query),
+                            get_match_cond(Event.src_ip, search_query),
+                            get_match_cond(Event.service, search_query),
+                            get_match_cond(Event.event_type, search_query),
+                            get_match_cond(Event.details["profile"].astext, search_query)
+                        ]
+                        filter_conds.append(or_(*conds))
+                
+                # 3. Total filtered count
+                count_stmt = select(func.count(Event.id))
+                if filter_conds:
+                    count_stmt = count_stmt.where(*filter_conds)
+                total_filtered = (await session.execute(count_stmt)).scalar() or 0
+                
+                # 4. Fetch only the requested paginated chunk
+                stmt = select(Event).order_by(desc(Event.timestamp))
+                if filter_conds:
+                    stmt = stmt.where(*filter_conds)
+                
+                if limit != -1:
+                    offset = (page - 1) * limit
+                    stmt = stmt.limit(limit).offset(offset)
+                    
+                result = await session.execute(stmt)
+                events_to_return = []
+                for r in result.scalars().all():
+                    event_data = {
+                        "id": r.id,
+                        "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC") if r.timestamp else "",
+                        "service": r.service,
+                        "event_type": r.event_type,
+                        "src_ip": r.src_ip,
+                        "src_port": r.src_port,
+                        "summary": r.summary,
+                        "src_mac": "N/A",
+                    }
+                    if r.details:
+                        if isinstance(r.details, dict):
+                            safe_details = {
+                                k: v for k, v in r.details.items()
+                                if k not in {"id", "timestamp", "service", "event_type", "src_ip", "src_port", "summary"}
+                            }
+                            event_data.update(safe_details)
+                    events_to_return.append(event_data)
+                
+                # 5. Fast GROUP BY queries for service/type dropdowns & charts (counts computed in DB)
+                by_service_res = await session.execute(select(Event.service, func.count(Event.id)).group_by(Event.service))
+                by_service = {s: c for s, c in by_service_res.all() if s}
+                
+                by_type_res = await session.execute(select(Event.event_type, func.count(Event.id)).group_by(Event.event_type))
+                by_type = {t: c for t, c in by_type_res.all() if t}
+                
+                # 6. Total suspicious events in the filtered subset (events with non-null non-local src_ip)
+                susp_conds = list(filter_conds)
+                susp_conds.append(Event.src_ip != None)
+                susp_conds.append(Event.src_ip != "127.0.0.1")
+                susp_conds.append(Event.src_ip != "::1")
+                susp_conds.append(Event.src_ip != "localhost")
+                susp_conds.append(Event.src_ip != "unknown")
+                susp_stmt = select(func.count(Event.id)).where(*susp_conds)
+                total_suspicious = (await session.execute(susp_stmt)).scalar() or 0
+                
+                # 7. IP counts in the last 24 hours for top IP & geo markers
+                since_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+                ip_query = (
+                    select(Event.src_ip, func.count(Event.id))
+                    .where(Event.timestamp >= since_24h)
+                    .where(Event.src_ip != None)
+                    .where(Event.src_ip != "127.0.0.1")
+                    .where(Event.src_ip != "::1")
+                    .where(Event.src_ip != "localhost")
+                    .where(Event.src_ip != "unknown")
+                    .group_by(Event.src_ip)
+                    .order_by(desc(func.count(Event.id)))
+                    .limit(200)
+                )
+                ip_totals = {}
+                for ip, count in (await session.execute(ip_query)).all():
+                    if ip:
+                        ip_totals[ip] = count
+                        
+        except Exception as exc:
+            import traceback
+            print("DB QUERY ERROR:", traceback.format_exc())
+            events_to_return = []
+            total_unfiltered = 0
+            total_filtered = 0
+            total_suspicious = 0
+            by_service = {}
+            by_type = {}
+            ip_totals = {}
 
-        # Apply filtering
-        filtered = []
-        for event in records:
-            if service_filter and str(event.get("service", "")).lower() != service_filter:
-                continue
-            if event_filter and str(event.get("event_type", "")).lower() != event_filter:
-                continue
-            if search_query:
-                summary = str(event.get("summary", "")).lower()
-                src_ip = str(event.get("src_ip", "")).lower()
-                profile = str(event.get("profile", "")).lower()
-                if search_query not in summary and search_query not in src_ip and search_query not in profile:
-                    continue
-            filtered.append(event)
-
-        by_service = Counter(record.get("service", "unknown") for record in records)
-        by_type = Counter(record.get("event_type", "unknown") for record in records)
-
-        # Calculate top IP in the last 24 hours and dynamically resolve its MAC
-        now_ts = time.time()
-        start_ts = now_ts - 24 * 60 * 60
-        ip_totals = {}
-        for record in records:
-            ts_str = record.get("timestamp", "")
-            if not ts_str or not record.get("src_ip"):
-                continue
-            try:
-                dt = datetime.strptime(ts_str.replace(" UTC", ""), "%Y-%m-%d %H:%M:%S")
-                dt = dt.replace(tzinfo=UTC)
-                if start_ts <= dt.timestamp() <= now_ts:
-                    ip = str(record.get("src_ip"))
-                    ip_totals[ip] = ip_totals.get(ip, 0) + 1
-            except Exception:
-                pass
-
+        # 8. Get top IP details
         top_mac = "unknown"
         top_ip_blocked = False
         geo_markers = []
+        top_ip = None
         if ip_totals:
             top_ip = max(ip_totals, key=ip_totals.get)
             top_mac = resolve_mac(top_ip)
             top_ip_blocked = await is_blacklisted(top_ip)
-            # GeoIP lookup for map markers
             try:
                 geo_data = bulk_lookup(list(ip_totals.keys())[:200])
-                seen_coords: set[tuple[float, float]] = set()
+                seen_coords = set()
                 for ip, count in sorted(ip_totals.items(), key=lambda x: x[1], reverse=True):
                     info = geo_data.get(ip, {})
                     lat = info.get("lat", 0)
@@ -617,20 +720,10 @@ class WebDashboard:
             except Exception:
                 pass
 
-        # Determine slice of events to return
-        if limit == -1:
-            events_to_return = filtered
-        else:
-            start_idx = (page - 1) * limit
-            events_to_return = filtered[start_idx : start_idx + limit]
-
-        # Resolve MAC addresses ONLY for the page events we are returning
+        # Resolve MAC addresses ONLY for the page events we are returning (25-100 items max)
         for event in events_to_return:
             if event.get("src_ip") and event.get("src_ip") not in {"127.0.0.1", "::1", "localhost", "unknown"}:
                 event["src_mac"] = resolve_mac(event["src_ip"])
-
-        # Compute total suspicious events count
-        total_suspicious = sum(1 for r in records if r.get("src_ip") and r.get("src_ip") not in {"127.0.0.1", "::1", "localhost", "unknown"})
 
         return {
             "services": await self.orchestrator.service_status(display_host),
@@ -642,8 +735,8 @@ class WebDashboard:
                 "port": self.orchestrator.config.web.port,
             },
             "stats": {
-                "total_recent_events": len(records),
-                "total_filtered": len(filtered),
+                "total_recent_events": total_unfiltered,
+                "total_filtered": total_filtered,
                 "suspicious_events_count": total_suspicious,
                 "by_service": dict(by_service),
                 "by_type": dict(by_type),
@@ -656,7 +749,6 @@ class WebDashboard:
             "events": events_to_return,
             "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
         }
-
 
     async def _gather_ioc_data(self) -> list[dict[str, Any]]:
         records = await read_recent_events(self.orchestrator.config.logging.path, 10000)

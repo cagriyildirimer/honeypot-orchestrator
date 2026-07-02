@@ -11,11 +11,17 @@ DATABASE_URL = os.environ.get(
 )
 
 # Create async engine
+from sqlalchemy.pool import NullPool
+engine_args = {}
+if "sqlite" in DATABASE_URL:
+    engine_args["connect_args"] = {"check_same_thread": False}
+if os.environ.get("HONEYPOT_TESTING") == "true":
+    engine_args["poolclass"] = NullPool
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    # SQLite-specific arguments; ignored by asyncpg
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+    **engine_args
 )
 
 # Async session factory

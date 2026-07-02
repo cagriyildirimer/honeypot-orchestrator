@@ -24,7 +24,7 @@ export function DashboardPage(props) {
   const events = payload && payload.events ? payload.events : [];
   const profile = payload && payload.profile && payload.profile.current ? payload.profile.current : null;
   const runningServices = services.filter((service) => service.running).length;
-  const suspiciousEvents = events.filter((event) => event && event.src_ip).length;
+  const suspiciousEvents = Number(stats.suspicious_events_count || 0);
   const totalEvents = Number(stats.total_recent_events || events.length || 0);
   const timelineReference = parseEventTime(payload && payload.generated_at);
   
