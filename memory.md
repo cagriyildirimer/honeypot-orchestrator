@@ -217,22 +217,6 @@ honeypot-orchestrator/
 
 ---
 
-## To-Do: Phase 16 — Rate Limiting Dashboard
-
-**Amaç:** Rate limit engellemelerini izlemek.
-
-1. Throttling Paneli: Hangi IP'lerin hangi limitlere takıldığını gösteren arayüz.
-
----
-
-## To-Do: Phase 17 — Automated Backup & Export
-
-**Amaç:** Log verilerini yedeklemek ve taşınabilir kılmak.
-
-1. Zamanlanmış Export: Günlük/haftalık JSONL veya CSV biçiminde otomatik yedekleme/dışa aktarma.
-
----
-
 ## 💭 Düşünülecek: Backend'in Go Diline Geçişi
 
 > **Durum:** Yapılmayacak ama ileride değerlendirilecek. Referans olarak burada tutuluyor.
