@@ -1,30 +1,4 @@
-x-backend-env: &backend-env
-  HONEYPOT_HOST: "0.0.0.0"
-  HONEYPOT_PROFILE: "empty"
-  HONEYPOT_WEB_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_HTTP_LINUX_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_HTTP_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_SSH_LINUX_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_SSH_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_FTP_LINUX_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_TELNET_LINUX_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_DNS_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_NETBIOS_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_LDAP_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_LDAPS_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_MSSQL_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_RDP_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_SMB_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_LLMNR_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_NBTNNS_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_RPC_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_AUTH_USERNAME: "${HONEYPOT_AUTH_USERNAME:-admin}"
-  HONEYPOT_AUTH_PASSWORD: "${HONEYPOT_AUTH_PASSWORD:-admin123}"
-  HONEYPOT_SECRET_KEY: "${HONEYPOT_SECRET_KEY:-}"
-  HONEYPOT_TI_ABUSEIPDB_KEY: "${HONEYPOT_TI_ABUSEIPDB_KEY:-}"
-  HONEYPOT_TI_GREYNOISE_KEY: "${HONEYPOT_TI_GREYNOISE_KEY:-}"
-  HONEYPOT_LOG_PATH: "/app/logs/events.jsonl"
-  HONEYPOT_DB_URL: "postgresql+asyncpg://honeypot:honeypot_password@postgres:5432/honeypot"
+version: '3.8'
 
 services:
   postgres:
@@ -39,78 +13,58 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
-  honeypot-decoy:
-    build: ./backend
-    container_name: honeypot-decoy
-    depends_on:
-      - postgres
-    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "decoy"]
-    ports:
-      - "${HONEYPOT_HTTP_WINDOWS_PORT:-8080}:80"
-      - "${HONEYPOT_SSH_WINDOWS_PORT:-2223}:2223"
-      - "2222:2222"
-      - "2121:2121"
-      - "2323:2323"
-      - "1053:1053"
-      - "139:139"
-      - "389:389"
-      - "636:636"
-      - "1433:1433"
-      - "3389:3389"
-      - "1445:1445"
-      - "135:135"
-      - "5355:5355/udp"
-      - "137:137/udp"
-    environment:
-      <<: *backend-env
-    volumes:
-      - honeypot_logs:/app/logs
-    restart: unless-stopped
-
-  honeypot-system:
-    build: ./backend
-    container_name: honeypot-system
-    depends_on:
-      - postgres
-    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "system"]
-    network_mode: "service:honeypot-decoy"
-    cap_add:
-      - NET_ADMIN
-    privileged: true
-    environment:
-      <<: *backend-env
-    volumes:
-      - honeypot_logs:/app/logs
-    restart: unless-stopped
 
   honeypot-web:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: honeypot-web
-    user: "honeypot:honeypot"
     depends_on:
       - postgres
-    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "web"]
+    privileged: true
+    cap_add:
+      - NET_ADMIN
     ports:
+      # Web API Port (internally mapping web port to 8000)
       - "8082:8000"
+      # Windows/Linux TCP Decoy Ports
+      - "8080:8080" # HTTP Linux
+      - "80:80"     # HTTP Windows
+      - "2222:2222" # SSH Linux
+      - "2223:2223" # SSH Windows
+      - "2121:2121" # FTP Linux
+      - "2323:2323" # Telnet Linux
+      - "1053:1053/udp" # DNS Windows
+      - "139:139"   # NetBIOS Windows
+      - "389:389"   # LDAP Windows
+      - "636:636"   # LDAPS Windows
+      - "1433:1433" # MSSQL Windows
+      - "3389:3389" # RDP Windows
+      - "1445:1445" # SMB Windows
+      - "135:135"   # RPC Windows
+      # Windows UDP Decoy Ports
+      - "5355:5355/udp" # LLMNR Windows
+      - "137:137/udp"  # NBTNNS Windows
     environment:
-      <<: *backend-env
+      HONEYPOT_HOST: "0.0.0.0"
+      HONEYPOT_PROFILE: "windows_server"
+      HONEYPOT_WEB_ENABLED: "true"
+      HONEYPOT_WEB_HOST: "0.0.0.0"
+      HONEYPOT_WEB_PORT: "8000"
+      HONEYPOT_LOG_PATH: "/app/logs/events.jsonl"
+      HONEYPOT_DB_URL: "postgresql://honeypot:honeypot_password@postgres:5432/honeypot"
+      HONEYPOT_AUTH_USERNAME: "${HONEYPOT_AUTH_USERNAME:-admin}"
+      HONEYPOT_AUTH_PASSWORD: "${HONEYPOT_AUTH_PASSWORD:-admin123}"
     volumes:
       - honeypot_logs:/app/logs
-    restart: unless-stopped
-
-  honeypot-ti:
-    build: ./backend
-    container_name: honeypot-ti
-    user: "honeypot:honeypot"
-    depends_on:
-      - postgres
-    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "ti"]
-    environment:
-      <<: *backend-env
+      # Bind mount config.yaml from project root
+      - ./config.yaml:/app/config.yaml
     restart: unless-stopped
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: honeypot-frontend
     ports:
       - "8000:80"
@@ -119,5 +73,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  honeypot_logs:
   pgdata:
+  honeypot_logs:

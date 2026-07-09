@@ -4,13 +4,13 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/start-lan.sh [--ip LAN_IP] [--parent IFACE] [--subnet CIDR] [--gateway IP] [--network NAME] [--detached] [--recreate-network]
+  backend/scripts/start-lan.sh [--ip LAN_IP] [--parent IFACE] [--subnet CIDR] [--gateway IP] [--network NAME] [--detached] [--recreate-network]
 
 Examples:
-  scripts/start-lan.sh --ip 192.168.1.240
-  scripts/start-lan.sh --ip 192.168.1.240 --parent eth0 --subnet 192.168.1.0/24 --gateway 192.168.1.1
-  scripts/start-lan.sh --ip 192.168.1.240 --recreate-network
-  scripts/start-lan.sh --detached
+  backend/scripts/start-lan.sh --ip 192.168.1.240
+  backend/scripts/start-lan.sh --ip 192.168.1.240 --parent eth0 --subnet 192.168.1.0/24 --gateway 192.168.1.1
+  backend/scripts/start-lan.sh --ip 192.168.1.240 --recreate-network
+  backend/scripts/start-lan.sh --detached
 
 If --ip is omitted, the script proposes a high address in the detected /24 subnet.
 Reserve the selected IP in your router/DHCP server when possible.
@@ -253,7 +253,7 @@ if (( SETUP_ONLY )); then
   exit 0
 fi
 
-echo "Starting Honeypot Orchestrator LAN mode"
+echo "Starting Honeypot Orchestrator LAN mode (Go)"
 echo "  Interface : $HONEYPOT_LAN_PARENT"
 echo "  Subnet    : $HONEYPOT_LAN_SUBNET"
 echo "  Gateway   : $HONEYPOT_LAN_GATEWAY"
@@ -264,7 +264,7 @@ echo "  Dashboard : http://$IFACE_IP (Ana makinenizin IP'si)"
 if (( DETACHED )); then
   docker compose -f docker-compose.lan.yml up --build -d
   echo "Container network details:"
-  docker inspect honeypot-decoy-lan \
+  docker inspect honeypot-web-lan \
     --format '  IP={{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} Gateway={{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}'
   echo "Published host ports (Frontend):"
   docker inspect honeypot-frontend-lan \

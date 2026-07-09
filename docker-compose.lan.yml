@@ -1,48 +1,4 @@
-x-backend-env: &backend-env
-  HONEYPOT_HOST: "0.0.0.0"
-  HONEYPOT_LAN_IP: "${HONEYPOT_LAN_IP:-}"
-  HONEYPOT_PROFILE: "empty"
-  HONEYPOT_WEB_HOST: "0.0.0.0"
-  HONEYPOT_WEB_PORT: "8000"
-  HONEYPOT_SERVICE_HTTP_LINUX_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_HTTP_LINUX_PORT: "8080"
-  HONEYPOT_SERVICE_HTTP_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_HTTP_WINDOWS_PORT: "80"
-  HONEYPOT_SERVICE_SSH_LINUX_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_SSH_LINUX_PORT: "22"
-  HONEYPOT_SERVICE_SSH_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_SSH_WINDOWS_PORT: "22"
-  HONEYPOT_SERVICE_FTP_LINUX_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_FTP_LINUX_PORT: "21"
-  HONEYPOT_SERVICE_TELNET_LINUX_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_TELNET_LINUX_PORT: "23"
-  HONEYPOT_SERVICE_DNS_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_DNS_WINDOWS_PORT: "53"
-  HONEYPOT_SERVICE_NETBIOS_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_NETBIOS_WINDOWS_PORT: "139"
-  HONEYPOT_SERVICE_LDAP_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_LDAP_WINDOWS_PORT: "389"
-  HONEYPOT_SERVICE_LDAPS_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_LDAPS_WINDOWS_PORT: "636"
-  HONEYPOT_SERVICE_MSSQL_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_MSSQL_WINDOWS_PORT: "1433"
-  HONEYPOT_SERVICE_RDP_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_RDP_WINDOWS_PORT: "3389"
-  HONEYPOT_SERVICE_SMB_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_SMB_WINDOWS_PORT: "445"
-  HONEYPOT_SERVICE_LLMNR_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_LLMNR_WINDOWS_PORT: "5355"
-  HONEYPOT_SERVICE_NBTNNS_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_NBTNNS_WINDOWS_PORT: "137"
-  HONEYPOT_SERVICE_RPC_WINDOWS_HOST: "0.0.0.0"
-  HONEYPOT_SERVICE_RPC_WINDOWS_PORT: "135"
-  HONEYPOT_AUTH_USERNAME: "${HONEYPOT_AUTH_USERNAME:-admin}"
-  HONEYPOT_AUTH_PASSWORD: "${HONEYPOT_AUTH_PASSWORD:-admin123}"
-  HONEYPOT_SECRET_KEY: "${HONEYPOT_SECRET_KEY:-}"
-  HONEYPOT_TI_ABUSEIPDB_KEY: "${HONEYPOT_TI_ABUSEIPDB_KEY:-}"
-  HONEYPOT_TI_GREYNOISE_KEY: "${HONEYPOT_TI_GREYNOISE_KEY:-}"
-  HONEYPOT_LOG_PATH: "/app/logs/events.jsonl"
-  HONEYPOT_DB_URL: "postgresql+asyncpg://honeypot:honeypot_password@postgres:5432/honeypot"
+version: '3.8'
 
 services:
   postgres:
@@ -57,66 +13,41 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
-  honeypot-decoy:
-    build: ./backend
-    container_name: honeypot-decoy-lan
+
+  honeypot-web:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: honeypot-web-lan
     depends_on:
       - postgres
-    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "decoy"]
+    privileged: true
+    cap_add:
+      - NET_ADMIN
     environment:
-      <<: *backend-env
+      HONEYPOT_HOST: "0.0.0.0"
+      HONEYPOT_PROFILE: "windows_server"
+      HONEYPOT_WEB_ENABLED: "true"
+      HONEYPOT_WEB_HOST: "0.0.0.0"
+      HONEYPOT_WEB_PORT: "8000"
+      HONEYPOT_LOG_PATH: "/app/logs/events.jsonl"
+      HONEYPOT_DB_URL: "postgresql://honeypot:honeypot_password@postgres:5432/honeypot"
+      HONEYPOT_AUTH_USERNAME: "${HONEYPOT_AUTH_USERNAME:-admin}"
+      HONEYPOT_AUTH_PASSWORD: "${HONEYPOT_AUTH_PASSWORD:-admin123}"
     volumes:
       - honeypot_logs:/app/logs
+      # Bind mount config.yaml from project root
+      - ./config.yaml:/app/config.yaml
     networks:
       a_macvlan:
         ipv4_address: "${HONEYPOT_LAN_IP:?Set HONEYPOT_LAN_IP to the reserved LAN IP for the container}"
       default:
     restart: unless-stopped
 
-  honeypot-system:
-    build: ./backend
-    container_name: honeypot-system-lan
-    depends_on:
-      - postgres
-    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "system"]
-    network_mode: "service:honeypot-decoy"
-    cap_add:
-      - NET_ADMIN
-    privileged: true
-    environment:
-      <<: *backend-env
-    volumes:
-      - honeypot_logs:/app/logs
-    restart: unless-stopped
-
-  honeypot-web:
-    build: ./backend
-    container_name: honeypot-web-lan
-    user: "honeypot:honeypot"
-    depends_on:
-      - postgres
-    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "web"]
-    ports:
-      - "8080:8000"
-    environment:
-      <<: *backend-env
-    volumes:
-      - honeypot_logs:/app/logs
-    restart: unless-stopped
-
-  honeypot-ti:
-    build: ./backend
-    container_name: honeypot-ti-lan
-    user: "honeypot:honeypot"
-    depends_on:
-      - postgres
-    command: ["python", "cli.py", "--config", "config.yaml", "--mode", "ti"]
-    environment:
-      <<: *backend-env
-    restart: unless-stopped
-
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: honeypot-frontend-lan
     ports:
       - "80:80"
@@ -125,8 +56,8 @@ services:
     restart: unless-stopped
 
 volumes:
-  honeypot_logs:
   pgdata:
+  honeypot_logs:
 
 networks:
   a_macvlan:
