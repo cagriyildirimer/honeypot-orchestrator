@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -85,6 +86,12 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 	defer o.mu.Unlock()
 
 	o.ctx, o.cancel = context.WithCancel(ctx)
+
+	if os.Getenv("HONEYPOT_DECOYS_ENABLED") == "false" {
+		log.Println("[ORCHESTRATOR] Running in Web-only mode. Decoy services disabled.")
+		return nil
+	}
+
 	o.mangler.Start()
 
 	// Initial load state from DB or set default config state
@@ -120,6 +127,10 @@ func (o *Orchestrator) Stop() error {
 		o.cancel()
 	}
 	o.wg.Wait()
+
+	if os.Getenv("HONEYPOT_DECOYS_ENABLED") == "false" {
+		return nil
+	}
 
 	o.mangler.Stop()
 	system.CleanupFirewall()
@@ -390,25 +401,54 @@ type WebServiceStatus struct {
 }
 
 func (o *Orchestrator) GetServicesStatus(displayHost string) []WebServiceStatus {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+	// Read state from database to get latest active profile, overrides, and running services
+	state, err := o.getDBState(context.Background())
+	var activeProfile string
+	var overrides map[string]bool
+	runningMap := make(map[string]bool)
 
-	// Determine visible services for active profile
-	prof := profiles.GetProfile(o.activeProfile)
+	if err == nil {
+		activeProfile = state.ActiveProfile
+		overrides = state.ServiceOverrides
+		for _, s := range state.RunningServices {
+			runningMap[s] = true
+		}
+	} else {
+		// Fallback to local memory values
+		o.mu.Lock()
+		activeProfile = o.activeProfile
+		overrides = o.overrides
+		for name, svc := range o.services {
+			if svc.IsRunning() {
+				runningMap[name] = true
+			}
+		}
+		o.mu.Unlock()
+	}
+
+	// Override displayHost if HONEYPOT_LAN_IP is set
+	targetDisplayHost := displayHost
+	if lanIP := os.Getenv("HONEYPOT_LAN_IP"); lanIP != "" {
+		targetDisplayHost = lanIP
+	}
+
+	prof := profiles.GetProfile(activeProfile)
 	visible := make(map[string]bool)
 	if prof != nil {
 		for _, s := range prof.Services {
 			visible[s] = true
 		}
 	}
-	// Manual overrides can make services visible too
-	for name, enabled := range o.overrides {
+	for name, enabled := range overrides {
 		if enabled {
 			visible[name] = true
 		}
 	}
 
 	var list []WebServiceStatus
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
 	for name, svc := range o.services {
 		if !visible[name] {
 			continue
@@ -429,14 +469,15 @@ func (o *Orchestrator) GetServicesStatus(displayHost string) []WebServiceStatus 
 
 		list = append(list, WebServiceStatus{
 			Name:        name,
-			Host:        svc.PortNameHost(), // Will fallback or return custom host
-			DisplayHost: displayHost,
+			Host:        svc.PortNameHost(),
+			DisplayHost: targetDisplayHost,
 			Template:    tmpl,
 			Port:        svc.Port(),
-			Running:     svc.IsRunning(),
+			Running:     runningMap[name],
 			Enabled:     enabled,
 		})
 	}
+
 	sort.Slice(list, func(i, j int) bool {
 		return list[i].Name < list[j].Name
 	})

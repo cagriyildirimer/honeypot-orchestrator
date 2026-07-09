@@ -264,7 +264,7 @@ echo "  Dashboard : http://$IFACE_IP (Ana makinenizin IP'si)"
 if (( DETACHED )); then
   docker compose -f docker-compose.lan.yml up --build -d
   echo "Container network details:"
-  docker inspect honeypot-web-lan \
+  docker inspect honeypot-decoys-lan \
     --format '  IP={{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}} Gateway={{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}'
   echo "Published host ports (Frontend):"
   docker inspect honeypot-frontend-lan \
