@@ -215,7 +215,8 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 	var attackers []map[string]interface{}
 	torCount := 0
 	cloudCount := 0
-	var abuseScores []float64
+	var weightedAbuseSum float64
+	var totalAbuseWeight float64
 
 	for _, ip := range topIPs {
 		count := ipCounts[ip]
@@ -233,7 +234,13 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 				}
 				if abuseVal, exists := details["abuse_score"]; exists {
 					if fScore, ok := abuseVal.(float64); ok {
-						abuseScores = append(abuseScores, fScore)
+						// Calculate weight based on event count and score severity
+						// Weight = event_count * (abuse_score + 1.0)
+						// This ensures highly malicious active IPs hold major weight,
+						// and low-abuse IPs don't unfairly pull down the average.
+						weight := float64(count) * (fScore + 1.0)
+						weightedAbuseSum += fScore * weight
+						totalAbuseWeight += weight
 					}
 				}
 				continue
@@ -248,12 +255,8 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var avgAbuse interface{} = "N/A"
-	if len(abuseScores) > 0 {
-		sum := 0.0
-		for _, s := range abuseScores {
-			sum += s
-		}
-		avgAbuse = sum / float64(len(abuseScores))
+	if totalAbuseWeight > 0 {
+		avgAbuse = int((weightedAbuseSum / totalAbuseWeight) + 0.5)
 	}
 
 	JSONResponse(w, http.StatusOK, map[string]interface{}{
