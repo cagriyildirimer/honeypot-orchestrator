@@ -14,6 +14,7 @@ import (
 	"honeypot-orchestrator/backend/internal/database"
 	"honeypot-orchestrator/backend/internal/profiles"
 	"honeypot-orchestrator/backend/internal/services"
+	"honeypot-orchestrator/backend/internal/ti"
 )
 
 type CSRFResponse struct {
@@ -133,6 +134,106 @@ func (s *Server) HandleStatus(w http.ResponseWriter, r *http.Request) {
 			Host:        s.config.Web.Host,
 			DisplayHost: displayHost,
 			Port:        s.config.Web.Port,
+		},
+	})
+}
+
+func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	cutoff := time.Now().Add(-24 * time.Hour)
+
+	// Fetch top 10 external attacker IPs in the last 24 hours
+	query := `
+		SELECT src_ip, COUNT(*) as count 
+		FROM events 
+		WHERE src_ip IS NOT NULL AND src_ip != '' AND timestamp >= $1 
+		GROUP BY src_ip 
+		ORDER BY count DESC 
+		LIMIT 10
+	`
+	rows, err := s.db.Pool.Query(ctx, query, cutoff)
+	if err != nil {
+		JSONResponse(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var topIPs []string
+	ipCounts := make(map[string]int)
+
+	for rows.Next() {
+		var ip string
+		var count int
+		if err := rows.Scan(&ip, &count); err == nil && ip != "" {
+			if !ti.IsPrivateIP(ip) {
+				topIPs = append(topIPs, ip)
+				ipCounts[ip] = count
+			}
+		}
+	}
+
+	var attackers []map[string]interface{}
+	torCount := 0
+	cloudCount := 0
+	var abuseScores []float64
+
+	cached, err := s.db.GetThreatIntelBulk(ctx, topIPs)
+	if err == nil {
+		for _, ip := range topIPs {
+			count := ipCounts[ip]
+			if cachedJSON, exists := cached[ip]; exists {
+				var details map[string]interface{}
+				if err := json.Unmarshal([]byte(cachedJSON), &details); err == nil {
+					details["event_count"] = count
+					attackers = append(attackers, details)
+
+					if isTor, _ := details["is_tor"].(bool); isTor {
+						torCount++
+					}
+					if cloud, _ := details["cloud_provider"].(string); cloud != "" {
+						cloudCount++
+					}
+					if abuseVal, exists := details["abuse_score"]; exists {
+						if fScore, ok := abuseVal.(float64); ok {
+							abuseScores = append(abuseScores, fScore)
+						}
+					}
+					continue
+				}
+			}
+			// Fallback for pending analysis
+			attackers = append(attackers, map[string]interface{}{
+				"ip":          ip,
+				"status":      "Pending Analysis",
+				"event_count": count,
+			})
+		}
+	} else {
+		// If DB error, just return all as pending analysis
+		for _, ip := range topIPs {
+			attackers = append(attackers, map[string]interface{}{
+				"ip":          ip,
+				"status":      "Pending Analysis",
+				"event_count": ipCounts[ip],
+			})
+		}
+	}
+
+	var avgAbuse interface{} = "N/A"
+	if len(abuseScores) > 0 {
+		sum := 0.0
+		for _, s := range abuseScores {
+			sum += s
+		}
+		avgAbuse = sum / float64(len(abuseScores))
+	}
+
+	JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"attackers": attackers,
+		"summary": map[string]interface{}{
+			"tor_count":       torCount,
+			"cloud_count":     cloudCount,
+			"avg_abuse_score": avgAbuse,
 		},
 	})
 }

@@ -29,6 +29,7 @@ services:
       HONEYPOT_PROFILE: "windows_server"
       HONEYPOT_WEB_ENABLED: "true"
       HONEYPOT_DECOYS_ENABLED: "false"
+      HONEYPOT_TI_WORKER_ENABLED: "false"
       HONEYPOT_WEB_HOST: "0.0.0.0"
       HONEYPOT_WEB_PORT: "8000"
       HONEYPOT_LOG_PATH: "/app/logs/events.jsonl"
@@ -57,6 +58,7 @@ services:
       HONEYPOT_PROFILE: "windows_server"
       HONEYPOT_WEB_ENABLED: "false"
       HONEYPOT_DECOYS_ENABLED: "true"
+      HONEYPOT_TI_WORKER_ENABLED: "false"
       HONEYPOT_LOG_PATH: "/app/logs/events.jsonl"
       HONEYPOT_DB_URL: "postgresql://honeypot:honeypot_password@postgres:5432/honeypot"
       HONEYPOT_LAN_IP: "${HONEYPOT_LAN_IP:-}"
@@ -85,6 +87,29 @@ services:
       a_macvlan:
         ipv4_address: "${HONEYPOT_LAN_IP:?Set HONEYPOT_LAN_IP to the reserved LAN IP for the container}"
       default:
+    restart: unless-stopped
+
+  honeypot-ti:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: honeypot-ti-lan
+    depends_on:
+      - postgres
+    environment:
+      HONEYPOT_HOST: "0.0.0.0"
+      HONEYPOT_PROFILE: "windows_server"
+      HONEYPOT_WEB_ENABLED: "false"
+      HONEYPOT_DECOYS_ENABLED: "false"
+      HONEYPOT_TI_WORKER_ENABLED: "true"
+      HONEYPOT_LOG_PATH: "/app/logs/events.jsonl"
+      HONEYPOT_DB_URL: "postgresql://honeypot:honeypot_password@postgres:5432/honeypot"
+      HONEYPOT_TI_ABUSEIPDB_KEY: "${HONEYPOT_TI_ABUSEIPDB_KEY:-}"
+      HONEYPOT_TI_GREYNOISE_KEY: "${HONEYPOT_TI_GREYNOISE_KEY:-}"
+    volumes:
+      - honeypot_logs:/app/logs
+      # Bind mount config.yaml from project root
+      - ./config.yaml:/app/config.yaml
     restart: unless-stopped
 
   frontend:

@@ -18,6 +18,7 @@ import (
 	_ "honeypot-orchestrator/backend/internal/services/udp"
 	"honeypot-orchestrator/backend/internal/siem"
 	"honeypot-orchestrator/backend/internal/system"
+	"honeypot-orchestrator/backend/internal/ti"
 	"honeypot-orchestrator/backend/internal/web"
 )
 
@@ -84,6 +85,10 @@ func main() {
 				log.Printf("Web API Server error: %v\n", err)
 			}
 		}()
+	}
+
+	if os.Getenv("HONEYPOT_TI_WORKER_ENABLED") == "true" {
+		ti.StartWorker(runCtx, db, appCfg)
 	}
 
 	eventLogger.Log(map[string]interface{}{

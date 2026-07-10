@@ -143,6 +143,7 @@ func (s *Server) StartServer(ctx context.Context) error {
 		r.Get("/api/session", s.HandleSession)
 		r.Get("/api/status", s.HandleStatus)
 		r.Get("/api/overview", s.HandleOverview)
+		r.Get("/api/threat-intel", s.HandleThreatIntel)
 		r.Get("/api/events", s.HandleEvents)
 		r.Get("/api/stats", s.HandleStats)
 		r.Get("/api/alerts/stream", s.alertStreamer.ServeHTTP)

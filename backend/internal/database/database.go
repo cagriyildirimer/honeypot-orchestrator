@@ -259,3 +259,35 @@ func (db *DB) SaveSystemSetting(ctx context.Context, key, value string) error {
 	_, err := db.Pool.Exec(ctx, query, key, value)
 	return err
 }
+
+func (db *DB) GetThreatIntelBulk(ctx context.Context, ips []string) (map[string]string, error) {
+	results := make(map[string]string)
+	if len(ips) == 0 {
+		return results, nil
+	}
+	query := "SELECT ip, data FROM threat_intel_cache WHERE ip = ANY($1) AND updated_at > NOW() - INTERVAL '1 hour'"
+	rows, err := db.Pool.Query(ctx, query, ips)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var ip, data string
+		if err := rows.Scan(&ip, &data); err == nil {
+			results[ip] = data
+		}
+	}
+	return results, nil
+}
+
+func (db *DB) SaveThreatIntel(ctx context.Context, ip string, dataJSON string) error {
+	query := `
+		INSERT INTO threat_intel_cache (ip, data, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (ip) DO UPDATE
+		SET data = EXCLUDED.data, updated_at = NOW()
+	`
+	_, err := db.Pool.Exec(ctx, query, ip, dataJSON)
+	return err
+}
