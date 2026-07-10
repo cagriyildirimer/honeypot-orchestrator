@@ -191,15 +191,6 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 		abuseKey := s.config.ThreatIntel.AbuseIPDBKey
 		greyKey := s.config.ThreatIntel.GreyNoiseKey
 
-		dbAbuseKey, err := s.db.GetSystemSetting(ctx, "ti_abuseipdb_key")
-		if err == nil && dbAbuseKey != "" {
-			abuseKey = dbAbuseKey
-		}
-		dbGreyKey, err := s.db.GetSystemSetting(ctx, "ti_greynoise_key")
-		if err == nil && dbGreyKey != "" {
-			greyKey = dbGreyKey
-		}
-
 		if envAbuse := os.Getenv("HONEYPOT_TI_ABUSEIPDB_KEY"); envAbuse != "" {
 			abuseKey = envAbuse
 		}

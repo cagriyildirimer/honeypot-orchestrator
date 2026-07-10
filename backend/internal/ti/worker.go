@@ -92,18 +92,9 @@ func analyzeAndEnrich(ctx context.Context, db *database.DB, cfg *config.AppConfi
 
 	log.Printf("[TI WORKER] Enriched cache misses: %d candidate IPs, querying Threat Intel APIs...\n", len(toEnrich))
 
-	// 3. Load AbuseIPDB and GreyNoise keys (prioritizing DB settings if saved)
+	// 3. Load AbuseIPDB and GreyNoise keys
 	abuseKey := cfg.ThreatIntel.AbuseIPDBKey
 	greyKey := cfg.ThreatIntel.GreyNoiseKey
-
-	dbAbuseKey, err := db.GetSystemSetting(dbCtx, "ti_abuseipdb_key")
-	if err == nil && dbAbuseKey != "" {
-		abuseKey = dbAbuseKey
-	}
-	dbGreyKey, err := db.GetSystemSetting(dbCtx, "ti_greynoise_key")
-	if err == nil && dbGreyKey != "" {
-		greyKey = dbGreyKey
-	}
 
 	// Environment variable overrides
 	if envAbuse := os.Getenv("HONEYPOT_TI_ABUSEIPDB_KEY"); envAbuse != "" {
