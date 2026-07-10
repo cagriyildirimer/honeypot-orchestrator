@@ -97,12 +97,14 @@ func resolveRDNS(ip string) string {
 
 func queryAbuseIPDB(ctx context.Context, ip, apiKey string) interface{} {
 	if apiKey == "" {
+		log.Printf("[TI DEBUG] AbuseIPDB API key is empty, skipping IP %s\n", ip)
 		return "N/A"
 	}
 
 	url := fmt.Sprintf("https://api.abuseipdb.com/api/v2/check?ipAddress=%s&maxAgeInDays=90", ip)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
+		log.Printf("[TI DEBUG] Failed to create request for AbuseIPDB IP %s: %v\n", ip, err)
 		return "N/A"
 	}
 	req.Header.Set("Key", apiKey)
@@ -112,30 +114,36 @@ func queryAbuseIPDB(ctx context.Context, ip, apiKey string) interface{} {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("[TI DEBUG] HTTP error querying AbuseIPDB for IP %s: %v\n", ip, err)
 		return "N/A"
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[TI DEBUG] AbuseIPDB returned status %d for IP %s\n", resp.StatusCode, ip)
 		return "N/A"
 	}
 
 	var apiResp abuseIPDBResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		log.Printf("[TI DEBUG] Failed to decode AbuseIPDB response for IP %s: %v\n", ip, err)
 		return "N/A"
 	}
 
+	log.Printf("[TI DEBUG] AbuseIPDB successfully query for IP %s: %d\n", ip, apiResp.Data.AbuseConfidenceScore)
 	return apiResp.Data.AbuseConfidenceScore
 }
 
 func queryGreyNoise(ctx context.Context, ip, apiKey string) string {
 	if apiKey == "" {
+		log.Printf("[TI DEBUG] GreyNoise API key is empty, skipping IP %s\n", ip)
 		return "N/A"
 	}
 
 	url := fmt.Sprintf("https://api.greynoise.io/v3/community/%s", ip)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
+		log.Printf("[TI DEBUG] Failed to create request for GreyNoise IP %s: %v\n", ip, err)
 		return "N/A"
 	}
 	req.Header.Set("key", apiKey)
@@ -145,22 +153,26 @@ func queryGreyNoise(ctx context.Context, ip, apiKey string) string {
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("[TI DEBUG] HTTP error querying GreyNoise for IP %s: %v\n", ip, err)
 		return "N/A"
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[TI DEBUG] GreyNoise returned status %d for IP %s\n", resp.StatusCode, ip)
 		return "N/A"
 	}
 
 	var apiResp greyNoiseResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		log.Printf("[TI DEBUG] Failed to decode GreyNoise response for IP %s: %v\n", ip, err)
 		return "N/A"
 	}
 
 	if apiResp.Classification == "" {
 		return "unknown"
 	}
+	log.Printf("[TI DEBUG] GreyNoise successfully query for IP %s: %s\n", ip, apiResp.Classification)
 	return strings.ToLower(apiResp.Classification)
 }
 
