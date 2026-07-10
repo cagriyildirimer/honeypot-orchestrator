@@ -151,7 +151,10 @@ honeypot-orchestrator/
 60. **Bildirim Kalıcılığı ve SSE Alarmlarının İngilizceye Çevrilmesi:** `NotificationBell` state verileri `localStorage` ile senkronize edilerek tarayıcıda kalıcı olmaları sağlandı. SSE yayıncısındaki tüm bildirim formatları ve şablonları tamamen İngilizceye çevrildi.
 61. **Tehdit İstihbaratı (TI Worker) Çoklu Konteyner İzolasyonu:** Tehdit İstihbaratı (TI) arka plan işleyicisi (worker) ana backend'den izole edilerek standart ve LAN compose dosyalarında `honeypot-ti` isimli bağımsız bir konteyner servisine taşındı.
 62. **Saldırgan Zaman Tüneli ve Coğrafi Aktivite Panel Entegrasyonu:** `buildFilterSQL` fonksiyonuna `src_ip` sorgu parametresi desteği eklenerek timeline sorguları düzeltildi. Haritanın soluna coğrafi konum bilgileri ve en çok hedef alınan servis bilgilerini listeleyen cam efektli yüzer panel yerleştirildi.
-63. **SIEM TCP Reconnect Desteği ve Kod Denetimi İyileştirmeleri:** SIEM TCP gönderici mekanizmasına 3 kez deneme ve kademeli bekleme (backoff) retry döngüsü eklendi. DNS UDP desteği, SMB/NetBIOS OOM/DoS korumaları ve AlertStreamer context sızıntısı giderimleri başarıyla doğrulandı.
+63. **DNS UDP Desteği Doğrulaması:** DNS decoy servisinin `BaseUDPService` yapısını kullandığı ve `1053/udp` portu üzerinden çalıştığı, compose dosyalarında UDP eşleşmelerinin doğru yapıldığı doğrulandı.
+64. **SMB ve NetBIOS OOM/DoS Sınırlandırması Doğrulaması:** `smb.go` ve `netbios.go` dosyalarında gelen paket payload uzunluklarının maksimum 64KB ile sınırlandırıldığı ve OOM zafiyetlerinin engellenmiş olduğu doğrulandı.
+65. **AlertStreamer Context Sızıntısı Giderim Doğrulaması:** AlertStreamer SSE yayıncısının `context.Background()` yerine sunucu yaşam döngüsüne bağlı root sinyal context'i ile başlatıldığı ve kaynak sızıntılarının engellendiği doğrulandı.
+66. **SIEM TCP Reconnect ve Kademeli Bekleme (Backoff) Mekanizması:** `forwarder.go` içerisinde TCP gönderim yapısı revize edilerek soket hatalarında 3 kez deneme (attempts) ve kademeli bekleme (backoff - 1s, 2s) retry mekanizması entegre edildi.
 
 ---
 
