@@ -274,9 +274,35 @@ export function NotificationBellPortal(props) {
 }
 
 export function NotificationBell() {
-  const [alerts, setAlerts] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [alerts, setAlerts] = useState(() => {
+    try {
+      const saved = localStorage.getItem("honeypot_alerts");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [unreadCount, setUnreadCount] = useState(() => {
+    try {
+      const saved = localStorage.getItem("honeypot_unread_count");
+      return saved ? parseInt(saved, 10) : 0;
+    } catch (e) {
+      return 0;
+    }
+  });
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("honeypot_alerts", JSON.stringify(alerts));
+    } catch (e) {}
+  }, [alerts]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("honeypot_unread_count", String(unreadCount));
+    } catch (e) {}
+  }, [unreadCount]);
 
   useEffect(() => {
     const es = new EventSource("/api/alerts/stream");
@@ -381,8 +407,8 @@ export function GeoWorldMap(props) {
       const initialHeight = Math.min(400, Math.max(250, initialWidth * 0.5));
 
       globeRef.current = window.Globe()(containerRef.current)
-        .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-        .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+        .globeImageUrl('/vendor/earth-blue-marble.jpg')
+        .bumpImageUrl('/vendor/earth-topology.png')
         .backgroundColor('rgba(0,0,0,0)')
         .width(initialWidth)
         .height(initialHeight)

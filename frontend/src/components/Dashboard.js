@@ -105,9 +105,42 @@ export function DashboardPage(props) {
         "div",
         { className: "section-heading" },
         h("div", null, h("h2", null, "Attacker Origins"), h("p", null, "Geographic distribution of suspicious IPs (last 24h).")),
-        h("span", { className: "status-counter" }, `${(payload.geo_markers || []).length} locations`)
+        h("span", { className: "status-counter" }, `${(stats.geo_markers || []).length} locations`)
       ),
-      h(GeoWorldMap, { markers: payload.geo_markers || [] })
+      h(
+        "div",
+        { className: "geo-map-layout" },
+        h(
+          "div",
+          { className: "geo-side-panel left-panel" },
+          h("h3", null, "Attacker Activity & Origins"),
+          h(
+            "div",
+            { className: "geo-list" },
+            (stats.geo_markers || []).slice(0, 6).map(m =>
+              h(
+                "div",
+                { className: "geo-list-item", key: m.ip },
+                h(
+                  "div",
+                  { className: "geo-ip-row" },
+                  h("span", { className: "geo-ip" }, m.ip),
+                  h("span", { className: "geo-badge count" }, `${m.most_attacked_service_count || 0} attacks`)
+                ),
+                h(
+                  "div",
+                  { className: "geo-detail" },
+                  h("span", { className: "value" }, `${m.city ? m.city + ', ' : ''}${m.country || 'Unknown'}`),
+                  h("span", { style: { margin: "0 6px", opacity: 0.5 } }, "•"),
+                  h("span", { className: "label" }, "Target: "),
+                  h("span", { className: "value" }, m.most_attacked_service || "unknown")
+                )
+              )
+            )
+          )
+        ),
+        h(GeoWorldMap, { markers: stats.geo_markers || [] })
+      )
     ),
 
     h(

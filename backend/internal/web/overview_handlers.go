@@ -299,6 +299,10 @@ func buildFilterSQL(queryValues map[string][]string) (string, []interface{}) {
 	if vals := queryValues["event_type"]; len(vals) > 0 {
 		eventFilter = strings.TrimSpace(strings.ToLower(vals[0]))
 	}
+	srcIPFilter := ""
+	if vals := queryValues["src_ip"]; len(vals) > 0 {
+		srcIPFilter = strings.TrimSpace(vals[0])
+	}
 	excludeSystem := false
 	if vals := queryValues["exclude_system"]; len(vals) > 0 {
 		excludeSystem = vals[0] == "true"
@@ -320,6 +324,11 @@ func buildFilterSQL(queryValues map[string][]string) (string, []interface{}) {
 	if eventFilter != "" {
 		conds = append(conds, fmt.Sprintf("event_type = $%d", argIdx))
 		args = append(args, eventFilter)
+		argIdx++
+	}
+	if srcIPFilter != "" {
+		conds = append(conds, fmt.Sprintf("src_ip = $%d", argIdx))
+		args = append(args, srcIPFilter)
 		argIdx++
 	}
 	if excludeSystem {
@@ -407,6 +416,37 @@ func formatEventMap(evt database.Event) map[string]interface{} {
 	return eventData
 }
 
+func (s *Server) getMostAttackedServices(ctx context.Context, since time.Time) (map[string]string, map[string]int) {
+	mostAttacked := make(map[string]string)
+	mostAttackedCount := make(map[string]int)
+
+	svcQuery := `
+		SELECT DISTINCT ON (src_ip) src_ip, service, COUNT(*) as svc_count
+		FROM events
+		WHERE timestamp >= $1
+		  AND src_ip IS NOT NULL
+		  AND src_ip != '127.0.0.1'
+		  AND src_ip != '::1'
+		  AND src_ip != 'localhost'
+		  AND src_ip != 'unknown'
+		GROUP BY src_ip, service
+		ORDER BY src_ip, svc_count DESC
+	`
+	rows, err := s.db.Pool.Query(ctx, svcQuery, since)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var ip, svc string
+			var count int
+			if err := rows.Scan(&ip, &svc, &count); err == nil {
+				mostAttacked[ip] = svc
+				mostAttackedCount[ip] = count
+			}
+		}
+	}
+	return mostAttacked, mostAttackedCount
+}
+
 func (s *Server) getCachedStats(ctx context.Context) map[string]interface{} {
 	s.statsMu.Lock()
 	defer s.statsMu.Unlock()
@@ -491,6 +531,7 @@ func (s *Server) getCachedStats(ctx context.Context) map[string]interface{} {
 	}
 
 	geoResults := BulkLookup(topIPsList)
+	mostAttacked, mostAttackedCount := s.getMostAttackedServices(ctx, since24h)
 	var geoMarkers []map[string]interface{}
 	seenCoords := make(map[string]bool)
 
@@ -506,12 +547,14 @@ func (s *Server) getCachedStats(ctx context.Context) map[string]interface{} {
 		seenCoords[coordKey] = true
 
 		geoMarkers = append(geoMarkers, map[string]interface{}{
-			"ip":      ip,
-			"lat":     info.Lat,
-			"lon":     info.Lon,
-			"country": info.Country,
-			"city":    info.City,
-			"count":   ipTotals[ip],
+			"ip":                          ip,
+			"lat":                         info.Lat,
+			"lon":                         info.Lon,
+			"country":                     info.Country,
+			"city":                        info.City,
+			"count":                       ipTotals[ip],
+			"most_attacked_service":       mostAttacked[ip],
+			"most_attacked_service_count": mostAttackedCount[ip],
 		})
 	}
 
@@ -760,6 +803,7 @@ func (s *Server) HandleOverview(w http.ResponseWriter, r *http.Request) {
 		}
 
 		geoResults := BulkLookup(topIPsList)
+		mostAttacked, mostAttackedCount := s.getMostAttackedServices(ctx, since24h)
 		var geoMarkers []map[string]interface{}
 		seenCoords := make(map[string]bool)
 
@@ -775,12 +819,14 @@ func (s *Server) HandleOverview(w http.ResponseWriter, r *http.Request) {
 			seenCoords[coordKey] = true
 
 			geoMarkers = append(geoMarkers, map[string]interface{}{
-				"ip":      ip,
-				"lat":     info.Lat,
-				"lon":     info.Lon,
-				"country": info.Country,
-				"city":    info.City,
-				"count":   ipTotals[ip],
+				"ip":                          ip,
+				"lat":                         info.Lat,
+				"lon":                         info.Lon,
+				"country":                     info.Country,
+				"city":                        info.City,
+				"count":                       ipTotals[ip],
+				"most_attacked_service":       mostAttacked[ip],
+				"most_attacked_service_count": mostAttackedCount[ip],
 			})
 		}
 

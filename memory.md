@@ -263,7 +263,26 @@ Faz 1, Faz 2 ve Faz 3 öncesinde `go-backend/` kod tabanı üzerinde yapılan an
 - **Sorun:** Derlenmiş binary deposu kirletiyordu.
 - **Çözüm:** Fiziksel binary git/dizin geçmişinden tamamen silindi ve `.gitignore` ile dışlandı.
 
-#### 57. Kapsamlı Kod Denetimi ve Analiz Raporu Hazırlanması
+#### 57. Kapsamlı Kod Denetimi Raporu Hazırlanması
 - **Sorun:** Yeni Go mimarisi ve React frontend kod tabanı üzerindeki tüm olası mantıksal hataların, güvenlik açıklarının, ölü kodların ve dizin yapısı eksikliklerinin detaylı analiz edilmesi gerekiyordu.
 - **Çözüm:** Tüm kodlar baştan sona denetlendi. Yeni Go yapısındaki kritik açıklar (DNS UDP eksikliği, SMB/NetBIOS sınırsız bellek tahsisi DoS riski, AlertStreamer goroutine sızıntısı vb.) tespit edildi. [code_audit_report.md](file:///c:/Users/BERN/.gemini/antigravity-ide/brain/e39bd832-d5ec-4016-b5f5-1677a695bf48/code_audit_report.md) güncellenerek detaylı bir şekilde raporlandı ve yapılacaklar listesine eklendi.
 
+#### 58. MITRE ATT&CK Desteği ve `/api/analyze` Uç Noktası
+- **Sorun:** Arayüz analiz sayfasındaki Adversary Cyber Kill Chain ve coğrafi dağılım panelleri çalışmıyordu çünkü Go backend tarafında `/api/analyze` uç noktası ve MITRE eşleme logic'i bulunmuyordu.
+- **Çözüm:** `analyze_handlers.go` oluşturulup olayları MITRE tekniklerine eşleyen `mapEventToMitre` fonksiyonu, saatlik timeline ve ülke bazlı kırılım analizi kodlandı. JSON serileştirmesinde boş listelerin `null` yerine `[]` dönmesi sağlanarak frontend çökme riskleri giderildi ve `/api/analyze` router'a bağlandı.
+
+#### 59. 3D Dünya Haritası Düzeltmeleri ve Çevrimdışı / LAN Uyumlaştırması
+- **Sorun:** Dashboard üzerindeki saldırgan konum kırmızı noktaları görüntülenmiyordu. Ayrıca 3D dünya haritası doku görsellerini unpkg.com'dan çektiği için internet bağlantısı olmayan kapalı ağlarda (LAN modunda) harita yüklenmiyordu.
+- **Çözüm:** `Dashboard.js`'deki veri okuma kaynağı `payload.geo_markers` yerine `stats.geo_markers` olarak düzeltilip saldırı noktaları aktif edildi. Harita doku dosyaları (`earth-blue-marble.jpg` ve `earth-topology.png`) yerel `/vendor/` dizinine indirilip `Core.js` üzerinden yerel yollarla çağrılarak uygulama %100 çevrimdışı çalışmaya hazır hale getirildi.
+
+#### 60. Bildirim Kalıcılığı ve SSE Alarmlarının İngilizceye Çevrilmesi
+- **Sorun:** Sayfa yenilendiğinde veya sekmeler arası geçişte web alarmları kayboluyordu. Ayrıca bildirimler Türkçe üretiliyordu.
+- **Çözüm:** `NotificationBell` state verileri `localStorage` ile entegre edilerek tarayıcıda kalıcı olmaları sağlandı. SSE yayıncısındaki (`alert_streamer.go`) tüm bildirim formatları ve şablonları tamamen İngilizceye çevrildi.
+
+#### 61. Tehdit İstihbaratı (TI Worker) Çoklu Konteyner İzolasyonu
+- **Sorun:** Tehdit İstihbaratı (TI) arka plan işleyicisi (worker) ana backend üzerinde gereksiz yük oluşturuyordu ve izole edilmesi istenmişti.
+- **Çözüm:** `docker-compose.yml` (Production/WAN) ve `docker-compose.lan.yml` dosyalarına `honeypot-ti` bağımsız servis konteyneri eklendi. Ana `honeypot-web` konteynerinde TI worker pasifleştirildi (`HONEYPOT_TI_WORKER_ENABLED: "false"`), TI worker ise izole bir şekilde ayrı konteynerde çalıştırıldı.
+
+#### 62. Saldırgan Zaman Tüneli ve Coğrafi Aktivite Panel Entegrasyonu
+- **Sorun:** "Attacker Behavior Timeline" filtresi seçilen IP'ye özel çalışmıyordu ve 3D dünya haritasının kenarlarında görsel zenginleştirme eksikti.
+- **Çözüm:** `buildFilterSQL` fonksiyonuna `src_ip` sorgu parametresi desteği eklenerek timeline sorguları düzeltildi. Haritanın soluna yerleştirilen "Attacker Activity & Origins" paneliyle, IP bazlı coğrafi konum bilgileri ve `DISTINCT ON (src_ip)` ile en çok hedef alınan servis ile saldırı adetleri listelendi. Görsel bütünlük için paneller cam efektiyle (glassmorphism) haritanın üzerine yüzer şekilde sol tarafa hizalandı.

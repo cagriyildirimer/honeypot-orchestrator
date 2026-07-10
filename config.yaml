@@ -14,8 +14,8 @@ auth:
   password: "admin123"
 
 threat_intel:
-  abuseipdb_key: ""
-  greynoise_key: ""
+  abuseipdb_key: "96e14e0602a135c6d2f1bc5b4ba42b8828da6da4b9af835a3d34776f3635878c73ac94423d4bfe19"
+  greynoise_key: "api.greynoise.io/v3/community"
 
 services:
   http_linux:

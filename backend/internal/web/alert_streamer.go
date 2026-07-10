@@ -135,13 +135,13 @@ func (as *AlertStreamer) pollEvents(ctx context.Context) {
 						Type:    "aggregated",
 						SrcIP:   ip,
 						Count:   count,
-						Summary: fmt.Sprintf("Yüksek yoğunluklu şüpheli aktivite (Port Tarama/Flood) tespit edildi: %d istek.", count),
+						Summary: fmt.Sprintf("High-density suspicious activity (Port Scan/Flood) detected: %d requests.", count),
 					})
 				} else {
 					for _, e := range evs {
 						sum := e.Summary
 						if sum == "" {
-							sum = fmt.Sprintf("%s üzerinde %s tespit edildi.", e.Service, e.EventType)
+							sum = fmt.Sprintf("Detected %s on %s.", e.EventType, e.Service)
 						}
 						alerts = append(alerts, AlertPayload{
 							Type:      "individual",
