@@ -18,6 +18,8 @@ import time
 import os
 import re
 from datetime import datetime, timezone
+import urllib.request
+import urllib.error
 
 # ---------------------------------------------------------------------------
 # Rich-ish console helpers (no dependency)
@@ -192,35 +194,26 @@ def _http_request(host: str, port: int, method: str = "GET", path: str = "/",
 
 def _api_request(host: str, port: int, path: str, method: str = "GET",
                  body: dict | None = None, cookie: str = "",
-                 timeout: float = 10.0) -> dict | None:
-    headers: dict[str, str] = {
-        "Host": f"{host}:{port}",
+                 timeout: float = 15.0) -> dict | None:
+    url = f"http://{host}:{port}{path}"
+    headers = {
         "User-Agent": "ThreatIntelTest/1.0",
-        "Connection": "close",
         "Accept": "application/json",
     }
     if cookie:
         headers["Cookie"] = f"session={cookie}"
 
-    body_str = ""
+    data_bytes = None
     if body is not None:
-        body_str = json.dumps(body)
+        data_bytes = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
-        headers["Content-Length"] = str(len(body_str))
 
-    raw_resp = _http_request(host, port, method, path, headers, body_str, timeout)
-    if not raw_resp:
-        return None
-
-    parts = raw_resp.split("\r\n\r\n", 1)
-    if len(parts) < 2:
-        parts = raw_resp.split("\n\n", 1)
-    if len(parts) < 2:
-        return None
-
+    req = urllib.request.Request(url, data=data_bytes, headers=headers, method=method)
     try:
-        return json.loads(parts[1])
-    except (json.JSONDecodeError, IndexError):
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        _warn(f"API Request to {path} failed: {exc}")
         return None
 
 # ---------------------------------------------------------------------------
@@ -382,7 +375,7 @@ def phase3_api_check(host: str, web_port: int, username: str, password: str) -> 
     if attackers:
         print(f"\n  {BOLD}Enriched Attacker Data:{RESET}\n")
         print(f"  {'IP':<18} {'Country':<15} {'Cloud':<15} {'ASN':<12} {'Abuse':<8} {'Tor':<5} {'Events':<8} {'rDNS'}")
-        print(f"  {'─'*18} {'─'*15} {'─'*15} {'─'*12} {'─'*8} {'─'*5} {'─'*8} {'─'*30}")
+        print(f"  {'-'*18} {'-'*15} {'-'*15} {'-'*12} {'-'*8} {'-'*5} {'-'*8} {'-'*30}")
         for a in attackers:
             tor_mark = f"{RED}YES{RESET}" if a.get("is_tor") else "no"
             abuse = a.get("abuse_score", "N/A")
