@@ -174,48 +174,59 @@ func (f *Forwarder) ForwardTo(target SiemTarget, evt *database.Event) error {
 		_, err = conn.Write(payloadBytes)
 		return err
 	} else if protocol == "tcp" {
-		f.mu.Lock()
 		key := fmt.Sprintf("%s:%s:%d", target.ID, host, port)
-		conn := f.tcpConns[key]
-		f.mu.Unlock()
-
 		var writeErr error
-		if conn != nil {
-			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			_, writeErr = conn.Write(payloadBytes)
-			if writeErr != nil {
-				// Existing connection failed (e.g. broken socket). Clean up and force reconnect.
+		maxAttempts := 3
+
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			f.mu.Lock()
+			conn := f.tcpConns[key]
+			f.mu.Unlock()
+
+			if conn != nil {
+				conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				_, writeErr = conn.Write(payloadBytes)
+				if writeErr == nil {
+					return nil // Success!
+				}
+				// Write failed. Close connection and delete from map.
 				conn.Close()
 				f.mu.Lock()
-				delete(f.tcpConns, key)
+				if f.tcpConns[key] == conn {
+					delete(f.tcpConns, key)
+				}
 				f.mu.Unlock()
-				conn = nil
 			}
-		}
 
-		if conn == nil {
+			// Connection is nil or writing failed, try to reconnect
 			addr := net.JoinHostPort(host, strconv.Itoa(port))
 			var dialErr error
 			conn, dialErr = net.DialTimeout("tcp", addr, 5*time.Second)
 			if dialErr != nil {
-				return dialErr
-			}
-			f.mu.Lock()
-			f.tcpConns[key] = conn
-			f.mu.Unlock()
+				writeErr = dialErr
+			} else {
+				f.mu.Lock()
+				f.tcpConns[key] = conn
+				f.mu.Unlock()
 
-			// Retry writing with the new connection
-			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			_, writeErr = conn.Write(payloadBytes)
-			if writeErr != nil {
+				conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				_, writeErr = conn.Write(payloadBytes)
+				if writeErr == nil {
+					return nil // Success!
+				}
 				conn.Close()
 				f.mu.Lock()
-				delete(f.tcpConns, key)
+				if f.tcpConns[key] == conn {
+					delete(f.tcpConns, key)
+				}
 				f.mu.Unlock()
-				return writeErr
+			}
+
+			if attempt < maxAttempts {
+				time.Sleep(time.Duration(attempt) * time.Second) // 1s, 2s backoff
 			}
 		}
-		return nil
+		return fmt.Errorf("failed to send to TCP SIEM target after %d attempts: %w", maxAttempts, writeErr)
 	} else if protocol == "http" {
 		urlStr := host
 		if !strings.HasPrefix(urlStr, "http://") && !strings.HasPrefix(urlStr, "https://") {
