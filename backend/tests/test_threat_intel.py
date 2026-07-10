@@ -136,7 +136,8 @@ def inject_db_events(ips: list[str]) -> bool:
         
         # Clear cached threat intel entries to force backend to rebuild cache with the new API keys
         cursor.execute("DELETE FROM threat_intel_cache;")
-        _ok("Cleared stale threat_intel_cache table in database.")
+        cursor.execute("DELETE FROM events WHERE service = 'simulated' OR event_type = 'simulated_attack';")
+        _ok("Cleared stale threat_intel_cache and simulated events in database.")
 
         for ev in events_to_inject:
             cursor.execute(
