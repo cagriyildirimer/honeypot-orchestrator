@@ -135,6 +135,7 @@ func (s *Server) StartServer(ctx context.Context) error {
 	r.Get("/api/csrf", s.HandleCSRF)
 	r.Post("/api/login", s.HandleLogin)
 	r.Post("/api/logout", s.HandleLogout)
+	r.Post("/api/test/inject-event", s.HandleInjectEvent)
 
 	r.Group(func(r chi.Router) {
 		r.Use(s.SessionMiddleware)

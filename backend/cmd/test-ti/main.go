@@ -1,105 +1,88 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"flag"
-	"fmt"
+	"io"
 	"log"
-	"time"
-
-	"honeypot-orchestrator/backend/internal/config"
-	"honeypot-orchestrator/backend/internal/database"
-	"honeypot-orchestrator/backend/internal/ti"
+	"net/http"
 )
 
 func main() {
-	configPath := flag.String("config", "../../config.yaml", "Path to config.yaml file")
+	apiURL := flag.String("url", "http://localhost/api/test/inject-event", "URL of the inject-event endpoint")
 	flag.Parse()
 
-	log.Println("Starting Threat Intelligence Test Utility...")
+	log.Printf("Starting Threat Intelligence Log Injection Utility...")
+	log.Printf("Target Endpoint: %s\n", *apiURL)
 
-	appCfg, err := config.LoadConfig(*configPath)
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v\n", err)
-	}
-
-	db, err := database.Connect(context.Background(), appCfg.DBURL)
-	if err != nil {
-		log.Fatalf("Database connection failed: %v\n", err)
-	}
-	defer db.Close()
-
-	// List of test IPs to inject and enrich
-	testIPs := map[string]struct {
-		service   string
-		eventType string
-		summary   string
-	}{
-		"185.220.101.5": {
-			service:   "ssh_windows",
-			eventType: "login_failed",
-			summary:   "Failed login attempt for admin from Tor exit node",
+	// List of test IPs to inject
+	testEvents := []map[string]interface{}{
+		{
+			"service":    "ssh_windows",
+			"event_type": "login_failed",
+			"src_ip":     "185.220.101.5",
+			"src_port":   52311,
+			"summary":    "Failed login attempt for admin from Tor exit node",
+			"username":   "admin",
 		},
-		"45.143.203.14": {
-			service:   "mssql_windows",
-			eventType: "brute_force",
-			summary:   "Brute force SQL login attack",
+		{
+			"service":    "mssql_windows",
+			"event_type": "brute_force",
+			"src_ip":     "45.143.203.14",
+			"src_port":   1433,
+			"summary":    "Brute force SQL login attack",
+			"username":   "sa",
 		},
-		"1.1.1.1": {
-			service:   "http_windows",
-			eventType: "port_scan",
-			summary:   "HTTP port scanning activity detected",
+		{
+			"service":    "http_windows",
+			"event_type": "port_scan",
+			"src_ip":     "1.1.1.1",
+			"src_port":   80,
+			"summary":    "HTTP port scanning activity detected",
+			"path":       "/wp-login.php",
 		},
 	}
 
-	log.Println("\n--- Phase 1: Injecting fake attack logs into database ---")
-	for ip, details := range testIPs {
-		ipVal := ip
-		portVal := 52311
-		summaryVal := details.summary
-		detailsBytes, _ := json.Marshal(map[string]interface{}{"note": "Test simulated event"})
+	log.Println("\n--- Injecting simulated attacker events via Web API ---")
+	client := &http.Client{}
 
-		evt := &database.Event{
-			Timestamp: time.Now().Add(-10 * time.Minute),
-			Service:   details.service,
-			EventType: details.eventType,
-			SrcIP:     &ipVal,
-			SrcPort:   &portVal,
-			Summary:   &summaryVal,
-			Details:   detailsBytes,
-		}
-		if err := db.InsertEvent(context.Background(), evt); err != nil {
-			log.Printf("Failed to insert event for IP %s: %v\n", ip, err)
-		} else {
-			log.Printf("Inserted simulated attack event: IP=%s, Service=%s\n", ip, details.service)
-		}
-	}
+	for _, evt := range testEvents {
+		ip := evt["src_ip"].(string)
+		service := evt["service"].(string)
 
-	log.Println("\n--- Phase 2: Querying TI APIs (AbuseIPDB, GreyNoise, Tor, Cloud) ---")
-	ips := []string{"185.220.101.5", "45.143.203.14", "1.1.1.1"}
-	
-	abuseKey := appCfg.ThreatIntel.AbuseIPDBKey
-	greyKey := appCfg.ThreatIntel.GreyNoiseKey
-
-	log.Printf("Loaded Keys: AbuseIPDB=%t (len=%d), GreyNoise=%t (len=%d)\n",
-		abuseKey != "", len(abuseKey), greyKey != "", len(greyKey))
-
-	results := ti.EnrichAttackerIPs(context.Background(), ips, abuseKey, greyKey)
-
-	log.Println("\n--- Phase 3: Displaying results and writing to cache ---")
-	for ip, details := range results {
-		js, _ := json.MarshalIndent(details, "", "  ")
-		fmt.Printf("IP: %s\n%s\n\n", ip, string(js))
-
-		// Save directly to Cache DB so UI gets it immediately
-		err := db.SaveThreatIntel(context.Background(), ip, string(js))
+		bodyBytes, err := json.Marshal(evt)
 		if err != nil {
-			log.Printf("Failed to cache result for IP %s: %v\n", ip, err)
+			log.Printf("Failed to marshal event: %v\n", err)
+			continue
+		}
+
+		req, err := http.NewRequest("POST", *apiURL, bytes.NewBuffer(bodyBytes))
+		if err != nil {
+			log.Printf("Failed to create request: %v\n", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "HoneypotTestUtility/1.0")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("HTTP Request failed for IP %s: %v. (Check if backend/nginx is running and accessible)\n", ip, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		respBytes, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusOK {
+			log.Printf("[SUCCESS] Event logged for IP %s on service %s. API response: %s\n", ip, service, string(respBytes))
 		} else {
-			log.Printf("Saved results for IP %s to database cache.\n", ip)
+			log.Printf("[FAILED] Failed to log event for IP %s. Status: %d, Response: %s\n", ip, resp.StatusCode, string(respBytes))
 		}
 	}
 
-	log.Println("\nTI Test completed successfully. Open your dashboard in the browser and navigate to the Analyze page to view the threat intelligence panel with live statistics!")
+	log.Println("\nInjection process completed.")
+	log.Println("1. Open your Web UI Dashboard in the browser.")
+	log.Println("2. Look at the live logs/recent events list; the simulated events should appear immediately.")
+	log.Println("3. Within 3 minutes, the honeypot-ti container will run its enrichment loop.")
+	log.Println("4. Visit the Analyze page to view the enriched Threat Intelligence data!")
 }

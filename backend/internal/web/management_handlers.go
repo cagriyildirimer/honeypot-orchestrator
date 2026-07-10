@@ -668,3 +668,19 @@ func mathRound(val float64, precision int) float64 {
 	res, _ := strconv.ParseFloat(resStr, 64)
 	return res
 }
+
+func (s *Server) HandleInjectEvent(w http.ResponseWriter, r *http.Request) {
+	var evt map[string]interface{}
+	if err := DecodeJSON(r, &evt); err != nil {
+		JSONResponse(w, http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+		return
+	}
+
+	// Direct injection through the EventLogger so it pops up in the SSE live alerts stream
+	s.logger.Log(evt)
+
+	JSONResponse(w, http.StatusOK, map[string]string{
+		"status":  "event_injected",
+		"message": "Event successfully logged, saved to DB, and broadcasted to Web UI",
+	})
+}
