@@ -133,6 +133,11 @@ def inject_db_events(ips: list[str]) -> bool:
         _info(f"Connecting to database at {db_url.split('@')[-1]} ...")
         conn = psycopg2.connect(db_url)
         cursor = conn.cursor()
+        
+        # Clear cached threat intel entries to force backend to rebuild cache with the new API keys
+        cursor.execute("DELETE FROM threat_intel_cache;")
+        _ok("Cleared stale threat_intel_cache table in database.")
+
         for ev in events_to_inject:
             cursor.execute(
                 "INSERT INTO events (timestamp, service, event_type, src_ip, src_port, summary, details) VALUES (%s, %s, %s, %s, %s, %s, %s)",
