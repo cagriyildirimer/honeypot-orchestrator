@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -172,51 +173,87 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	cached, err := s.db.GetThreatIntelBulk(ctx, topIPs)
+	if err != nil {
+		cached = make(map[string]string)
+	}
+
+	// Identify cache misses
+	var missedIPs []string
+	for _, ip := range topIPs {
+		if _, exists := cached[ip]; !exists {
+			missedIPs = append(missedIPs, ip)
+		}
+	}
+
+	// Inline enrich missed IPs
+	if len(missedIPs) > 0 {
+		abuseKey := s.config.ThreatIntel.AbuseIPDBKey
+		greyKey := s.config.ThreatIntel.GreyNoiseKey
+
+		dbAbuseKey, err := s.db.GetSystemSetting(ctx, "ti_abuseipdb_key")
+		if err == nil && dbAbuseKey != "" {
+			abuseKey = dbAbuseKey
+		}
+		dbGreyKey, err := s.db.GetSystemSetting(ctx, "ti_greynoise_key")
+		if err == nil && dbGreyKey != "" {
+			greyKey = dbGreyKey
+		}
+
+		if envAbuse := os.Getenv("HONEYPOT_TI_ABUSEIPDB_KEY"); envAbuse != "" {
+			abuseKey = envAbuse
+		}
+		if envGrey := os.Getenv("HONEYPOT_TI_GREYNOISE_KEY"); envGrey != "" {
+			greyKey = envGrey
+		}
+
+		// Perform synchronous enrichment
+		log.Printf("[TI API] Enriching cache misses synchronously: %v\n", missedIPs)
+		enriched := ti.EnrichAttackerIPs(ctx, missedIPs, abuseKey, greyKey)
+
+		// Save to cache database and add to cached map
+		for ip, details := range enriched {
+			detailsBytes, err := json.Marshal(details)
+			if err == nil {
+				_ = s.db.SaveThreatIntel(ctx, ip, string(detailsBytes))
+				cached[ip] = string(detailsBytes)
+			}
+		}
+	}
+
 	var attackers []map[string]interface{}
 	torCount := 0
 	cloudCount := 0
 	var abuseScores []float64
 
-	cached, err := s.db.GetThreatIntelBulk(ctx, topIPs)
-	if err == nil {
-		for _, ip := range topIPs {
-			count := ipCounts[ip]
-			if cachedJSON, exists := cached[ip]; exists {
-				var details map[string]interface{}
-				if err := json.Unmarshal([]byte(cachedJSON), &details); err == nil {
-					details["event_count"] = count
-					attackers = append(attackers, details)
+	for _, ip := range topIPs {
+		count := ipCounts[ip]
+		if cachedJSON, exists := cached[ip]; exists {
+			var details map[string]interface{}
+			if err := json.Unmarshal([]byte(cachedJSON), &details); err == nil {
+				details["event_count"] = count
+				attackers = append(attackers, details)
 
-					if isTor, _ := details["is_tor"].(bool); isTor {
-						torCount++
-					}
-					if cloud, _ := details["cloud_provider"].(string); cloud != "" {
-						cloudCount++
-					}
-					if abuseVal, exists := details["abuse_score"]; exists {
-						if fScore, ok := abuseVal.(float64); ok {
-							abuseScores = append(abuseScores, fScore)
-						}
-					}
-					continue
+				if isTor, _ := details["is_tor"].(bool); isTor {
+					torCount++
 				}
+				if cloud, _ := details["cloud_provider"].(string); cloud != "" {
+					cloudCount++
+				}
+				if abuseVal, exists := details["abuse_score"]; exists {
+					if fScore, ok := abuseVal.(float64); ok {
+						abuseScores = append(abuseScores, fScore)
+					}
+				}
+				continue
 			}
-			// Fallback for pending analysis
-			attackers = append(attackers, map[string]interface{}{
-				"ip":          ip,
-				"status":      "Pending Analysis",
-				"event_count": count,
-			})
 		}
-	} else {
-		// If DB error, just return all as pending analysis
-		for _, ip := range topIPs {
-			attackers = append(attackers, map[string]interface{}{
-				"ip":          ip,
-				"status":      "Pending Analysis",
-				"event_count": ipCounts[ip],
-			})
-		}
+		// Fallback
+		attackers = append(attackers, map[string]interface{}{
+			"ip":          ip,
+			"status":      "Pending Analysis",
+			"event_count": count,
+		})
 	}
 
 	var avgAbuse interface{} = "N/A"
