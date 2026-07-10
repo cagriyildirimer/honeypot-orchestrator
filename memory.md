@@ -145,6 +145,12 @@ honeypot-orchestrator/
 54. **Go Backend Kritik Hata Düzeltmeleri (Faz 1):** `system_settings` kolonunun TEXT yapılması, IPv6 JoinHostPort düzeltmesi, 24 saatlik session expiry ve cleanup goroutine'i, SIEM double json marshal optimizasyonu ve iptables banlama IPv6/MAC ayrım tespiti tamamlandı.
 55. **Go Backend Mimari ve Performans İyileştirmeleri (Faz 2):** `/api/overview` analitik sorguları için 10s stats caching yapıldı, `formatEventMap` helper'ı yazıldı, dynamic CPU/Disk hesapları Linux sisteminden çekildi ve cache overflow/reset mantıkları kuruldu.
 56. **Go Backend Yapısal ve Zaman Aşımı İyileştirmeleri (Faz 3):** Varsayılan admin şifresinin başlangıçta hashlenerek DB'ye yazılması, SSE için `WriteTimeout: 0` ve Nginx `proxy_read_timeout 86400s` tanımlanması, syncLoop bağımsız timeout context'i, template ismi prefix tespiti ve dynamic looping service factory mapping entegrasyonu tamamlandı.
+57. **Kapsamlı Kod Denetimi Raporu Hazırlanması:** Yeni Go mimarisi ve React frontend kod tabanı üzerindeki tüm olası mantıksal hatalar, güvenlik açıkları ve dizin yapısı eksiklikleri denetlendi, `code_audit_report.md` dosyasına raporlandı ve yapılacaklar listesine eklendi.
+58. **MITRE ATT&CK Desteği ve `/api/analyze` Uç Noktası:** Analiz sayfası için MITRE ATT&CK taktik/teknik olay eşleme logic'i, saatlik timeline ve ülke bazlı kırılım analizi yapan Go backend handler'ı yazıldı ve router'a bağlandı.
+59. **3D Dünya Haritası Düzeltmeleri ve Çevrimdışı/LAN Uyumlaştırması:** Harita doku dosyaları yerel `/vendor/` dizinine indirilip `Core.js` üzerinden yerel yollarla çağrılarak uygulama çevrimdışı çalışmaya hazır hale getirildi. `Dashboard.js`'deki veri okuma kaynağı `stats.geo_markers` olarak düzeltildi.
+60. **Bildirim Kalıcılığı ve SSE Alarmlarının İngilizceye Çevrilmesi:** `NotificationBell` state verileri `localStorage` ile senkronize edilerek tarayıcıda kalıcı olmaları sağlandı. SSE yayıncısındaki tüm bildirim formatları ve şablonları tamamen İngilizceye çevrildi.
+61. **Tehdit İstihbaratı (TI Worker) Çoklu Konteyner İzolasyonu:** Tehdit İstihbaratı (TI) arka plan işleyicisi (worker) ana backend'den izole edilerek standart ve LAN compose dosyalarında `honeypot-ti` isimli bağımsız bir konteyner servisine taşındı.
+62. **Saldırgan Zaman Tüneli ve Coğrafi Aktivite Panel Entegrasyonu:** `buildFilterSQL` fonksiyonuna `src_ip` sorgu parametresi desteği eklenerek timeline sorguları düzeltildi. Haritanın soluna coğrafi konum bilgileri ve en çok hedef alınan servis bilgilerini listeleyen cam efektli yüzer panel yerleştirildi.
 
 ---
 
@@ -263,26 +269,4 @@ Faz 1, Faz 2 ve Faz 3 öncesinde `go-backend/` kod tabanı üzerinde yapılan an
 - **Sorun:** Derlenmiş binary deposu kirletiyordu.
 - **Çözüm:** Fiziksel binary git/dizin geçmişinden tamamen silindi ve `.gitignore` ile dışlandı.
 
-#### 57. Kapsamlı Kod Denetimi Raporu Hazırlanması
-- **Sorun:** Yeni Go mimarisi ve React frontend kod tabanı üzerindeki tüm olası mantıksal hataların, güvenlik açıklarının, ölü kodların ve dizin yapısı eksikliklerinin detaylı analiz edilmesi gerekiyordu.
-- **Çözüm:** Tüm kodlar baştan sona denetlendi. Yeni Go yapısındaki kritik açıklar (DNS UDP eksikliği, SMB/NetBIOS sınırsız bellek tahsisi DoS riski, AlertStreamer goroutine sızıntısı vb.) tespit edildi. [code_audit_report.md](file:///c:/Users/BERN/.gemini/antigravity-ide/brain/e39bd832-d5ec-4016-b5f5-1677a695bf48/code_audit_report.md) güncellenerek detaylı bir şekilde raporlandı ve yapılacaklar listesine eklendi.
 
-#### 58. MITRE ATT&CK Desteği ve `/api/analyze` Uç Noktası
-- **Sorun:** Arayüz analiz sayfasındaki Adversary Cyber Kill Chain ve coğrafi dağılım panelleri çalışmıyordu çünkü Go backend tarafında `/api/analyze` uç noktası ve MITRE eşleme logic'i bulunmuyordu.
-- **Çözüm:** `analyze_handlers.go` oluşturulup olayları MITRE tekniklerine eşleyen `mapEventToMitre` fonksiyonu, saatlik timeline ve ülke bazlı kırılım analizi kodlandı. JSON serileştirmesinde boş listelerin `null` yerine `[]` dönmesi sağlanarak frontend çökme riskleri giderildi ve `/api/analyze` router'a bağlandı.
-
-#### 59. 3D Dünya Haritası Düzeltmeleri ve Çevrimdışı / LAN Uyumlaştırması
-- **Sorun:** Dashboard üzerindeki saldırgan konum kırmızı noktaları görüntülenmiyordu. Ayrıca 3D dünya haritası doku görsellerini unpkg.com'dan çektiği için internet bağlantısı olmayan kapalı ağlarda (LAN modunda) harita yüklenmiyordu.
-- **Çözüm:** `Dashboard.js`'deki veri okuma kaynağı `payload.geo_markers` yerine `stats.geo_markers` olarak düzeltilip saldırı noktaları aktif edildi. Harita doku dosyaları (`earth-blue-marble.jpg` ve `earth-topology.png`) yerel `/vendor/` dizinine indirilip `Core.js` üzerinden yerel yollarla çağrılarak uygulama %100 çevrimdışı çalışmaya hazır hale getirildi.
-
-#### 60. Bildirim Kalıcılığı ve SSE Alarmlarının İngilizceye Çevrilmesi
-- **Sorun:** Sayfa yenilendiğinde veya sekmeler arası geçişte web alarmları kayboluyordu. Ayrıca bildirimler Türkçe üretiliyordu.
-- **Çözüm:** `NotificationBell` state verileri `localStorage` ile entegre edilerek tarayıcıda kalıcı olmaları sağlandı. SSE yayıncısındaki (`alert_streamer.go`) tüm bildirim formatları ve şablonları tamamen İngilizceye çevrildi.
-
-#### 61. Tehdit İstihbaratı (TI Worker) Çoklu Konteyner İzolasyonu
-- **Sorun:** Tehdit İstihbaratı (TI) arka plan işleyicisi (worker) ana backend üzerinde gereksiz yük oluşturuyordu ve izole edilmesi istenmişti.
-- **Çözüm:** `docker-compose.yml` (Production/WAN) ve `docker-compose.lan.yml` dosyalarına `honeypot-ti` bağımsız servis konteyneri eklendi. Ana `honeypot-web` konteynerinde TI worker pasifleştirildi (`HONEYPOT_TI_WORKER_ENABLED: "false"`), TI worker ise izole bir şekilde ayrı konteynerde çalıştırıldı.
-
-#### 62. Saldırgan Zaman Tüneli ve Coğrafi Aktivite Panel Entegrasyonu
-- **Sorun:** "Attacker Behavior Timeline" filtresi seçilen IP'ye özel çalışmıyordu ve 3D dünya haritasının kenarlarında görsel zenginleştirme eksikti.
-- **Çözüm:** `buildFilterSQL` fonksiyonuna `src_ip` sorgu parametresi desteği eklenerek timeline sorguları düzeltildi. Haritanın soluna yerleştirilen "Attacker Activity & Origins" paneliyle, IP bazlı coğrafi konum bilgileri ve `DISTINCT ON (src_ip)` ile en çok hedef alınan servis ile saldırı adetleri listelendi. Görsel bütünlük için paneller cam efektiyle (glassmorphism) haritanın üzerine yüzer şekilde sol tarafa hizalandı.
