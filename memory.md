@@ -8,10 +8,10 @@
 - `[ ]` **Canary Tokens:** Bu decoy dosyalara erişildiğinde tetiklenen özel kritik alarm mekanizması.
 
 ### 2. Kapsamlı Kod Denetimi Bulguları (Yeni Go Mimarisi Sorunları)
-- `[ ]` **DNS UDP Desteği:** `dns.go`'yu `BaseTCPService` yerine `BaseUDPService` yapısına taşımak, UDP 1053 portunu docker-compose ve dockerfile üzerinde açmak.
-- `[ ]` **DoS / OOM Sınırlandırması:** `smb.go` (`readNbssFrame`) ve `netbios.go` (`handleClient`) içindeki sınırsız `make([]byte, length)` bellek tahsisini (max 64KB/128KB limit koyarak) engellemek.
-- `[ ]` **AlertStreamer Context Sızıntısı:** `ServeHTTP` içindeki `as.Start(context.Background())` yerine daemon lifecycle context'ini bağlamak.
-- `[ ]` **SIEM TCP Reconnect Desteği:** Bağlantı kesildiğinde log kayıplarını engellemek için retry mekanizması eklemek.
+- `[x]` **DNS UDP Desteği:** `dns.go`'yu `BaseTCPService` yerine `BaseUDPService` yapısına taşımak, UDP 1053 portunu docker-compose ve dockerfile üzerinde açmak.
+- `[x]` **DoS / OOM Sınırlandırması:** `smb.go` (`readNbssFrame`) ve `netbios.go` (`handleClient`) içindeki sınırsız `make([]byte, length)` bellek tahsisini (max 64KB/128KB limit koyarak) engellemek.
+- `[x]` **AlertStreamer Context Sızıntısı:** `ServeHTTP` içindeki `as.Start(context.Background())` yerine daemon lifecycle context'ini bağlamak.
+- `[x]` **SIEM TCP Reconnect Desteği:** Bağlantı kesildiğinde log kayıplarını engellemek için retry mekanizması eklemek.
 
 ---
 
@@ -151,6 +151,7 @@ honeypot-orchestrator/
 60. **Bildirim Kalıcılığı ve SSE Alarmlarının İngilizceye Çevrilmesi:** `NotificationBell` state verileri `localStorage` ile senkronize edilerek tarayıcıda kalıcı olmaları sağlandı. SSE yayıncısındaki tüm bildirim formatları ve şablonları tamamen İngilizceye çevrildi.
 61. **Tehdit İstihbaratı (TI Worker) Çoklu Konteyner İzolasyonu:** Tehdit İstihbaratı (TI) arka plan işleyicisi (worker) ana backend'den izole edilerek standart ve LAN compose dosyalarında `honeypot-ti` isimli bağımsız bir konteyner servisine taşındı.
 62. **Saldırgan Zaman Tüneli ve Coğrafi Aktivite Panel Entegrasyonu:** `buildFilterSQL` fonksiyonuna `src_ip` sorgu parametresi desteği eklenerek timeline sorguları düzeltildi. Haritanın soluna coğrafi konum bilgileri ve en çok hedef alınan servis bilgilerini listeleyen cam efektli yüzer panel yerleştirildi.
+63. **SIEM TCP Reconnect Desteği ve Kod Denetimi İyileştirmeleri:** SIEM TCP gönderici mekanizmasına 3 kez deneme ve kademeli bekleme (backoff) retry döngüsü eklendi. DNS UDP desteği, SMB/NetBIOS OOM/DoS korumaları ve AlertStreamer context sızıntısı giderimleri başarıyla doğrulandı.
 
 ---
 
