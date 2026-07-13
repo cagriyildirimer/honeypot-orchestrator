@@ -33,20 +33,28 @@ type Forwarder struct {
 	mu         sync.RWMutex
 	tcpConns   map[string]net.Conn
 	httpClient *http.Client
+	lastJSON   string
 }
 
 func NewForwarder(db *database.DB) *Forwarder {
-	return &Forwarder{
+	f := &Forwarder{
 		db:       db,
 		tcpConns: make(map[string]net.Conn),
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
 	}
+	go f.startSyncLoop()
+	return f
 }
 
 func (f *Forwarder) LoadConfig(configJSON string) error {
 	f.mu.Lock()
+	if configJSON == f.lastJSON {
+		f.mu.Unlock()
+		return nil
+	}
+	f.lastJSON = configJSON
 	defer f.mu.Unlock()
 
 	var rawConfigs []SiemTarget
@@ -81,7 +89,11 @@ func (f *Forwarder) LoadConfig(configJSON string) error {
 		}
 		port := c.Port
 		if port <= 0 || port > 65535 {
-			port = 514
+			if proto == "http" {
+				port = 0
+			} else {
+				port = 514
+			}
 		}
 		parsed = append(parsed, SiemTarget{
 			ID:       id,
@@ -133,7 +145,7 @@ func (f *Forwarder) Forward(evt *database.Event) {
 
 		if c.Scope == "alerts" {
 			critical := false
-			criticalTypes := []string{"login_attempt", "exploit_attempt", "command_execution"}
+			criticalTypes := []string{"login_attempt", "login_success", "credential_attempt", "ssh_command", "sql_query", "exploit_attempt", "command_execution"}
 			for _, ct := range criticalTypes {
 				if evt.EventType == ct {
 					critical = true
@@ -200,13 +212,16 @@ func (f *Forwarder) ForwardTo(target SiemTarget, evt *database.Event) error {
 
 			// Connection is nil or writing failed, try to reconnect
 			addr := net.JoinHostPort(host, strconv.Itoa(port))
-			var dialErr error
-			conn, dialErr = net.DialTimeout("tcp", addr, 5*time.Second)
-			if dialErr != nil {
-				writeErr = dialErr
-			} else {
+			newConn, dialErr := net.DialTimeout("tcp", addr, 5*time.Second)
+			if dialErr == nil {
 				f.mu.Lock()
-				f.tcpConns[key] = conn
+				if existing := f.tcpConns[key]; existing != nil {
+					newConn.Close() // Close duplicate connection
+					conn = existing  // Reuse existing connection
+				} else {
+					f.tcpConns[key] = newConn
+					conn = newConn
+				}
 				f.mu.Unlock()
 
 				conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
@@ -220,6 +235,8 @@ func (f *Forwarder) ForwardTo(target SiemTarget, evt *database.Event) error {
 					delete(f.tcpConns, key)
 				}
 				f.mu.Unlock()
+			} else {
+				writeErr = dialErr
 			}
 
 			if attempt < maxAttempts {
@@ -233,7 +250,7 @@ func (f *Forwarder) ForwardTo(target SiemTarget, evt *database.Event) error {
 			urlStr = fmt.Sprintf("http://%s", net.JoinHostPort(host, strconv.Itoa(port)))
 		} else {
 			parsed, err := url.Parse(host)
-			if err == nil && parsed.Port() == "" {
+			if err == nil && parsed.Port() == "" && port > 0 && port != 80 && port != 443 {
 				parsed.Host = net.JoinHostPort(parsed.Hostname(), strconv.Itoa(port))
 				urlStr = parsed.String()
 			}
@@ -263,4 +280,12 @@ func (f *Forwarder) ForwardTo(target SiemTarget, evt *database.Event) error {
 	}
 
 	return fmt.Errorf("unknown protocol: %s", protocol)
+}
+
+func (f *Forwarder) startSyncLoop() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		f.Sync(context.Background())
+	}
 }

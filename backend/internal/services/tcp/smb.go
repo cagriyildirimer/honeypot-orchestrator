@@ -674,7 +674,7 @@ func buildDirEntry(nextOffset uint32, filename string, fileSize uint64, isDir bo
 func buildSmb2ReadResponse(messageID uint64, creditRequest uint16, sessionID uint64, treeID uint32, content []byte) []byte {
 	body := new(bytes.Buffer)
 	binary.Write(body, binary.LittleEndian, uint16(17)) // StructureSize
-	body.WriteByte(72)                                  // DataOffset
+	body.WriteByte(80)                                  // DataOffset (64 header + 16 read response metadata)
 	body.WriteByte(0)
 	binary.Write(body, binary.LittleEndian, uint32(len(content)))
 	binary.Write(body, binary.LittleEndian, uint32(0))

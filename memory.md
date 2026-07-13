@@ -7,14 +7,6 @@
 - `[ ]` **Sahte Dosya Sistemi:** FTP ve SMB servislerine sahte dosya yapıları (`passwords.xlsx`, `backup.sql`, `.ssh/id_rsa`) yüklenmesi.
 - `[ ]` **Canary Tokens:** Bu decoy dosyalara erişildiğinde tetiklenen özel kritik alarm mekanizması.
 
-### 2. Kapsamlı Kod Denetimi Bulguları (Yeni Go Mimarisi Sorunları)
-- `[x]` **DNS UDP Desteği:** `dns.go`'yu `BaseTCPService` yerine `BaseUDPService` yapısına taşımak, UDP 1053 portunu docker-compose ve dockerfile üzerinde açmak.
-- `[x]` **DoS / OOM Sınırlandırması:** `smb.go` (`readNbssFrame`) ve `netbios.go` (`handleClient`) içindeki sınırsız `make([]byte, length)` bellek tahsisini (max 64KB/128KB limit koyarak) engellemek.
-- `[x]` **AlertStreamer Context Sızıntısı:** `ServeHTTP` içindeki `as.Start(context.Background())` yerine daemon lifecycle context'ini bağlamak.
-- `[x]` **SIEM TCP Reconnect Desteği:** Bağlantı kesildiğinde log kayıplarını engellemek için retry mekanizması eklemek.
-
----
-
 ## 🏗️ Proje Mimari ve Dosya Yapısı (Mevcut Durum)
 
 ```
@@ -70,20 +62,6 @@ honeypot-orchestrator/
             ├── Profiles.js           # Profil değiştirme ve IP Kara/Beyaz liste yönetimi
             └── Settings.js           # Yönetici ayarları, parola, tema ve SIEM yapılandırma ekranı
 ```
-
----
-
-## 💭 Düşünülecek: Backend'in Go Diline Geçişi (Tarihsel Referans)
-
-> **Durum:** Tamamlandı. Geliştirme feature/go-migration dalında sürdürülmüştür. Referans amacıyla burada tutuluyor.
-
-- **Performans:** Python asyncio (tek thread, cooperative) → Go goroutine (preemptive, çok çekirdekli).
-- **Bellek:** Python runtime ~80-120MB → Go statik binary ~15-30MB (5-6x azalma).
-- **Deploy:** Docker + pip + runtime bağımlılıkları → Tek statik binary.
-- **Startup:** Python ~2-3 saniye → Go ~50ms.
-- **Tip güvenliği:** Runtime duck typing hataları → derleme zamanı hata yakalama.
-
----
 
 ## Completed
 
@@ -155,6 +133,11 @@ honeypot-orchestrator/
 64. **SMB ve NetBIOS OOM/DoS Sınırlandırması Doğrulaması:** `smb.go` ve `netbios.go` dosyalarında gelen paket payload uzunluklarının maksimum 64KB ile sınırlandırıldığı ve OOM zafiyetlerinin engellenmiş olduğu doğrulandı.
 65. **AlertStreamer Context Sızıntısı Giderim Doğrulaması:** AlertStreamer SSE yayıncısının `context.Background()` yerine sunucu yaşam döngüsüne bağlı root sinyal context'i ile başlatıldığı ve kaynak sızıntılarının engellendiği doğrulandı.
 66. **SIEM TCP Reconnect ve Kademeli Bekleme (Backoff) Mekanizması:** `forwarder.go` içerisinde TCP gönderim yapısı revize edilerek soket hatalarında 3 kez deneme (attempts) ve kademeli bekleme (backoff - 1s, 2s) retry mekanizması entegre edildi.
+67. **Go Web Filtreli İstatistik Hatası Düzeltildi:** `HandleOverview` altındaki `by_service` ve `by_type` istatistik sorgularına aktif filtreleme parametreleri (`whereClause` ve `args`) uygulanarak panel grafikleriyle log listesi arasındaki tutarsızlık giderildi.
+68. **SMB Decoy Read DataOffset Hizalama Düzeltildi:** `buildSmb2ReadResponse` fonksiyonundaki `DataOffset` değeri 72'den 80'e güncellenerek SMB2 başlık (64) ve metadata (16) uyumluluğu sağlandı ve katı SMB istemcilerinin bağlantı koparmasının önüne geçildi.
+69. **SIEM TCP Bağlantı Sızıntısı Giderildi:** Concurrency (eşzamanlı olay aktarımı) durumunda birden fazla soket açılmasını engellemek amacıyla `forwarder.go` altında mutex kilit kontrolü ile Dial sonrası mükerrer soketleri kapatıp mevcut soketi yeniden kullanan güvenli bağlantı havuzu yapısı kuruldu.
+70. **SIEM HTTP Webhook Port Ezme Hatası Çözüldü:** Webhook veya HEC gibi portsuz standart absolute URL'lerin sonuna `:514` (varsayılan syslog portu) eklenmesi sorunu giderildi. HTTP hedefleri için port bilgisi artık sadece kullanıcı tarafından elle girildiğinde (`port > 0` ve `!= 80/443`) URL'e dahil ediliyor.
+71. **SSE Bildirim Fırtınası (Toast Storm) Engellendi:** Arayüz kapalıyken arka planda biriken olayların, arayüz ilk açıldığında toplu halde tarayıcıya yığılmasını önlemek amacıyla `alert_streamer.go` üzerinde istemci yokken `lastID` değerini veritabanı maksimum ID'sine eşitleyen catch-up engelleyici kontrol mekanizması kuruldu.
 
 ---
 

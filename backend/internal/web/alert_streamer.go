@@ -70,6 +70,11 @@ func (as *AlertStreamer) pollEvents(ctx context.Context) {
 			as.mu.Unlock()
 
 			if !hasClients {
+				var maxID int
+				err := as.db.Pool.QueryRow(ctx, "SELECT COALESCE(MAX(id), 0) FROM events").Scan(&maxID)
+				if err == nil {
+					as.lastID = maxID
+				}
 				continue
 			}
 

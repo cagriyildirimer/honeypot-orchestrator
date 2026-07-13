@@ -730,7 +730,12 @@ func (s *Server) HandleOverview(w http.ResponseWriter, r *http.Request) {
 		_ = s.db.Pool.QueryRow(ctx, countQuery, args...).Scan(&totalFiltered)
 
 		byService := make(map[string]int)
-		sRows, err := s.db.Pool.Query(ctx, "SELECT service, COUNT(*) FROM events GROUP BY service")
+		serviceQuery := "SELECT service, COUNT(*) FROM events"
+		if whereClause != "" {
+			serviceQuery += " WHERE " + whereClause
+		}
+		serviceQuery += " GROUP BY service"
+		sRows, err := s.db.Pool.Query(ctx, serviceQuery, args...)
 		if err == nil {
 			for sRows.Next() {
 				var svc string
@@ -743,7 +748,12 @@ func (s *Server) HandleOverview(w http.ResponseWriter, r *http.Request) {
 		}
 
 		byType := make(map[string]int)
-		tRows, err := s.db.Pool.Query(ctx, "SELECT event_type, COUNT(*) FROM events GROUP BY event_type")
+		typeQuery := "SELECT event_type, COUNT(*) FROM events"
+		if whereClause != "" {
+			typeQuery += " WHERE " + whereClause
+		}
+		typeQuery += " GROUP BY event_type"
+		tRows, err := s.db.Pool.Query(ctx, typeQuery, args...)
 		if err == nil {
 			for tRows.Next() {
 				var evType string
