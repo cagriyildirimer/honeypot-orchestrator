@@ -98,7 +98,7 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 	initialState, err := o.getDBState(o.ctx)
 	if err != nil {
 		initialState = DBState{
-			ActiveProfile:    o.config.Profile,
+			ActiveProfile:    "empty",
 			ServiceOverrides: make(map[string]bool),
 			RunningServices:  []string{},
 		}
@@ -178,7 +178,9 @@ func (o *Orchestrator) SetProfile(ctx context.Context, name string) error {
 	// Hot reload state
 	o.activeProfile = name
 	o.overrides = state.ServiceOverrides
-	o.applyState(ctx, name, state.ServiceOverrides)
+	if os.Getenv("HONEYPOT_DECOYS_ENABLED") != "false" {
+		o.applyState(ctx, name, state.ServiceOverrides)
+	}
 
 	return nil
 }
@@ -215,7 +217,9 @@ func (o *Orchestrator) ToggleService(ctx context.Context, name string, enabled b
 
 	// Hot reload state
 	o.overrides = state.ServiceOverrides
-	o.applyState(ctx, o.activeProfile, state.ServiceOverrides)
+	if os.Getenv("HONEYPOT_DECOYS_ENABLED") != "false" {
+		o.applyState(ctx, o.activeProfile, state.ServiceOverrides)
+	}
 
 	return true
 }
