@@ -30,14 +30,7 @@ func NewAlertStreamer(db *database.DB) *AlertStreamer {
 
 func (as *AlertStreamer) Start(ctx context.Context) {
 	as.startOnce.Do(func() {
-		// Initialize lastID
-		var maxID int
-		err := as.db.Pool.QueryRow(ctx, "SELECT COALESCE(MAX(id), 0) FROM events").Scan(&maxID)
-		if err == nil {
-			as.lastID = maxID
-		} else {
-			log.Println("AlertStreamer init error:", err)
-		}
+		as.lastID = -1
 		as.started = true
 		go as.pollEvents(ctx)
 	})
@@ -70,12 +63,18 @@ func (as *AlertStreamer) pollEvents(ctx context.Context) {
 			as.mu.Unlock()
 
 			if !hasClients {
+				as.lastID = -1
+				continue
+			}
+
+			if as.lastID == -1 {
 				var maxID int
 				err := as.db.Pool.QueryRow(ctx, "SELECT COALESCE(MAX(id), 0) FROM events").Scan(&maxID)
 				if err == nil {
 					as.lastID = maxID
+				} else {
+					as.lastID = 0
 				}
-				continue
 			}
 
 			// Fetch new events
