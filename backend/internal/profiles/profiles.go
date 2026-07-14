@@ -147,7 +147,7 @@ var Profiles = map[string]*HoneypotProfile{
 	"windows_server": {
 		Name:        "windows_server",
 		DisplayName: "Windows Server Profile",
-		Services:    []string{"http_windows", "dns_windows", "netbios_windows", "ldap_windows", "ldaps_windows", "mssql_windows", "rdp_windows", "smb_windows", "llmnr_windows", "nbtnns_windows", "ssh_windows", "rpc_windows", "winrm"},
+		Services:    []string{"http_windows", "dns_windows", "netbios_windows", "ldap_windows", "ldaps_windows", "mssql_windows", "rdp_windows", "smb_windows", "llmnr_windows", "nbtnns_windows", "ssh_windows", "rpc_windows", "winrm", "ftp_windows"},
 		Telnet: TelnetProfile{
 			TemplateName:        "telnet_windows",
 			Banner:              "Microsoft Telnet Service\r\nlogin: ",

@@ -33,6 +33,7 @@ services:
       - "2222:2222" # SSH Linux
       - "2223:2223" # SSH Windows
       - "2121:2121" # FTP Linux
+      - "2122:2122" # FTP Windows
       - "2323:2323" # Telnet Linux
       - "1053:1053/udp" # DNS Windows
       - "139:139"   # NetBIOS Windows

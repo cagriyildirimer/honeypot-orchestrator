@@ -38,6 +38,10 @@ services:
     enabled: true
     host: "0.0.0.0"
     port: 2121
+  ftp_windows:
+    enabled: true
+    host: "0.0.0.0"
+    port: 2122
   telnet_linux:
     enabled: true
     host: "0.0.0.0"
