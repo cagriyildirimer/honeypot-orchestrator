@@ -32,6 +32,14 @@ export function AnalyzePage(props) {
   const [harvestEvents, setHarvestEvents] = useState([]);
   const [harvestLoading, setHarvestLoading] = useState(false);
 
+  // Captured Payloads States
+  const [payloadEvents, setPayloadEvents] = useState([]);
+  const [payloadsLoading, setPayloadsLoading] = useState(false);
+
+  // Tarpit States
+  const [tarpitEvents, setTarpitEvents] = useState([]);
+  const [tarpitLoading, setTarpitLoading] = useState(false);
+
   async function loadData() {
     try {
       const [tiRes, analyzeRes] = await Promise.all([
@@ -85,6 +93,42 @@ export function AnalyzePage(props) {
       })
       .finally(() => {
         setHarvestLoading(false);
+      });
+  }, [activeTab]);
+
+  // Fetch captured payloads when payloads tab is activated
+  useEffect(() => {
+    if (activeTab !== "payloads") return;
+    setPayloadsLoading(true);
+    window.requestJson("/api/events?event_type=captured_payload&limit=200")
+      .then(res => {
+        if (res && Array.isArray(res.events)) {
+          setPayloadEvents(res.events);
+        }
+      })
+      .catch(e => {
+        window.showToast("Failed to load payloads: " + e.message, "error");
+      })
+      .finally(() => {
+        setPayloadsLoading(false);
+      });
+  }, [activeTab]);
+
+  // Fetch tarpit events when tarpit tab is activated
+  useEffect(() => {
+    if (activeTab !== "tarpit") return;
+    setTarpitLoading(true);
+    window.requestJson("/api/events?search=tarpit&limit=500")
+      .then(res => {
+        if (res && Array.isArray(res.events)) {
+          setTarpitEvents(res.events);
+        }
+      })
+      .catch(e => {
+        window.showToast("Failed to load tarpit logs: " + e.message, "error");
+      })
+      .finally(() => {
+        setTarpitLoading(false);
       });
   }, [activeTab]);
 
@@ -206,6 +250,38 @@ export function AnalyzePage(props) {
 
     return { topPasswords, topUsernames };
   }, [harvestEvents]);
+
+  // Process tarpit active list and history
+  const tarpitSummary = useMemo(() => {
+    const activeTrapped = {};
+    const history = [];
+
+    // Tarpit events are processed in reverse chronological order
+    tarpitEvents.forEach(evt => {
+      const ip = evt.src_ip;
+      if (!ip) return;
+
+      history.push(evt);
+
+      if (evt.event_type === "tarpit_hooked") {
+        if (!activeTrapped[ip]) {
+          activeTrapped[ip] = {
+            ip: ip,
+            port: evt.src_port,
+            timestamp: evt.timestamp,
+            summary: evt.summary
+          };
+        }
+      } else if (evt.event_type === "tarpit_released") {
+        if (!activeTrapped[ip]) {
+          activeTrapped[ip] = "released";
+        }
+      }
+    });
+
+    const activeList = Object.values(activeTrapped).filter(v => v !== "released");
+    return { activeList, history };
+  }, [tarpitEvents]);
 
   // Client-side export helper
   function handleExportCredentials(format) {
@@ -809,6 +885,149 @@ export function AnalyzePage(props) {
     )
   );
 
+  const payloadsTabNode = h(
+    "section",
+    { className: "panel page-fade-in" },
+    h(
+      "div",
+      { className: "section-heading" },
+      h("div", null, h("h2", null, "Captured Decoy Payloads & Malware"), h("p", null, "Real-time list of all binaries, webshells, and scripts uploaded or downloaded in decoy services."))
+    ),
+    h(
+      "div",
+      { className: "table-shell" },
+      h(
+        "table",
+        null,
+        h("thead", null, h("tr", null, h("th", null, "Timestamp"), h("th", null, "Source IP"), h("th", null, "Filename"), h("th", null, "Size"), h("th", null, "Malware Tag"), h("th", null, "SHA-256"), h("th", null, "Source URL"))),
+        h(
+          "tbody",
+          null,
+          payloadsLoading
+            ? h("tr", null, h("td", { colSpan: 7, className: "empty-row" }, "Loading captured payloads..."))
+            : payloadEvents.length === 0
+              ? h("tr", null, h("td", { colSpan: 7, className: "empty-row" }, "No malware payloads captured yet."))
+              : payloadEvents.map((evt, idx) => {
+                  const details = evt.details || {};
+                  return h(
+                    "tr",
+                    { key: evt.id || idx },
+                    h("td", null, evt.timestamp),
+                    h("td", null, h("span", { className: "table-strong" }, evt.src_ip)),
+                    h("td", null, details.filename || "unknown"),
+                    h("td", null, details.file_size ? `${(details.file_size / 1024).toFixed(2)} KB` : "unknown"),
+                    h("td", null, h("span", { className: "status-badge badge-threat" }, details.malware_type || "Generic Payload")),
+                    h("td", null, h("code", { style: { fontSize: "0.85em" } }, details.sha256 || "N/A")),
+                    h("td", null, details.download_url ? h("a", { href: details.download_url, target: "_blank", style: { color: "var(--neon-blue)" } }, "URL Link") : "Direct Upload (FTP)")
+                  );
+                })
+        )
+      )
+    )
+  );
+
+  const tarpitTabNode = h(
+    React.Fragment,
+    null,
+    h(
+      "div",
+      { className: "analyze-grid-container page-fade-in" },
+      h(
+        "section",
+        { className: "panel" },
+        h(
+          "div",
+          { className: "section-heading" },
+          h("div", null, h("h2", null, "Active Attacker Traps (Currently Tarpitted)"), h("p", null, "Hostile IPs currently held in TCP Tarpit delays to waste scanner threads."))
+        ),
+        h(
+          "div",
+          { className: "country-breakdown-list" },
+          tarpitSummary.activeList.length === 0
+            ? h("div", { className: "ti-empty" }, "No attackers currently trapped in Tarpit.")
+            : tarpitSummary.activeList.map((item, idx) => {
+                return h(
+                  "div",
+                  { key: item.ip || idx, className: "country-item" },
+                  h(
+                    "div",
+                    { className: "country-item-header" },
+                    h("span", { className: "country-name", style: { color: "var(--neon-red)" } }, `⚠️ Attacker: ${item.ip}:${item.port}`),
+                    h("span", { className: "country-count" }, `Trapped at: ${item.timestamp}`)
+                  ),
+                  h(
+                    "div",
+                    { className: "country-progress-bar", style: { height: "6px" } },
+                    h("div", { className: "country-progress-fill", style: { width: "100%", background: "var(--neon-red)" } })
+                  )
+                );
+              })
+        )
+      ),
+      h(
+        "section",
+        { className: "panel" },
+        h(
+          "div",
+          { className: "section-heading" },
+          h("div", null, h("h2", null, "Tarpit Impact Statistics"), h("p", null, "Real-time active defense defensive value metrics."))
+        ),
+        h(
+          "div",
+          { className: "mitre-stats-bar", style: { flexDirection: "column", gap: "10px", padding: "10px 0" } },
+          h(
+            "div",
+            { className: "mitre-stat-pill", style: { justifyContent: "space-between" } },
+            h("span", { className: "mitre-stat-label" }, "Active Held Attackers"),
+            h("span", { className: "mitre-stat-value text-danger" }, String(tarpitSummary.activeList.length))
+          ),
+          h(
+            "div",
+            { className: "mitre-stat-pill", style: { justifyContent: "space-between" } },
+            h("span", { className: "mitre-stat-label" }, "Total Historical Tarpits"),
+            h("span", { className: "mitre-stat-value text-success" }, String(tarpitSummary.history.filter(e => e.event_type === "tarpit_hooked").length))
+          )
+        )
+      )
+    ),
+    h(
+      "section",
+      { className: "panel page-fade-in" },
+      h(
+        "div",
+        { className: "section-heading" },
+        h("div", null, h("h2", null, "Historical Tarpit Action Logs"), h("p", null, "Audit logs of all attacker trap/release operations."))
+      ),
+      h(
+        "div",
+        { className: "table-shell" },
+        h(
+          "table",
+          null,
+          h("thead", null, h("tr", null, h("th", null, "Timestamp"), h("th", null, "Action"), h("th", null, "Attacker IP"), h("th", null, "Summary"))),
+          h(
+            "tbody",
+            null,
+            tarpitLoading
+              ? h("tr", null, h("td", { colSpan: 4, className: "empty-row" }, "Loading tarpit audit logs..."))
+              : tarpitSummary.history.length === 0
+                ? h("tr", null, h("td", { colSpan: 4, className: "empty-row" }, "No tarpit events logged yet."))
+                : tarpitSummary.history.map((evt, idx) =>
+                    h(
+                      "tr",
+                      { key: evt.id || idx },
+                      h("td", null, evt.timestamp),
+                      h("td", null, h("span", { className: `status-badge ${evt.event_type === "tarpit_hooked" ? "badge-threat" : "badge-secure"}` }, evt.event_type === "tarpit_hooked" ? "HOOKED" : "RELEASED")),
+                      h("td", null, h("span", { className: "table-strong" }, evt.src_ip)),
+                      h("td", null, evt.summary)
+                    )
+                  )
+          )
+        )
+      )
+    )
+  );
+
   return h(
     "div",
     { className: "page-container page-fade-in" },
@@ -887,9 +1106,27 @@ export function AnalyzePage(props) {
           onClick: () => setActiveTab("credentials")
         },
         "🔑 Credential Harvest Report"
+      ),
+      h(
+        "button",
+        {
+          className: `analyze-tab-btn${activeTab === "payloads" ? " active" : ""}`,
+          onClick: () => setActiveTab("payloads")
+        },
+        "📦 Captured Payloads & Malware"
+      ),
+      h(
+        "button",
+        {
+          className: `analyze-tab-btn${activeTab === "tarpit" ? " active" : ""}`,
+          onClick: () => setActiveTab("tarpit")
+        },
+        "🍯 TCP Tarpit Activity"
       )
     ),
 
-    activeTab === "analytics" ? analyticsTabNode : credentialsTabNode
+    activeTab === "analytics" ? analyticsTabNode : 
+    activeTab === "credentials" ? credentialsTabNode : 
+    activeTab === "payloads" ? payloadsTabNode : tarpitTabNode
   );
 }

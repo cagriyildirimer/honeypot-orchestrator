@@ -5,10 +5,17 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"honeypot-orchestrator/backend/internal/defense"
@@ -18,11 +25,13 @@ import (
 )
 
 type SSHHoneypot struct {
-	baseService *services.BaseTCPService
-	profile     *profiles.HoneypotProfile
-	config      *ssh.ServerConfig
-	attempts    map[string]int
-	attemptsMu  sync.Mutex
+	baseService    *services.BaseTCPService
+	profile        *profiles.HoneypotProfile
+	config         *ssh.ServerConfig
+	attempts       map[string]int
+	attemptsMu     sync.Mutex
+	virtualFiles   map[string]map[string][]byte // maps srcIP -> (filename -> content)
+	virtualFilesMu sync.Mutex
 }
 
 func NewSSHHoneypot(
@@ -34,12 +43,33 @@ func NewSSHHoneypot(
 	initialProfile *profiles.HoneypotProfile,
 ) *SSHHoneypot {
 	s := &SSHHoneypot{
-		profile:  initialProfile,
-		attempts: make(map[string]int),
+		profile:      initialProfile,
+		attempts:     make(map[string]int),
+		virtualFiles: make(map[string]map[string][]byte),
 	}
 
 	s.baseService = services.NewBaseTCPService(name, host, port, el, ds, s.handleRawConn)
 	return s
+}
+
+func (s *SSHHoneypot) addVirtualFile(srcIP string, filename string, content []byte) {
+	s.virtualFilesMu.Lock()
+	defer s.virtualFilesMu.Unlock()
+	if s.virtualFiles[srcIP] == nil {
+		s.virtualFiles[srcIP] = make(map[string][]byte)
+	}
+	s.virtualFiles[srcIP][filename] = content
+}
+
+func (s *SSHHoneypot) getVirtualFileContent(srcIP string, filename string) ([]byte, bool) {
+	s.virtualFilesMu.Lock()
+	defer s.virtualFilesMu.Unlock()
+	if userFiles, ok := s.virtualFiles[srcIP]; ok {
+		if content, ok := userFiles[filename]; ok {
+			return content, true
+		}
+	}
+	return nil, false
 }
 
 func (s *SSHHoneypot) Name() string {
@@ -244,8 +274,10 @@ func (s *SSHHoneypot) handleSession(channel ssh.Channel, username string, srcIP 
 			break
 		}
 
-		response := s.executeMockCommand(baseCmd, arg, username, &currentDir, isWindows, srcIP, srcPort)
-		_, _ = channel.Write([]byte(response))
+		response := s.executeMockCommand(channel, baseCmd, arg, username, &currentDir, isWindows, srcIP, srcPort)
+		if response != "" {
+			_, _ = channel.Write([]byte(response))
+		}
 	}
 }
 
@@ -276,7 +308,7 @@ func readLine(reader *bufio.Reader, channel ssh.Channel) ([]byte, error) {
 	return line, nil
 }
 
-func (s *SSHHoneypot) executeMockCommand(baseCmd, arg, username string, currentDir *string, isWindows bool, srcIP string, srcPort int) string {
+func (s *SSHHoneypot) executeMockCommand(channel ssh.Channel, baseCmd, arg, username string, currentDir *string, isWindows bool, srcIP string, srcPort int) string {
 	if isWindows {
 		switch baseCmd {
 		case "whoami":
@@ -293,10 +325,25 @@ func (s *SSHHoneypot) executeMockCommand(baseCmd, arg, username string, currentD
 			*currentDir = targetDir
 			return ""
 		case "dir", "ls":
-			return fmt.Sprintf(" Directory of %s\r\n\r\n2026-06-03  10:15             120 notes.txt\r\n2026-06-03  10:15             150 todo.txt\r\n               2 File(s)            270 bytes\r\n               0 Dir(s)  42,919,203,840 bytes free\r\n", *currentDir)
+			var filesList []string
+			filesList = []string{
+				"2026-06-03  10:15             120 notes.txt",
+				"2026-06-03  10:15             150 todo.txt",
+			}
+			s.virtualFilesMu.Lock()
+			if userFiles, ok := s.virtualFiles[srcIP]; ok {
+				for name, content := range userFiles {
+					filesList = append(filesList, fmt.Sprintf("2026-07-14  09:15           %5d %s", len(content), name))
+				}
+			}
+			s.virtualFilesMu.Unlock()
+			return fmt.Sprintf(" Directory of %s\r\n\r\n%s\r\n               %d File(s)\r\n               0 Dir(s)  42,919,203,840 bytes free\r\n", *currentDir, strings.Join(filesList, "\r\n"), len(filesList))
 		case "type", "cat":
 			if arg == "" {
 				return "The syntax of the command is incorrect.\r\n"
+			}
+			if content, ok := s.getVirtualFileContent(srcIP, arg); ok {
+				return string(content) + "\r\n"
 			}
 			return getMockFileContent(arg)
 		case "ipconfig":
@@ -342,12 +389,99 @@ func (s *SSHHoneypot) executeMockCommand(baseCmd, arg, username string, currentD
 			if strings.Contains(*currentDir, "etc") {
 				return "passwd  group  hosts  resolv.conf\r\n"
 			}
-			return "Desktop  Documents  Downloads  notes.txt\r\n"
+			filesList := []string{"Desktop", "Documents", "Downloads", "notes.txt"}
+			s.virtualFilesMu.Lock()
+			if userFiles, ok := s.virtualFiles[srcIP]; ok {
+				for name := range userFiles {
+					filesList = append(filesList, name)
+				}
+			}
+			s.virtualFilesMu.Unlock()
+			return strings.Join(filesList, "  ") + "\r\n"
 		case "cat":
 			if arg == "" {
 				return ""
 			}
+			if content, ok := s.getVirtualFileContent(srcIP, arg); ok {
+				return string(content) + "\r\n"
+			}
 			return getMockFileContent(arg)
+		case "wget", "curl":
+			if arg == "" {
+				if baseCmd == "wget" {
+					return "wget: missing URL\r\n"
+				}
+				return "curl: no URL specified\r\n"
+			}
+			rawURL := arg
+			if baseCmd == "curl" {
+				parts := strings.Fields(arg)
+				for _, p := range parts {
+					if !strings.HasPrefix(p, "-") {
+						rawURL = p
+						break
+					}
+				}
+			}
+			rawURL = strings.Trim(rawURL, `"'`)
+
+			filename := "index.html"
+			u, err := url.Parse(rawURL)
+			if err == nil {
+				pathParts := strings.Split(u.Path, "/")
+				if len(pathParts) > 0 && pathParts[len(pathParts)-1] != "" {
+					filename = pathParts[len(pathParts)-1]
+				}
+			}
+
+			_, _ = channel.Write([]byte(fmt.Sprintf("Connecting to %s... connected.\r\n", rawURL)))
+			time.Sleep(400 * time.Millisecond)
+			_, _ = channel.Write([]byte("HTTP request sent, awaiting response... 200 OK\r\n"))
+			time.Sleep(400 * time.Millisecond)
+
+			var fileBytes []byte
+			client := &http.Client{Timeout: 3 * time.Second}
+			resp, err := client.Get(rawURL)
+			if err == nil && resp.StatusCode == http.StatusOK {
+				fileBytes, _ = io.ReadAll(resp.Body)
+				resp.Body.Close()
+			}
+			if len(fileBytes) == 0 {
+				fileBytes = []byte("#!/bin/bash\n# Simulated payload downloaded by honeypot attacker\necho \"Executing malware...\"\n")
+			}
+
+			captureDir := "/app/logs/captured_malware"
+			_ = os.MkdirAll(captureDir, 0755)
+			timestamp := time.Now().Format("20060102_150405")
+			safeIP := strings.ReplaceAll(srcIP, ":", "_")
+			filePath := fmt.Sprintf("%s/%s_%s_%s", captureDir, timestamp, safeIP, filename)
+			_ = os.WriteFile(filePath, fileBytes, 0644)
+
+			malwareType, scanDetails := services.AnalyzePayload(filename, fileBytes)
+
+			hasher := sha256.New()
+			hasher.Write(fileBytes)
+			sha256Sum := hex.EncodeToString(hasher.Sum(nil))
+
+			s.baseService.LogEvent("captured_payload", map[string]interface{}{
+				"src_ip":       srcIP,
+				"src_port":     srcPort,
+				"profile":      s.profile.Name,
+				"username":     username,
+				"filename":     filename,
+				"file_size":    len(fileBytes),
+				"sha256":       sha256Sum,
+				"malware_type": malwareType,
+				"details":      scanDetails,
+				"download_url": rawURL,
+				"summary":      fmt.Sprintf("Malware payload '%s' captured from %s. Type: %s", filename, srcIP, malwareType),
+			})
+
+			s.addVirtualFile(srcIP, filename, fileBytes)
+
+			_, _ = channel.Write([]byte(fmt.Sprintf("Length: %d (application/octet-stream)\r\nSaving to: '%s'\r\n\r\n", len(fileBytes), filename)))
+			time.Sleep(400 * time.Millisecond)
+			return fmt.Sprintf("100%%[======================================>] %d  --.-KB/s   in 0.1s\r\n", len(fileBytes))
 		case "ifconfig", "ip":
 			return "eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500\r\n        inet 192.168.1.240  netmask 255.255.255.0  broadcast 192.168.1.255\r\n        ether 00:15:5d:00:1a:2b  txqueuelen 1000  (Ethernet)\r\n"
 		case "uname":
@@ -356,7 +490,7 @@ func (s *SSHHoneypot) executeMockCommand(baseCmd, arg, username string, currentD
 			}
 			return "Linux\r\n"
 		case "help":
-			return "Supported commands: whoami, id, pwd, cd, ls, cat, ifconfig, ip, uname -a, help, exit\r\n"
+			return "Supported commands: whoami, id, pwd, cd, ls, cat, wget, curl, ifconfig, ip, uname -a, help, exit\r\n"
 		default:
 			return fmt.Sprintf("bash: %s: command not found\r\n", baseCmd)
 		}

@@ -2,11 +2,6 @@
 
 ## 📋 To-Do & Next Steps
 
-### 1. Phase 14 — Honeypot Decoy Files & Canary Tokens
-**Amaç:** Daha gerçekçi tuzak dosyalarıyla sızma girişimlerini tespit etmek.
-- `[ ]` **Sahte Dosya Sistemi:** FTP ve SMB servislerine sahte dosya yapıları (`passwords.xlsx`, `backup.sql`, `.ssh/id_rsa`) yüklenmesi.
-- `[ ]` **Canary Tokens:** Bu decoy dosyalara erişildiğinde tetiklenen özel kritik alarm mekanizması.
-
 ## 🏗️ Proje Mimari ve Dosya Yapısı (Mevcut Durum)
 
 ```
@@ -16,6 +11,7 @@ honeypot-orchestrator/
 ├── setup.sh                           # İnteraktif IP, şifreleme ve veritabanı ayarlarını yapan kurulum betiği
 ├── .env.example                       # Çevre değişkenleri şablon dosyası
 ├── config.yaml                        # API yetkilendirme, veritabanı ve SIEM hedeflerini barındıran konfigürasyon
+├── README.md                          # Proje kurulum ve kullanım kılavuzu
 ├── backend/                           # Go tabanlı Decoy & API daemon dizini
 │   ├── cmd/
 │   │   └── honeypot-daemon/
@@ -29,12 +25,30 @@ honeypot-orchestrator/
 │   │   ├── services/                  # Merkezi servis yöneticisi (Orchestrator) ve base yapılar
 │   │   │   ├── base.go
 │   │   │   ├── orchestrator.go
-│   │   │   ├── tcp/                   # TCP decoy servisleri (http, ssh, ftp, telnet, rdp, smb, rpc, ldap, ldaps, mssql, netbios)
-│   │   │   └── udp/                   # UDP decoy servisleri (dns, llmnr, nbtnns)
+│   │   │   ├── tcp/                   # TCP decoy servisleri dizini
+│   │   │   │   ├── ftp.go             # FTP (ProFTPD / MSFTP taklidi) tuzak servisi
+│   │   │   │   ├── http.go            # HTTP (Nginx / IIS taklidi) tuzak servisi
+│   │   │   │   ├── ldap.go            # LDAP dizin servisi taklidi
+│   │   │   │   ├── ldaps.go           # Güvenli LDAPS dizin servisi taklidi
+│   │   │   │   ├── mssql.go           # MS SQL Server veritabanı taklidi
+│   │   │   │   ├── netbios.go         # NetBIOS Session Service taklidi
+│   │   │   │   ├── rdp.go             # RDP (Uzak Masaüstü) protokol taklidi
+│   │   │   │   ├── rpc.go             # MSRPC (Remote Procedure Call) taklidi
+│   │   │   │   ├── smb.go             # SMBv2/v3 dosya paylaşım protokol taklidi
+│   │   │   │   ├── ssh.go             # SSH (OpenSSH Windows/Linux taklidi) tuzak servisi
+│   │   │   │   └── telnet.go          # Telnet terminal servisi taklidi
+│   │   │   └── udp/                   # UDP decoy servisleri dizini
+│   │   │       ├── dns.go             # DNS ad çözümleme tuzak servisi
+│   │   │       ├── llmnr.go           # LLMNR multicast ad çözümleme taklidi
+│   │   │       └── nbtnns.go          # NetBIOS Name Service UDP taklidi
 │   │   ├── siem/                      # UDP/TCP/HTTP SIEM log yönlendirici motoru
 │   │   ├── system/                    # iptables firewall yönetimi ve sysctl parametre güncelleyici
 │   │   └── web/                       # go-chi router, CSRF/Auth middleware'ler ve JSON API uç noktaları
-│   ├── Dockerfile                     # Alpine tabanlı Go daemon derleme ve çalıştırma Dockerfile'ı
+│   ├── scripts/
+│   │   └── start-lan.sh               # LAN modunda decoy ağ yapılandırma ve firewall başlatma betiği
+│   ├── tests/
+│   │   └── test_threat_intel.py       # Tehdit istihbaratı test betiği
+│   ├── Dockerfile                     # Derleme ve çalıştırma Dockerfile'ı
 │   ├── go.mod
 │   └── go.sum
 └── frontend/                         # Görsel kontrol paneli (React.js SPA)
@@ -62,6 +76,80 @@ honeypot-orchestrator/
             ├── Profiles.js           # Profil değiştirme ve IP Kara/Beyaz liste yönetimi
             └── Settings.js           # Yönetici ayarları, parola, tema ve SIEM yapılandırma ekranı
 ```
+
+## 🗄️ Veritabanı Tablo Yapıları (PostgreSQL)
+
+Honeypot verileri ve yönetim yapılandırması PostgreSQL veritabanında saklanır. Tabloların yapısı ve kullanım amaçları aşağıda listelenmiştir:
+
+1.  **`events` (Olay Günlükleri):** Saldırganların decoy servislerine yaptığı tüm erişimleri saklar.
+    *   `id` (SERIAL PRIMARY KEY): Benzersiz olay kimliği.
+    *   `timestamp` (TIMESTAMPTZ, Default NOW()): Olayın gerçekleştiği tarih ve saat.
+    *   `service` (VARCHAR(255)): Olayı tetikleyen servis (örn: `ssh_linux`, `smb_windows`).
+    *   `event_type` (VARCHAR(255)): Olay tipi (örn: `connection_attempt`, `login_success`, `file_access`).
+    *   `src_ip` (VARCHAR(255)): Saldırganın IP adresi.
+    *   `src_port` (INTEGER): Saldırganın kaynak portu.
+    *   `summary` (TEXT): Olayın kısa özeti.
+    *   `details` (JSONB): Protokole özel detaylar (örn: girilen şifreler, çalıştırılan SQL sorguları).
+
+2.  **`users` (Yöneticiler):** Yönetim paneline giriş yapabilecek yetkili kullanıcıları tutar.
+    *   `id` (SERIAL PRIMARY KEY)
+    *   `username` (VARCHAR(255) UNIQUE)
+    *   `password_hash` (VARCHAR(255)): bcrypt ile hash'lenmiş şifre.
+    *   `role` (VARCHAR(255), Default 'viewer'): Kullanıcı rolü (`admin` / `viewer`).
+
+3.  **`sessions` (Oturumlar):** Giriş yapan yöneticilerin aktif tarayıcı oturumlarını takip eder.
+    *   `session_id` (VARCHAR(255) PRIMARY KEY): Benzersiz session token'ı.
+    *   `username` (VARCHAR(255))
+    *   `role` (VARCHAR(255))
+    *   `created_at` (TIMESTAMPTZ, Default NOW()): Oturum başlangıç zamanı (24 saatlik TTL süresi vardır).
+
+4.  **`whitelist` (Beyaz Liste):** Otomatik engelleme (IP ban) mekanizmasından hariç tutulan IP adresleri.
+    *   `id` (SERIAL PRIMARY KEY)
+    *   `ip` (VARCHAR(255) UNIQUE): Güvenilen IP adresi.
+    *   `description` (VARCHAR(255)): Ek açıklama.
+    *   `timestamp` (TIMESTAMPTZ, Default NOW())
+
+5.  **`blacklist` (Kara Liste):** Saldırı girişimleri sonucu otomatik veya manuel olarak engellenen IP adresleri.
+    *   `id` (SERIAL PRIMARY KEY)
+    *   `ip` (VARCHAR(255) UNIQUE): Engellenen IP adresi.
+    *   `description` (VARCHAR(255)): Engelleme nedeni.
+    *   `timestamp` (TIMESTAMPTZ, Default NOW())
+
+6.  **`threat_intel_cache` (Tehdit İstihbaratı Önbelleği):** AbuseIPDB ve GreyNoise üzerinden sorgulanan IP'lerin itibar verileri.
+    *   `ip` (VARCHAR(255) PRIMARY KEY)
+    *   `data` (JSONB): İstihbarat servislerinden gelen detaylı JSON yanıtı.
+    *   `updated_at` (TIMESTAMPTZ, Default NOW()): Önbelleğin son güncellenme tarihi.
+
+7.  **`system_settings` (Sistem Ayarları):** SIEM yapılandırması ve orkestratörün profil durumu.
+    *   `setting_key` (VARCHAR(255) PRIMARY KEY): Ayar anahtarı (örn: `siem_config`, `orchestrator_state`).
+    *   `setting_value` (TEXT): Ayarın değeri (büyük JSON yapılandırmalarını saklayabilmek için TEXT tipindedir).
+    *   `updated_at` (TIMESTAMPTZ, Default NOW())
+
+---
+
+## 📡 SIEM Entegrasyon Seçenekleri ve Protokolleri
+
+Sistemde üretilen kritik alarmlar (`login_success`, `credential_attempt`, `ssh_command`, `sql_query` vb.) gerçek zamanlı olarak dış güvenlik izleme sistemlerine (SIEM) aktarılabilir.
+
+*   **Desteklenen Aktarım Protokolleri:**
+    1.  **Syslog (UDP):** Standart syslog sunucularına RFC 5424 formatında hızlı log aktarımı.
+    2.  **Syslog (TCP):** Bağlantı kalıcılığı ve hata denetimli TCP akışı (3 kez backoff retry destekli).
+    3.  **HTTP Webhook:** Splunk HEC (HTTP Event Collector), Slack webhook kanalları veya genel JSON Webhook hedeflerine HTTP POST üzerinden JSON payload gönderimi.
+*   **Filtreleme Kapsamları (Scopes):**
+    *   `all`: Decoy servislerindeki en ufak TCP/UDP bağlantı denemesi dahil tüm olayları yönlendirir.
+    *   `alerts`: Sadece saldırganın başarılı girişleri, terminal komutları, SQL enjeksiyon sorguları gibi yüksek önem dereceli (critical) olayları yönlendirir.
+
+---
+
+## 🛡️ Aktif Savunma ve Otomatik Engelleme (Active Defense)
+
+*   **Otomatik Ban Mekanizması:** Saldırgan decoy servislerine (örn: SSH veya FTP) belirli bir eşikten fazla hatalı istek gönderdiğinde, IP adresi tespit edilerek otomatik olarak `blacklist` tablosuna yazılır.
+*   **Firewall Entegrasyonu:** `system/net_tuner.go` modülü, `blacklist` tablosundaki IP'leri Linux kernel seviyesinde engellemek için `iptables` kuralları oluşturur:
+    ```bash
+    iptables -A HONEYPOT_INPUT -s <attacker_ip> -j DROP
+    ```
+*   **IP Beyaz Liste Koruması:** `whitelist` tablosundaki IP'ler bu engelleme adımlarından tamamen muaf tutulur.
+
 
 ## Completed
 
@@ -141,122 +229,34 @@ honeypot-orchestrator/
 72. **Çoklu Konteyner SIEM Senkronizasyonu ve Olay Kapsamı Genişletildi:** LAN modunda (ayrı konteynerler) Web UI'dan güncellenen SIEM yapılandırmasının Decoy konteynerine yansıması için `forwarder.go` içerisine 10 saniyede bir çalışan dinamik veritabanı senkronizasyon döngüsü (`startSyncLoop`) eklendi. Ayrıca `"alerts"` kapsamı genişletilerek başarılı girişler (`login_success`), HTTP kimlik denemeleri (`credential_attempt`), SSH komutları (`ssh_command`) ve SQL sorguları (`sql_query`) kritik olay listesine dahil edildi.
 73. **Web API Konteynerinde Decoy Servislerin Başlatılması Engellendi:** LAN/Çoklu Konteyner modunda Web API konteyneri (`honeypot-web-lan`) üzerinde profil değiştirildiğinde veya servis tetiklendiğinde `applyState` çağrısının decoy servislerini ve iptables kurallarını bu konteynerde gereksiz yere çalıştırması engellendi (`HONEYPOT_DECOYS_ENABLED == "false"` kontrolü ile).
 74. **İlk Kurulum Varsayılan Profili 'empty' Yapıldı:** Veritabanının sıfırdan kurulduğu ilk çalışma anında sistemin varsayılan olarak `"empty"` (boş) profille başlaması sağlandı.
+75. **system_settings.setting_value Sütun Boyutu TEXT'e Dönüştürüldü (Eski 1):** `orchestrator_state` ve `siem_config` JSON verilerinin 255 karakter sınırına takılıp kesilerek JSON parse hatası vermesini engellemek için kolon tipi TEXT yapıldı.
+76. **IPv6 Adresleri İçin net.JoinHostPort Entegrasyonu (Eski 2):** SIEM göndericisinin IPv6 hedef adresleri köşeli parantezsiz yazıp hatalı Dial yapması `net.JoinHostPort` kullanılarak çözüldü.
+77. **Oturum Süre Sınırı ve Cleanup Goroutine'i (Eski 3):** `sessions` tablosundaki oturumların sonsuza kadar geçerli kalmaması için 24 saatlik TTL sınırı ve saatlik temizleme döngüsü eklendi.
+78. **SIEM HTTP Forwarder Double Marshal Giderildi (Eski 4):** HTTP post işlemi sırasında event verisinin iki kez serialize edilerek gereksiz işlemci ve bellek yükü oluşturması engellendi.
+79. **ApplyFirewallRule IPv6/MAC Algılaması Düzeltildi (Eski 5):** İki nokta içeren IPv6 adreslerinin iptables kuralında hatalı bir şekilde MAC adresi olarak parse edilerek firewall kurallarını bozması `net.ParseIP` kontrolü ile giderildi.
+80. **HandleOverview Stats Önbelleklemesi (Eski 6):** Dashboard açılışında atılan 8 ayrı DB sorgusu, GeoIP lookup ve ARP sorgularının latency oluşturmasını engellemek için landing isteklerine 10 saniyelik `statsCache` RAM önbelleği uygulandı.
+81. **Scan ve Format Event Kod Tekrarı Temizlendi (Eski 7):** `HandleEvents` ve `HandleOverview` altında mükerrer olarak yazılmış olan veritabanı satır okuma ve biçimlendirme kodları `formatEventMap` altında birleştirildi.
+82. **Kullanılmayan web.ServiceStatus Tanımı Silindi (Eski 8):** Hiçbir yerde kullanılmayan mükerrer durum yapısı kod tabanından temizlendi.
+83. **Arayüz Ayarlarında Gerçek CPU/Disk Metrikleri Bağlandı (Eski 10):** CPU için `/proc/loadavg`, disk için `df -k` komutları kullanılarak arayüzde statik gösterilen metrikler yerine gerçek Linux kaynak değerleri çekildi.
+84. **GeoIP Önbelleği Sınırsız Büyüme Engeli (Eski 11):** `geoCache` haritasının bellekte sürekli büyüyerek sızıntı yapmaması için 5000 kaydı aşınca otomatik temizlenme mantığı eklendi.
+85. **ARP Tablosu İş Parçacığı Güvenliği (Eski 12):** `loadArpTable` tetiklendiğinde eskiyen stale kayıtların birikmesini önlemek için map sıfırlanarak güncellenmesi sağlandı.
+86. **Orchestrator Registry Fabrika Yapısına Geçildi (Eski 13):** Yeni tuzak servisler eklendikçe `NewOrchestrator`'a elle ekleme yapma gereksinimi, anonymous registry fabrikası ve dinamik loop yapısıyla ortadan kaldırıldı.
+87. **GetServicesStatus Şablon Adı Parsing'i Dinamikleştirildi (Eski 14):** Servis adından katı string kesimleri yerine `strings.HasPrefix` kullanan dinamik şablon adı eşleştirme yapısına geçildi.
+88. **syncLoop DB Sorgu Context'i İyileştirildi (Eski 15):** Sunucu kapanırken loglarda context iptal hataları oluşmaması için DB durum sorgularına bağımsız 3 saniyelik timeout context'i atandı.
+89. **Yönetici Giriş Şifresi Pre-Hash Kaydı (Eski 16):** Her girişte varsayılan admin şifresinin tekrarlı hash'lenerek CPU yükü yaratması, başlangıçta kullanıcı yoksa bir kez hash'lenip DB'ye kaydedilmesi yöntemiyle çözüldü.
+90. **generateToken utils.go Altında Tekilleştirildi (Eski 19):** İki farklı yerde ayrı ayrı tanımlanmış olan token üretim fonksiyonu `utils.go`'ya taşınarak ortaklaştırıldı.
+91. **Nginx SSE proxy_read_timeout Ayarı (Eski 20):** SSE akışının 60 saniye sessizlikten sonra Nginx tarafından kapatılmasını önlemek için okuma ve yazma zaman aşımı limitleri 86400 saniyeye çıkarıldı.
+92. **Go HTTP Server WriteTimeout Sınırsız Yapıldı (Eski 21):** Go sunucusunun 15 saniyelik varsayılan yazma zaman aşımının uzun ömürlü SSE bağlantısını koparmasını önlemek için `WriteTimeout: 0` (sınırsız) olarak ayarlandı.
+93. **CSRF Tek Kullanımlık Token Güvenliği (Eski 22):** Replay saldırılarını engellemek amacıyla doğrulanmış CSRF token'ı eşleşmenin hemen ardından bellekten silinecek şekilde güncellendi.
+94. **Go Backend Dizin Yapısı Reorganizasyonu:** Kod tabanı standart Go pratiklerine göre `cmd/` ve `internal/` modüler yapısına dönüştürülüp dairesel bağımlılıklar giderildi.
+95. **Boilerplate PortNameHost Delege Metotları Kaldırıldı:** 14 farklı decoy sınıfında bulunan mükerrer metotlar `BaseTCPService` yapısına taşındı.
+96. **Eski Python backend/ Dizin ve honeypot-daemon.exe Temizliği:** Eski kafa karıştırıcı Python dosyaları ile derlenmiş exe binary dosyası git ve fiziksel dizin geçmişinden kalıcı olarak temizlendi.
+97. **Gelişmiş Etkileşimli Fake Shell (SSH & Telnet):** SSH ve Telnet servislerine login attempts takibi eklenerek 2. denemede başarılı giriş sağlandı. Saldırganların kabuk içinde `wget` veya `curl` ile sahte zararlı indirme akışları simüle edilerek dosyalar diskte yakalandı, SHA-256 özetleri çıkarılarak veritabanına `captured_payload` olarak kaydedildi ve bellek içi sanal dosya sistemi ile `ls`, `dir`, `cat` ve `type` komutları üzerinden saldırganın erişimine sunuldu.
+98. **FTP Decoy & Dynamic Passive Mode STOR Capturing:** FTP decoy servisi genişletilerek `USER`, `PASS` (2. denemede başarı), `PWD`, `SYST`, `TYPE`, `LIST` komutları emüle edildi. Dinamik `PASV` passive mode TCP veri dinleyici port tahsisi entegre edilerek `STOR` ile yapılan tüm dosya yüklemeleri diskte yakalanıp Malware Analyzer ile tarandı ve kaydedildi.
+99. **TCP Tarpit (Active Defense) Mekanizması:** Kara listedeki (banlanmış) saldırganların bağlantılarının doğrudan kesilmesi yerine `base.go` üzerinden TCP tarpit havuzuna alınarak 15 saniyelik okuma/yazma gecikmeleriyle scanner ve brute-force thread'leri kilitlendi ve yönetim panelinde alarmlandı.
+100. **Ücretsiz Malware Analyzer Motoru (Local Regex + MalwareBazaar API):** Yakalanan dosyaların taranması için internet gerektirmeyen çevrimdışı regex imza tarayıcısı ve internet varken abuse.ch MalwareBazaar API üzerinden tamamen ücretsiz tehdit sorgulaması yapan çift katmanlı tarama motoru entegre edildi.
+101. **Analyze.js Paneline Payloads ve Tarpit Tabları Entegre Edildi:** Yönetim paneli analiz sayfasına yakalanan tüm zararlı yazılımların SHA-256, boyut ve detaylarıyla izlenebildiği "Captured Payloads" sekmesi ile o an trap'te meşgul edilen saldırgan IP'lerinin ve istatistiklerinin gösterildiği "TCP Tarpit Activity" sekmesi entegre edildi.
 
 ---
-
-### 🔍 Go Backend — Kapsamlı Kod Denetim Raporu (Tarihsel Referans)
-
-Faz 1, Faz 2 ve Faz 3 öncesinde `go-backend/` kod tabanı üzerinde yapılan analizlerde tespit edilen hatalar ve uygulanan düzeltmelerin arşividir.
-
-#### 1. `system_settings.setting_value` sütunu `VARCHAR(255)` — Veri Kaybı Riski (Kritik)
-- **Dosya:** [database.go](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/database/database.go#L93-L97)
-- **Sorun:** `orchestrator_state` JSON verisi (profil adı + 12+ servis override'ı + running services listesi) kolayca 255 karakteri aşar. PostgreSQL bu değeri **sessizce keser** ve JSON parse hatası oluşur → orchestrator state sıfırlanır. Aynı sorun `siem_config` için de geçerli.
-- **Çözüm:** `setting_value VARCHAR(255)` → `setting_value TEXT` olarak değiştirildi.
-
-#### 2. IPv6 Adresleri İçin `fmt.Sprintf("%s:%d")` Kullanımı — Bağlantı Hatası (Kritik)
-- **Dosya:** [forwarder.go](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/siem/forwarder.go#L167-L184)
-- **Sorun:** IPv6 literal adresleri `[::1]:514` formatında olmalı ama `fmt.Sprintf("%s:%d", host, port)` ile `::1:514` üretiliyordu → dial başarısız oluyordu.
-- **Çözüm:** `net.JoinHostPort` fonksiyonuna geçilerek otomatik köşeli parantez eklenmesi sağlandı.
-
-#### 3. Session Expiry Mekanizması Yok — Güvenlik Açığı (Kritik)
-- **Dosya:** [database.go](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/database/database.go#L200-L208)
-- **Sorun:** `sessions` tablosunda eski session'lar temizlenmiyordu ve sunucu tarafında oturumlar sonsuza kadar geçerli kalıyordu.
-- **Çözüm:** Oturumlara 24 saatlik TTL sınırı konuldu ve saatte bir eski oturumları temizleyen asenkron cleanup goroutine'i server.go'ya entegre edildi.
-
-#### 4. SIEM Forwarder'da Double JSON Marshal — Gereksiz Bellek Kullanımı (Kritik)
-- **Dosya:** [forwarder.go](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/siem/forwarder.go#L155-L220)
-- **Sorun:** HTTP protokolü branşında event nesnesi gereksiz yere iki kez marshal ediliyordu.
-- **Çözüm:** İlk üretilen `payloadBytes` (satır sonu ayıklanarak) doğrudan kullanıldı, mükerrer marshal çağrısı kaldırıldı.
-
-#### 5. `ApplyFirewallRule` IPv6 Hatalı Algılama (Kritik)
-- **Dosya:** [net_tuner.go](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/system/net_tuner.go#L168-L173)
-- **Sorun:** İki nokta `:` karakteri içeren IPv6 adresleri yanlışlıkla MAC adresi kuralı (`--mac-source`) olarak iptables'a eklenip firewall'u bozuyordu.
-- **Çözüm:** IP adreslerinin tespiti için `net.ParseIP` ön kontrolü eklendi.
-
-#### 6. `HandleOverview` Dev Fonksiyon — 220 Satır, 8 DB Sorgusu (Önemli)
-- **Dosya:** [overview_handlers.go](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/overview_handlers.go#L372-L589)
-- **Sorun:** Dashboard açılışında 8 ayrı veritabanı sorgusu, GeoIP batch lookup ve ARP resolution tekil handler içinde senkron çalışıyor ve yüksek latency oluşturuyordu.
-- **Çözüm:** Parametresiz landing istekleri için 10 saniye süreyle stats ve geo verileri RAM üzerinde önbelleklendi (statsCache).
-
-#### 7. `HandleEvents` ve `HandleOverview` Arasında Büyük Kod Tekrarı (Önemli)
-- **Dosyalar:** [overview_handlers.go L261-L327](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/overview_handlers.go#L261-L327) ve [overview_handlers.go L408-L441](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/overview_handlers.go#L408-L441)
-- **Sorun:** Event satırlarını scan edip JSON map oluşturan kod bloğu birebir kopyalanmıştı.
-- **Çözüm:** scanEventRow/formatEventMap fonksiyonu altında ortak bir helper yazılıp iki uç noktaya da entegre edildi.
-
-#### 8. `ServiceStatus` Struct'ı İki Kez Tanımlanmış (Kullanılmayan Versiyon) (Önemli)
-- **Dosyalar:** [overview_handlers.go L23-L31](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/overview_handlers.go#L23-L31) ve [orchestrator.go L425-L433](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/services/orchestrator.go#L425-L433)
-- **Sorun:** `web.ServiceStatus` tanımlıydı ama hiçbir yerde kullanılmıyordu (gerçekte `services.WebServiceStatus` kullanılıyor).
-- **Çözüm:** Ölü kod tabanından temizlendi.
-
-#### 10. `HandleGetSettings` — CPU ve Disk Değerleri Hardcoded (Önemli)
-- **Dosya:** [management_handlers.go L606-L618](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/management_handlers.go#L606-L618)
-- **Sorun:** CPU %1.5 ve Disk %15.2 olarak tamamen statik dönüyordu.
-- **Çözüm:** Linux sisteminden `/proc/loadavg` ve `df -k` kullanılarak gerçek sistem metrikleri okundu ve API'ye bağlandı.
-
-#### 11. GeoIP Cache Sınırsız Büyüme (Önemli)
-- **Dosya:** [utils.go L297](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/utils.go#L297)
-- **Sorun:** `geoCache` 5000 entry'ye kadar büyüyordu ama temizlenmediği için bellek sızıntısına neden oluyordu.
-- **Çözüm:** Cache limit aşıldığında map sıfırlanarak temizlenme mantığı entegre edildi.
-
-#### 12. ARP Cache Thread Safety Sorunu (Önemli)
-- **Dosya:** [utils.go L88-L137](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/utils.go#L88-L137)
-- **Sorun:** `loadArpTable` çağrıldığında eski stale ARP kayıtları temizlenmiyor ve birikiyordu.
-- **Çözüm:** loadArpTable tetiklendiğinde map sıfırlanarak stale ağ cihazlarının birikmesi engellendi.
-
-#### 13. Orchestrator.NewOrchestrator() — Hardcoded Servis Mapping (Orta Seviye)
-- **Dosya:** [orchestrator.go](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/services/orchestrator.go#L62-L123)
-- **Sorun:** Her servis tipi için ayrı `if c, ok := cfg.Services["xxx"]; ok { ... }` bloğu var. Yeni servis eklemek için bu fonksiyona elle ekleme yapmak gerekiyor.
-- **Çözüm:** Service factory/registry veya dynamic loop mapping yapısına geçilerek hardcoded eşleşmeler kaldırıldı (serviceFactories registry map + dynamic looping yapısına geçildi).
-
-#### 14. `GetServicesStatus` — Template Name Heuristic (Orta Seviye)
-- **Dosya:** [orchestrator.go L460-L469](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/services/orchestrator.go#L460-L469)
-- **Sorun:** Template adı servis adından prefix parsing ile çıkarılıyordu (`name[:5] == "http_"` gibi). Kırılgan bir yapıydı.
-- **Çözüm:** `strings.HasPrefix` kullanan dinamik bir prefix eşleşme döngüsü yazıldı.
-
-#### 15. Orchestrator `syncLoop` Kendi Context'ini Kullanıyor (Orta Seviye)
-- **Dosya:** [orchestrator.go L369](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/services/orchestrator.go#L369)
-- **Sorun:** `o.getDBState(o.ctx)` — orchestrator stop edilirken bu context cancel oluyor ve DB sorgusu loglarda context cancel hatası fırlatıyordu.
-- **Çözüm:** DB sorguları için 3 saniye zaman aşımı olan bağımsız context atandı.
-
-#### 16. `HandleLogin` — Config'den Gelen Şifre Her Seferinde Hash'leniyor (Orta Seviye)
-- **Dosya:** [auth_handlers.go L89-L91](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/auth_handlers.go#L89-L91)
-- **Sorun:** Varsayılan admin şifresi DB'ye kaydedilmemişti, her girişte hashlenip doğrulanıyordu (timing attack riski ve CPU yükü).
-- **Çözüm:** Sunucu başlangıcında (init) varsayılan kullanıcı DB'de yoksa bir kez hash'lenip kaydedildi.
-
-#### 19. `generateToken` Fonksiyonu İki Kez Tanımlı (Düşük Seviye)
-- **Dosyalar:** [auth_handlers.go L29-L35](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/auth_handlers.go#L29-L35)
-- **Sorun:** Hem `auth_handlers` hem `overview_handlers` ayrı ayrı generateToken barındırıyordu.
-- **Çözüm:** Fonksiyon `utils.go` dosyasına taşınarak tekilleştirildi.
-
-#### 20. Nginx Config'de SSE Location Block Sırası Önemli (Düşük Seviye)
-- **Dosya:** [nginx.conf L19-L37](file:///c:/Users/BERN/honeypot-orchestrator/frontend/nginx.conf#L19-L37)
-- **Sorun:** `/api/alerts/stream` Nginx proxy bloğunda `proxy_read_timeout` eksikti, sessiz geçen 60s sonunda Nginx akışı koparıyordu.
-- **Çözüm:** `proxy_read_timeout 86400s` ve `proxy_send_timeout 86400s` eklendi.
-
-#### 21. `WriteTimeout: 15s` SSE Stream'i Kesiyor Olabilir (Düşük Seviye)
-- **Dosya:** [server.go L184](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/server.go#L184)
-- **Sorun:** Go HTTP sunucusunun default WriteTimeout (15s) değeri uzun SSE akışlarının yarıda kesilmesine yol açıyordu.
-- **Çözüm:** Sunucu ayarlarında `WriteTimeout: 0` (sınırsız) yapıldı.
-
-#### 22. `CSRF Token` Tek Kullanımlık — İlk POST'tan Sonra Yeniden Alınmalı (Düşük Seviye)
-- **Dosya:** [server.go L77-L81](file:///c:/Users/BERN/honeypot-orchestrator/go-backend/web/server.go#L77-L81)
-- **Sorun:** CSRF token silinme mantığı ve frontend senkronizasyonu.
-- **Çözüm:** Backend normal davranışı doğrulandı, frontend tarafının her POST öncesi token'ı tazelediği doğrulandı.
-
-#### 3. Go Backend Dizin Yapısı Reorganizasyonu (Önemli)
-- **Sorun:** Standartlara uygun (`cmd/` ve `internal/`) modüler bir dizin yapısına geçiş ihtiyacı.
-- **Çözüm:** Eski Python `backend/` dizini temizlendi, `go-backend/` dizini `backend/` yapıldı. config, database, logger, profiles, siem, system, web paketleri `internal/` altına, main.go `cmd/honeypot-daemon/` altına taşındı. Decoy servisler `tcp/` ve `udp/` olarak ayrılıp dairesel bağımlılığı (import cycle) önleyen anonymous registry deseni ile yapılandırıldı.
-
-#### 9. PortNameHost() — 14 Boilerplate Metod (Düşük Seviye)
-- **Sorun:** Her servis tipi için ayrı delegasyon metotları bulunmaktaydı.
-- **Çözüm:** `orchestrator.go` üzerindeki tekrarlı metotlar kaldırıldı, decoy struct'larının içerisine delege edilerek izole edildi.
-
-#### 17. Python backend/ Dizini Temizliği (Önemli)
-- **Sorun:** Eski Python dosyaları dizinde kafa karışıklığı yaratıyordu.
-- **Çözüm:** Python dosyaları ve eski dizin tamamen silindi.
-
-#### 18. Build Artifact Repo'dan Silinmesi — honeypot-daemon.exe (Düşük Seviye)
-- **Sorun:** Derlenmiş binary deposu kirletiyordu.
-- **Çözüm:** Fiziksel binary git/dizin geçmişinden tamamen silindi ve `.gitignore` ile dışlandı.
 
 

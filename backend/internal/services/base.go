@@ -159,11 +159,13 @@ func (s *BaseTCPService) acceptLoop() {
 }
 
 func (s *BaseTCPService) handleConnection(conn net.Conn) {
-	defer conn.Close()
+	// Note: We do not defer conn.Close() here directly anymore, as tarpitConnection manages its own lifecycle.
+	// We only close it in the normal path or error branches.
 
 	remoteAddr := conn.RemoteAddr()
 	tcpAddr, ok := remoteAddr.(*net.TCPAddr)
 	if !ok {
+		conn.Close()
 		return
 	}
 	peerIP := tcpAddr.IP.String()
@@ -176,8 +178,11 @@ func (s *BaseTCPService) handleConnection(conn net.Conn) {
 		log.Printf("[%s] Error checking blacklist for %s: %v\n", s.name, peerIP, err)
 	}
 	if blacklisted {
+		s.tarpitConnection(conn, peerIP, peerPort)
 		return
 	}
+
+	defer conn.Close()
 
 	dbCtx2, dbCancel2 := context.WithTimeout(context.Background(), 3*time.Second)
 	s.defense.RecordSuspiciousEvent(dbCtx2, peerIP)
@@ -197,6 +202,48 @@ func (s *BaseTCPService) handleConnection(conn net.Conn) {
 			})
 		}
 	}
+}
+
+func (s *BaseTCPService) tarpitConnection(conn net.Conn, peerIP string, peerPort int) {
+	defer conn.Close()
+
+	s.LogEvent("tarpit_hooked", map[string]interface{}{
+		"src_ip":   peerIP,
+		"src_port": peerPort,
+		"summary":  fmt.Sprintf("Blacklisted attacker %s trapped in TCP Tarpit.", peerIP),
+	})
+
+	buffer := make([]byte, 128)
+	for {
+		// Set a long read deadline
+		conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+		_, err := conn.Read(buffer)
+		if err != nil {
+			// If client connection is still open but timeout, send dummy bytes to keep it alive
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+				_, err = conn.Write([]byte("\r\n"))
+				if err != nil {
+					break
+				}
+				continue
+			}
+			break
+		}
+		// Slow down response to a crawl to trap their socket threads
+		time.Sleep(15 * time.Second)
+		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		_, err = conn.Write([]byte("\r\n"))
+		if err != nil {
+			break
+		}
+	}
+
+	s.LogEvent("tarpit_released", map[string]interface{}{
+		"src_ip":   peerIP,
+		"src_port": peerPort,
+		"summary":  fmt.Sprintf("Attacker %s connection closed, released from Tarpit.", peerIP),
+	})
 }
 
 func (s *BaseTCPService) LogEvent(eventType string, fields map[string]interface{}) {
