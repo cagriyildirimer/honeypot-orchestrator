@@ -257,6 +257,7 @@ Sistemde üretilen kritik alarmlar (`login_success`, `credential_attempt`, `ssh_
 100. **Ücretsiz Malware Analyzer Motoru (Local Regex + MalwareBazaar API):** Yakalanan dosyaların taranması için internet gerektirmeyen çevrimdışı regex imza tarayıcısı ve internet varken abuse.ch MalwareBazaar API üzerinden tamamen ücretsiz tehdit sorgulaması yapan çift katmanlı tarama motoru entegre edildi.
 101. **Analyze.js Paneline Payloads ve Tarpit Tabları Entegre Edildi:** Yönetim paneli analiz sayfasına yakalanan tüm zararlı yazılımların SHA-256, boyut ve detaylarıyla izlenebildiği "Captured Payloads" sekmesi ile o an trap'te meşgul edilen saldırgan IP'lerinin ve istatistiklerinin gösterildiği "TCP Tarpit Activity" sekmesi entegre edildi.
 102. **WinRM (Port 5985) HTTP Emülasyonu ve Windows Profiline Entegrasyonu:** Windows Remote Management (WinRM) servisini taklit edecek bir HTTP sunucu simülatörü yazıldı. /wsman uç noktasına gelen SOAP Identify isteklerine "Microsoft Corporation" imzalı XML yanıtı dönmesi sağlandı. Geçersiz isteklere Microsoft HTTPAPI/2.0 standardında 404 sayfaları döndürüldü ve tüm istek detayları "winrm_request" olarak veritabanına loglandı.
+103. **Windows FTP Decoy (Microsoft FTP Service) Entegrasyonu:** Windows sunucu profiline (windows_server) Microsoft FTP Service taklidi yapacak şekilde "ftp_windows" servisi entegre edildi. config.yaml ve docker-compose dosyalarında yönlendirmeleri tamamlanarak LAN modunda standart 21 numaralı portta MS FTP banner'ı (220 Microsoft FTP Service) dönecek şekilde aktifleştirildi.
 
 ---
 
