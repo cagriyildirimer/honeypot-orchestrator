@@ -82,3 +82,7 @@ services:
     enabled: true
     host: "0.0.0.0"
     port: 135
+  winrm:
+    enabled: true
+    host: "0.0.0.0"
+    port: 5985

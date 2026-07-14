@@ -54,6 +54,7 @@ services:
       HONEYPOT_SERVICE_LDAPS_WINDOWS_PORT: 636
       HONEYPOT_SERVICE_MSSQL_WINDOWS_PORT: 1433
       HONEYPOT_SERVICE_RDP_WINDOWS_PORT: 3389
+      HONEYPOT_SERVICE_WINRM_PORT: 5985
     volumes:
       - honeypot_logs:/app/logs
       # Bind mount config.yaml from project root
@@ -96,6 +97,7 @@ services:
       HONEYPOT_SERVICE_LDAPS_WINDOWS_PORT: 636
       HONEYPOT_SERVICE_MSSQL_WINDOWS_PORT: 1433
       HONEYPOT_SERVICE_RDP_WINDOWS_PORT: 3389
+      HONEYPOT_SERVICE_WINRM_PORT: 5985
     volumes:
       - honeypot_logs:/app/logs
       # Bind mount config.yaml from project root

@@ -42,6 +42,7 @@ services:
       - "3389:3389" # RDP Windows
       - "1445:1445" # SMB Windows
       - "135:135"   # RPC Windows
+      - "5985:5985" # WinRM Windows
       # Windows UDP Decoy Ports
       - "5355:5355/udp" # LLMNR Windows
       - "137:137/udp"  # NBTNNS Windows
