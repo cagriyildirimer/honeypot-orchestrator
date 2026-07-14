@@ -70,6 +70,24 @@ func (f *FTPHoneypot) SetProfile(prof *profiles.HoneypotProfile) {
 	f.profile = prof
 }
 
+func (f *FTPHoneypot) getDataConnection(activeAddr string, dataListener net.Listener) (net.Conn, error) {
+	if dataListener != nil {
+		dataConn, err := dataListener.Accept()
+		if err != nil {
+			return nil, err
+		}
+		return dataConn, nil
+	}
+	if activeAddr != "" {
+		dataConn, err := net.DialTimeout("tcp", activeAddr, 3*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		return dataConn, nil
+	}
+	return nil, fmt.Errorf("no passive listener or active address set")
+}
+
 func (f *FTPHoneypot) handleClient(ctx context.Context, conn net.Conn) error {
 	remoteAddr := conn.RemoteAddr()
 	tcpAddr, ok := remoteAddr.(*net.TCPAddr)
@@ -94,6 +112,7 @@ func (f *FTPHoneypot) handleClient(ctx context.Context, conn net.Conn) error {
 
 	username := ""
 	isLoggedIn := false
+	var activeAddr string
 
 	var dataListener net.Listener
 	defer func() {
@@ -173,15 +192,95 @@ func (f *FTPHoneypot) handleClient(ctx context.Context, conn net.Conn) error {
 			break
 		} else if command == "SYST" {
 			_, _ = conn.Write([]byte("215 UNIX Type: L8\r\n"))
+		} else if command == "FEAT" {
+			var featResponse string
+			if strings.Contains(f.profile.Name, "windows") {
+				featResponse = "211-Extended features supported:\r\n" +
+					" LANG EN*\r\n" +
+					" UTF8\r\n" +
+					" SIZE\r\n" +
+					" MDTM\r\n" +
+					" REST STREAM\r\n" +
+					"211 End\r\n"
+			} else {
+				featResponse = "211-Features:\r\n" +
+					" MDTM\r\n" +
+					" MFMT\r\n" +
+					" TVFS\r\n" +
+					" UTF8\r\n" +
+					" REST STREAM\r\n" +
+					" SIZE\r\n" +
+					"211 End\r\n"
+			}
+			_, _ = conn.Write([]byte(featResponse))
+		} else if command == "OPTS" {
+			_, _ = conn.Write([]byte("200 OPTS UTF8 is set to ON.\r\n"))
 		} else if command == "PWD" {
 			_, _ = conn.Write([]byte("257 \"/\" is current directory.\r\n"))
+		} else if command == "CWD" {
+			if !isLoggedIn {
+				_, _ = conn.Write([]byte("530 Please login with USER and PASS.\r\n"))
+				continue
+			}
+			_, _ = conn.Write([]byte("250 Directory successfully changed.\r\n"))
 		} else if command == "TYPE" {
 			_, _ = conn.Write([]byte("200 Type set to I.\r\n"))
+		} else if command == "SIZE" {
+			if !isLoggedIn {
+				_, _ = conn.Write([]byte("530 Please login with USER and PASS.\r\n"))
+				continue
+			}
+			argLower := strings.ToLower(argument)
+			if strings.HasSuffix(argLower, "notes.txt") {
+				_, _ = conn.Write([]byte("213 120\r\n"))
+			} else if strings.HasSuffix(argLower, "todo.txt") {
+				_, _ = conn.Write([]byte("213 150\r\n"))
+			} else {
+				_, _ = conn.Write([]byte("550 File not found.\r\n"))
+			}
+		} else if command == "MDTM" {
+			if !isLoggedIn {
+				_, _ = conn.Write([]byte("530 Please login with USER and PASS.\r\n"))
+				continue
+			}
+			argLower := strings.ToLower(argument)
+			if strings.HasSuffix(argLower, "notes.txt") || strings.HasSuffix(argLower, "todo.txt") {
+				_, _ = conn.Write([]byte("213 20260714091500\r\n"))
+			} else {
+				_, _ = conn.Write([]byte("550 File not found.\r\n"))
+			}
+		} else if command == "PORT" {
+			if !isLoggedIn {
+				_, _ = conn.Write([]byte("530 Please login with USER and PASS.\r\n"))
+				continue
+			}
+			parts := strings.Split(argument, ",")
+			if len(parts) != 6 {
+				_, _ = conn.Write([]byte("501 Syntax error in parameters.\r\n"))
+				continue
+			}
+			var h1, h2, h3, h4, p1, p2 int
+			_, err := fmt.Sscanf(argument, "%d,%d,%d,%d,%d,%d", &h1, &h2, &h3, &h4, &p1, &p2)
+			if err != nil {
+				_, _ = conn.Write([]byte("501 Syntax error in parameters.\r\n"))
+				continue
+			}
+			ip := fmt.Sprintf("%d.%d.%d.%d", h1, h2, h3, h4)
+			port := p1*256 + p2
+			activeAddr = fmt.Sprintf("%s:%d", ip, port)
+
+			if dataListener != nil {
+				dataListener.Close()
+				dataListener = nil
+			}
+
+			_, _ = conn.Write([]byte("200 PORT command successful.\r\n"))
 		} else if command == "PASV" {
 			if !isLoggedIn {
 				_, _ = conn.Write([]byte("530 Please login with USER and PASS.\r\n"))
 				continue
 			}
+			activeAddr = "" // clear active mode
 			localAddr := conn.LocalAddr().String()
 			localIP, _, _ := net.SplitHostPort(localAddr)
 			ipCommas := strings.ReplaceAll(localIP, ".", ",")
@@ -212,19 +311,69 @@ func (f *FTPHoneypot) handleClient(ctx context.Context, conn net.Conn) error {
 				_, _ = conn.Write([]byte("530 Please login with USER and PASS.\r\n"))
 				continue
 			}
-			if dataListener == nil {
+			if dataListener == nil && activeAddr == "" {
 				_, _ = conn.Write([]byte("425 Use PORT or PASV first.\r\n"))
 				continue
 			}
 			_, _ = conn.Write([]byte("150 Opening ASCII mode data connection for file list.\r\n"))
-			dataConn, err := dataListener.Accept()
-			if err == nil {
-				listContent := "-rw-r--r--   1 owner    group             120 Jul 14 09:15 notes.txt\r\n-rw-r--r--   1 owner    group             150 Jul 14 09:15 todo.txt\r\n"
-				_, _ = dataConn.Write([]byte(listContent))
-				dataConn.Close()
+
+			dataConn, err := f.getDataConnection(activeAddr, dataListener)
+			if err != nil {
+				_, _ = conn.Write([]byte("425 Can't open data connection.\r\n"))
+				continue
 			}
-			dataListener.Close()
-			dataListener = nil
+
+			listContent := "-rw-r--r--   1 owner    group             120 Jul 14 09:15 notes.txt\r\n-rw-r--r--   1 owner    group             150 Jul 14 09:15 todo.txt\r\n"
+			_, _ = dataConn.Write([]byte(listContent))
+			dataConn.Close()
+
+			if dataListener != nil {
+				dataListener.Close()
+				dataListener = nil
+			}
+			activeAddr = "" // clear for next command
+			_, _ = conn.Write([]byte("226 Transfer complete.\r\n"))
+		} else if command == "RETR" {
+			if !isLoggedIn {
+				_, _ = conn.Write([]byte("530 Please login with USER and PASS.\r\n"))
+				continue
+			}
+			if argument == "" {
+				_, _ = conn.Write([]byte("501 Syntax error in parameters.\r\n"))
+				continue
+			}
+			if dataListener == nil && activeAddr == "" {
+				_, _ = conn.Write([]byte("425 Use PORT or PASV first.\r\n"))
+				continue
+			}
+
+			argLower := strings.ToLower(argument)
+			var fileContent string
+			if strings.HasSuffix(argLower, "notes.txt") {
+				fileContent = "Tüm servis entegrasyonlarını tamamlayıp güvenlik duvarı kurallarını gözden geçirin.\r\n"
+			} else if strings.HasSuffix(argLower, "todo.txt") {
+				fileContent = "1. Web paneli şifrelerini değiştir\r\n2. SQL Server yedeklerini al\r\n3. Gereksiz portları kapat\r\n"
+			} else {
+				_, _ = conn.Write([]byte("550 File not found.\r\n"))
+				continue
+			}
+
+			_, _ = conn.Write([]byte(fmt.Sprintf("150 Opening ASCII mode data connection for %s.\r\n", argument)))
+
+			dataConn, err := f.getDataConnection(activeAddr, dataListener)
+			if err != nil {
+				_, _ = conn.Write([]byte("425 Can't open data connection.\r\n"))
+				continue
+			}
+
+			_, _ = dataConn.Write([]byte(fileContent))
+			dataConn.Close()
+
+			if dataListener != nil {
+				dataListener.Close()
+				dataListener = nil
+			}
+			activeAddr = "" // clear for next command
 			_, _ = conn.Write([]byte("226 Transfer complete.\r\n"))
 		} else if command == "STOR" {
 			if !isLoggedIn {
@@ -235,14 +384,14 @@ func (f *FTPHoneypot) handleClient(ctx context.Context, conn net.Conn) error {
 				_, _ = conn.Write([]byte("501 Syntax error in parameters or arguments.\r\n"))
 				continue
 			}
-			if dataListener == nil {
+			if dataListener == nil && activeAddr == "" {
 				_, _ = conn.Write([]byte("425 Use PORT or PASV first.\r\n"))
 				continue
 			}
 
 			_, _ = conn.Write([]byte(fmt.Sprintf("150 Opening BINARY mode data connection for %s.\r\n", argument)))
 
-			dataConn, err := dataListener.Accept()
+			dataConn, err := f.getDataConnection(activeAddr, dataListener)
 			if err != nil {
 				_, _ = conn.Write([]byte("425 Can't open data connection.\r\n"))
 				continue
@@ -261,8 +410,12 @@ func (f *FTPHoneypot) handleClient(ctx context.Context, conn net.Conn) error {
 				}
 			}
 			dataConn.Close()
-			dataListener.Close()
-			dataListener = nil
+
+			if dataListener != nil {
+				dataListener.Close()
+				dataListener = nil
+			}
+			activeAddr = "" // clear for next command
 
 			_, _ = conn.Write([]byte("226 Transfer complete.\r\n"))
 
