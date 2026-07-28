@@ -53,6 +53,7 @@ export const STANDARD_PORTS = {
   smb: 445,
   ssh: 22,
   telnet: 23,
+  winrm: 5985,
 };
 export const DONUT_COLORS = [
   "#0075ff",
