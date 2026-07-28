@@ -64,7 +64,7 @@ func NewOrchestrator(
 
 	for name, c := range cfg.Services {
 		tmpl := name
-		for _, prefix := range []string{"http_", "telnet_", "ssh_", "ftp_", "rdp_", "dns_", "ldaps_", "llmnr_", "nbtnns_", "netbios_", "rpc_", "ldap_", "mssql_", "smb_"} {
+		for _, prefix := range []string{"http_", "telnet_", "ssh_", "ftp_", "rdp_", "dns_", "ldaps_", "llmnr_", "nbtnns_", "netbios_", "rpc_", "ldap_", "mssql_", "smb_", "winrm_"} {
 			if strings.HasPrefix(name, prefix) {
 				tmpl = prefix[:len(prefix)-1]
 				break
@@ -459,7 +459,7 @@ func (o *Orchestrator) GetServicesStatus(displayHost string) []WebServiceStatus 
 		}
 
 		tmpl := name
-		for _, prefix := range []string{"http_", "telnet_", "ssh_", "ftp_"} {
+		for _, prefix := range []string{"http_", "telnet_", "ssh_", "ftp_", "rdp_", "dns_", "ldaps_", "llmnr_", "nbtnns_", "netbios_", "rpc_", "ldap_", "mssql_", "smb_", "winrm_"} {
 			if strings.HasPrefix(name, prefix) {
 				tmpl = prefix[:len(prefix)-1]
 				break
