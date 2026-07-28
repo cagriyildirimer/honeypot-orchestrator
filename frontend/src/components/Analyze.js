@@ -703,12 +703,12 @@ export function AnalyzePage(props) {
                 type: "button",
                 className: "button secondary",
                 onClick: () => handleExportTimeline("csv")
-              }, "Export Timeline (CSV)"),
+              }, "Export CSV"),
               h("button", {
                 type: "button",
                 className: "button secondary",
                 onClick: () => handleExportTimeline("json")
-              }, "Export Timeline (JSON)")
+              }, "Export JSON")
             )
           : null
       ),
@@ -1044,12 +1044,6 @@ export function AnalyzePage(props) {
         "div",
         { className: "topbar-actions" },
         h(
-          "div",
-          { className: "user-pill" },
-          h("span", null, "Signed in as"),
-          h("strong", null, props.session.username || "-")
-        ),
-        h(
           "a",
           {
             className: `button${isAdmin ? "" : " disabled"}`,
@@ -1078,6 +1072,13 @@ export function AnalyzePage(props) {
             },
           },
           "Export IOC (STIX)"
+        ),
+        h("span", { className: "topbar-icons-slot" }),
+        h(
+          "div",
+          { className: "user-pill" },
+          h("span", null, "Signed in as"),
+          h("strong", null, props.session.username || "-")
         ),
         h(
           "button",

@@ -1,11 +1,22 @@
 const h = React.createElement;
-const { useEffect, useState, useRef, useMemo } = React;
-import { STANDARD_PORTS, standardPortNote, servicePortTone } from '../utils.js';
+const { useEffect, useState } = React;
+import { STANDARD_PORTS } from '../utils.js';
 import { PageSkeleton, MetricCard } from './Core.js';
+
+function getServiceDetails(serviceName) {
+  const baseName = serviceName.split("_")[0].toLowerCase();
+  const displayName = baseName.toUpperCase();
+  return {
+    baseName,
+    displayName
+  };
+}
+
 export function ProfilesPage(props) {
   const [payload, setPayload] = useState(null);
   const [selectedProfile, setSelectedProfile] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [togglingMap, setTogglingMap] = useState({});
 
   async function loadProfiles() {
     const next = await window.requestJson("/api/overview?limit=1");
@@ -81,14 +92,15 @@ export function ProfilesPage(props) {
       h(
         "div",
         { className: "topbar-actions" },
-        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button secondary", onClick: () => loadProfiles().catch((error) => window.showToast(error.message, "error")) }, "Refresh"),
+        h("span", { className: "topbar-icons-slot" }),
+        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
       )
     ),
     h(
       "section",
-      { className: "toolbar-panel" },
+      { className: "toolbar-panel static-panel" },
       h(
         "form",
         { className: "profile-control", onSubmit: applyProfile },
@@ -121,42 +133,56 @@ export function ProfilesPage(props) {
     ),
     h(
       "section",
-      { className: "panel services-panel" },
+      { className: "panel services-panel static-panel" },
       h("div", { className: "section-heading" }, h("div", null, h("h2", null, "Services"), h("p", null, "Listeners assigned to the selected profile."))),
       h(
         "div",
-        { className: "service-grid" },
+        { className: "service-grid-fixed" },
         services.length
-          ? services.map((service) =>
-              h(
+          ? services.map((service) => {
+              const { baseName, displayName } = getServiceDetails(service.name);
+              const standardPort = STANDARD_PORTS[baseName] || STANDARD_PORTS[service.name];
+              const isPortMismatch = Boolean(standardPort && standardPort !== service.port);
+
+              return h(
                 "article",
-                { key: `${service.name}-${service.port}`, className: `service-card ${service.running ? "live" : ""}` },
+                { key: `${service.name}-${service.port}`, className: `service-card-modern ${service.running ? "live" : "stopped"}` },
                 h(
                   "div",
                   { className: "service-card-header" },
-                  h("div", null, h("strong", null, window.text(service.name)), h("span", null, `${window.text(service.display_host || service.host)}:${window.text(service.port)}`)),
+                  h(
+                    "div",
+                    { className: "service-header-title-row" },
+                    h("strong", { className: "service-name-title" }, displayName),
+                    h("span", { className: "service-port-title" }, `:${service.port}`)
+                  ),
                   h(
                     "label",
                     { className: "toggle-switch", title: service.running ? "Turn Off" : "Turn On" },
                     h("input", {
                       type: "checkbox",
                       checked: service.running,
+                      disabled: props.session.role !== "admin" || submitting || Boolean(togglingMap[service.name]),
                       onChange: async (e) => {
                         const enabled = e.target.checked;
-                        const label = service.name.replace(/_/g, " ");
-                        setServiceRunning(service.name, enabled);
+                        const serviceName = service.name;
+                        const label = displayName;
+
+                        setTogglingMap((prev) => ({ ...prev, [serviceName]: true }));
+                        setServiceRunning(serviceName, enabled);
+
                         try {
                           await window.requestJson("/api/services/toggle", {
                             method: "POST",
-                            body: JSON.stringify({ service: service.name, enabled: enabled })
+                            body: JSON.stringify({ service: serviceName, enabled: enabled })
                           });
                           window.showToast(enabled ? `${label} started` : `${label} stopped`, enabled ? "success" : "neutral");
-                          window.setTimeout(() => {
-                            loadProfiles().catch((error) => window.showToast(error.message, "error"));
-                          }, 1200);
+                          await loadProfiles();
                         } catch (err) {
                           window.showToast(err.message || "Toggle failed", "error");
-                          loadProfiles().catch((error) => window.showToast(error.message, "error"));
+                          await loadProfiles();
+                        } finally {
+                          setTogglingMap((prev) => ({ ...prev, [serviceName]: false }));
                         }
                       }
                     }),
@@ -165,23 +191,39 @@ export function ProfilesPage(props) {
                 ),
                 h(
                   "div",
-                  { className: "service-card-tags" },
-                  h("span", { className: `tag ${servicePortTone(service)}` }, window.text(standardPortNote(service))),
-                  h("span", { className: "tag template" }, window.text(service.template))
-                ),
-                h("p", null, service.running ? "This listener is exposed right now." : "This listener exists in the profile but is not active."),
-                (function() {
-                  const baseName = service.name.split("_")[0];
-                  const standardPort = STANDARD_PORTS[baseName] || STANDARD_PORTS[service.name];
-                  return standardPort && standardPort !== service.port
-                    ? h("p", { style: { fontSize: "11.5px", color: "#f59e0b", marginTop: "8px", display: "flex", alignItems: "center", gap: "5px", lineHeight: "1.4" } }, 
-                        `⚠️ Exposed on custom port ${service.port} to prevent host port conflict (Standard: ${standardPort}).`
+                  { className: "service-card-body" },
+                  isPortMismatch
+                    ? h(
+                        "div",
+                        { className: "port-warning-box" },
+                        h("span", { className: "warning-icon" }, "⚠️"),
+                        h(
+                          "div",
+                          { className: "warning-text" },
+                          h("strong", null, `Port Conflict (Standard: ${standardPort})`),
+                          h("span", null, `Bound to custom port ${service.port}`)
+                        )
                       )
-                    : null;
-                })()
-              )
-            )
-          : h("article", { className: "service-card" }, h("p", null, "No listeners are assigned to the current profile."))
+                    : h(
+                        "div",
+                        { className: "port-standard-box" },
+                        h("span", { className: "check-icon" }, "✓"),
+                        h("span", null, `Standard Listener Port`)
+                      )
+                ),
+                h(
+                  "div",
+                  { className: "service-card-footer" },
+                  h(
+                    "span",
+                    { className: `status-indicator ${service.running ? "active" : "inactive"}` },
+                    h("span", { className: "status-dot" }),
+                    service.running ? "EXPOSED / LISTENING" : "STOPPED"
+                  )
+                )
+              );
+            })
+          : h("article", { className: "service-card-modern" }, h("p", null, "No listeners are assigned to the current profile."))
       )
     )
   );

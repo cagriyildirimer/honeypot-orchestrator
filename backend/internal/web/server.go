@@ -149,6 +149,8 @@ func (s *Server) StartServer(ctx context.Context) error {
 		r.Get("/api/events", s.HandleEvents)
 		r.Get("/api/stats", s.HandleStats)
 		r.Get("/api/alerts/stream", s.alertStreamer.ServeHTTP)
+		r.Get("/api/ioc/csv", s.HandleExportIocCSV)
+		r.Get("/api/ioc/stix", s.HandleExportIocSTIX)
 
 		// Profiles and Service controls
 		r.Post("/api/profile", s.HandleProfile)

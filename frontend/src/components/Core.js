@@ -1,6 +1,6 @@
 const h = React.createElement;
 const { useEffect, useState, useRef, useMemo } = React;
-import { NAV_ITEMS, SETTINGS_ITEMS, isSettingsPage } from '../utils.js';
+import { NAV_ITEMS, SETTINGS_ITEMS, isSettingsPage, APPEARANCE_THEMES } from '../utils.js';
 export function Skeleton(props) {
   return h("div", { 
     className: `skeleton ${props.className || ""}`, 
@@ -246,7 +246,7 @@ export function NotificationBellPortal(props) {
   useEffect(() => {
     let debounceTimer;
     const updateTarget = () => {
-      const target = document.querySelector(".page-actions, .topbar-actions");
+      const target = document.querySelector(".topbar-icons-slot");
       setPortalTarget(target);
     };
 
@@ -291,6 +291,21 @@ export function NotificationBell() {
     }
   });
   const [open, setOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [scheme, setScheme] = useState(() => window.currentScheme());
+  const [theme, setTheme] = useState(() => window.currentTheme());
+
+  function toggleScheme() {
+    const nextScheme = scheme === "dark" ? "light" : "dark";
+    window.applyScheme(nextScheme);
+    setScheme(nextScheme);
+  }
+
+  function selectTheme(nextTheme) {
+    window.applyTheme(nextTheme);
+    setTheme(nextTheme);
+    setThemeOpen(false);
+  }
 
   useEffect(() => {
     try {
@@ -327,46 +342,186 @@ export function NotificationBell() {
     return () => es.close();
   }, []);
 
-  return h("div", { className: "notification-bell-container", style: { position: "relative", zIndex: 999, flexShrink: 0 } },
+  return h("div", { className: "top-controls-group", style: { display: "flex", alignItems: "center", gap: "6px", position: "relative", zIndex: 999, flexShrink: 0 } },
+    /* 1. Dark/Light Mode Toggle Button (Line SVG Icon) */
     h("button", { 
-      className: "bell-btn", 
-      onClick: () => { setOpen(!open); setUnreadCount(0); },
-      style: { background: "transparent", border: "none", width: "38px", height: "38px", cursor: "pointer", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--accent, #0075ff)", padding: 0 }
+      type: "button",
+      className: "bell-btn mode-toggle-btn", 
+      title: scheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
+      onClick: toggleScheme,
+      style: { background: "transparent", border: "none", width: "38px", height: "38px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--accent, #0075ff)", padding: 0 }
     },
-      h("svg", {
-        width: "22",
-        height: "22",
-        viewBox: "0 0 24 24",
-        fill: "none",
-        stroke: "currentColor",
-        strokeWidth: "2.2",
-        strokeLinecap: "round",
-        strokeLinejoin: "round",
-        style: { display: "block" }
-      },
-        h("path", { d: "M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" }),
-        h("path", { d: "M13.73 21a2 2 0 0 1-3.46 0" })
-      ),
-      unreadCount > 0 ? h("span", { 
-        className: "badge", 
-        style: { position: "absolute", top: "0px", right: "0px", background: "var(--danger)", color: "#ffffff", borderRadius: "10px", padding: "2px 6px", fontSize: "11px", fontWeight: "bold", border: "2px solid var(--surface-strong)" } 
-      }, unreadCount > 99 ? "99+" : unreadCount) : null
+      scheme === "dark" 
+        ? h("svg", {
+            width: "20",
+            height: "20",
+            viewBox: "0 0 24 24",
+            fill: "none",
+            stroke: "currentColor",
+            strokeWidth: "2.2",
+            strokeLinecap: "round",
+            strokeLinejoin: "round",
+            style: { display: "block" }
+          },
+            h("circle", { cx: "12", cy: "12", r: "5" }),
+            h("line", { x1: "12", y1: "1", x2: "12", y2: "3" }),
+            h("line", { x1: "12", y1: "21", x2: "12", y2: "23" }),
+            h("line", { x1: "4.22", y1: "4.22", x2: "5.64", y2: "5.64" }),
+            h("line", { x1: "18.36", y1: "18.36", x2: "19.78", y2: "19.78" }),
+            h("line", { x1: "1", y1: "12", x2: "3", y2: "12" }),
+            h("line", { x1: "21", y1: "12", x2: "23", y2: "12" }),
+            h("line", { x1: "4.22", y1: "19.78", x2: "5.64", y2: "18.36" }),
+            h("line", { x1: "18.36", y1: "5.64", x2: "19.78", y2: "4.22" })
+          )
+        : h("svg", {
+            width: "20",
+            height: "20",
+            viewBox: "0 0 24 24",
+            fill: "none",
+            stroke: "currentColor",
+            strokeWidth: "2.2",
+            strokeLinecap: "round",
+            strokeLinejoin: "round",
+            style: { display: "block" }
+          },
+            h("path", { d: "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" })
+          )
     ),
-    open ? h("div", { 
-      className: "dropdown-menu", 
-      style: { position: "absolute", top: "48px", right: "0", width: "320px", background: "var(--surface-strong, #131c44)", border: "1px solid var(--border)", borderRadius: "8px", padding: "0", boxShadow: "var(--shadow)", maxHeight: "400px", overflowY: "auto", overflowX: "hidden" } 
-    },
-      h("div", { style: { padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "var(--glass-header-bg)", fontWeight: "600", fontSize: "14px" } }, "Notifications"),
-      alerts.length === 0 ? h("p", { style: { textAlign: "center", color: "var(--muted)", margin: "20px 0" } }, "No recent alerts.") : null,
-      alerts.map((a, i) => h("div", { key: i, style: { padding: "12px 16px", borderBottom: "1px solid var(--border)", fontSize: "13px", background: a.type === "aggregated" ? "var(--danger-soft, rgba(227, 26, 26, 0.16))" : "transparent" } },
-        h("strong", { style: { color: "var(--danger)", display: "block", marginBottom: "4px" } }, a.type === "aggregated" ? "Aggregated Alert" : "Critical Alert"),
-        h("div", { style: { color: "var(--muted-strong)", lineHeight: "1.4" } }, a.summary),
-        h("div", { style: { color: "var(--muted)", marginTop: "6px", fontSize: "11px", display: "flex", justifyContent: "space-between" } }, 
-          h("span", null, `IP: ${a.src_ip || "Unknown"}`),
-          a.service ? h("span", { style: { background: "var(--tag-neutral-bg)", padding: "2px 6px", borderRadius: "4px" } }, a.service) : null
+
+    /* 2. Color Theme Picker Button (Line SVG Palette Icon) */
+    h("div", { style: { position: "relative" } },
+      h("button", { 
+        type: "button",
+        className: "bell-btn color-theme-btn", 
+        title: "Change Color Accent",
+        onClick: () => { setThemeOpen(!themeOpen); setOpen(false); },
+        style: { background: "transparent", border: "none", width: "38px", height: "38px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--accent, #0075ff)", padding: 0 }
+      },
+        h("svg", {
+          width: "20",
+          height: "20",
+          viewBox: "0 0 24 24",
+          fill: "none",
+          stroke: "currentColor",
+          strokeWidth: "2.2",
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+          style: { display: "block" }
+        },
+          h("circle", { cx: "13.5", cy: "6.5", r: ".5", fill: "currentColor" }),
+          h("circle", { cx: "17.5", cy: "10.5", r: ".5", fill: "currentColor" }),
+          h("circle", { cx: "8.5", cy: "7.5", r: ".5", fill: "currentColor" }),
+          h("circle", { cx: "6.5", cy: "12.5", r: ".5", fill: "currentColor" }),
+          h("path", { d: "M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.92 0 1.7-.72 1.7-1.65 0-.43-.17-.83-.44-1.13-.27-.3-.44-.7-.44-1.13 0-.93.77-1.69 1.7-1.69h1.98C19.42 16.4 22 13.8 22 10.5 22 5.8 17.5 2 12 2z" })
         )
-      ))
-    ) : null
+      ),
+      themeOpen ? h("div", { 
+        className: "dropdown-menu theme-picker-menu", 
+        style: { position: "absolute", top: "48px", right: "0", width: "190px", background: "var(--surface-strong, #131c44)", border: "1px solid var(--border)", borderRadius: "10px", padding: "6px 0", boxShadow: "var(--shadow)", zIndex: 1000 } 
+      },
+        h("div", { style: { padding: "8px 14px", borderBottom: "1px solid var(--border)", fontWeight: "700", fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px" } }, "Color Palette"),
+        APPEARANCE_THEMES.map((t) => {
+          const isSel = t.key === theme;
+          return h("button", {
+            key: t.key,
+            type: "button",
+            onClick: () => selectTheme(t.key),
+            style: { 
+              display: "flex", 
+              alignItems: "center", 
+              justifyContent: "space-between", 
+              width: "100%", 
+              padding: "9px 14px", 
+              background: isSel ? "var(--accent-soft)" : "transparent", 
+              border: "none", 
+              color: isSel ? "var(--accent)" : "var(--text)", 
+              cursor: "pointer", 
+              fontSize: "13px", 
+              fontWeight: isSel ? "700" : "500",
+              textAlign: "left" 
+            }
+          },
+            h("span", null, t.label),
+            isSel ? h("span", { style: { fontSize: "12px", color: "var(--accent)" } }, "✓") : null
+          );
+        })
+      ) : null
+    ),
+
+    /* 3. Notification Bell Button */
+    h("div", { style: { position: "relative" } },
+      h("button", { 
+        className: "bell-btn", 
+        onClick: () => { setOpen(!open); setThemeOpen(false); },
+        style: { background: "var(--surface-strong, rgba(255, 255, 255, 0.05))", border: "1px solid var(--border)", borderRadius: "8px", width: "36px", height: "36px", cursor: "pointer", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--accent, #0075ff)", padding: 0 }
+      },
+        h("svg", {
+          width: "20",
+          height: "20",
+          viewBox: "0 0 24 24",
+          fill: "none",
+          stroke: "currentColor",
+          strokeWidth: "2.2",
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+          style: { display: "block" }
+        },
+          h("path", { d: "M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" }),
+          h("path", { d: "M13.73 21a2 2 0 0 1-3.46 0" })
+        ),
+        unreadCount > 0 ? h("span", { 
+          className: "badge", 
+          style: { position: "absolute", top: "-2px", right: "-2px", background: "var(--danger)", color: "#ffffff", borderRadius: "10px", padding: "1px 5px", fontSize: "10px", fontWeight: "bold", border: "2px solid var(--surface-strong)" } 
+        }, unreadCount > 99 ? "99+" : unreadCount) : null
+      ),
+      open ? h("div", { 
+        className: "dropdown-menu", 
+        style: { position: "absolute", top: "44px", right: "0", width: "340px", background: "var(--surface-strong, #131c44)", border: "1px solid var(--border)", borderRadius: "10px", padding: "0", boxShadow: "var(--shadow)", maxHeight: "420px", overflowY: "auto", overflowX: "hidden" } 
+      },
+        h("div", { 
+          style: { 
+            padding: "10px 16px", 
+            borderBottom: "1px solid var(--border)", 
+            background: "var(--glass-header-bg)", 
+            display: "flex", 
+            justifyContent: "space-between", 
+            alignItems: "center" 
+          } 
+        },
+          h("div", { style: { fontWeight: "700", fontSize: "14px", color: "var(--text)" } }, "Notifications"),
+          alerts.length > 0 ? h("button", {
+            type: "button",
+            className: "button secondary small",
+            style: { fontSize: "11px", padding: "3px 8px", height: "24px", minHeight: "24px", cursor: "pointer", color: "#21d4fd", borderColor: "rgba(33, 212, 253, 0.4)" },
+            onClick: () => {
+              setUnreadCount(0);
+              try {
+                localStorage.setItem("honeypot_unread_count", "0");
+              } catch (e) {}
+            }
+          }, "Mark all as read") : null
+        ),
+        alerts.length === 0 ? h("p", { style: { textAlign: "center", color: "var(--muted)", margin: "20px 0", fontSize: "13px" } }, "No recent alerts.") : null,
+        alerts.map((a, i) => h("div", { key: i, style: { padding: "12px 16px", borderBottom: "1px solid var(--border)", fontSize: "13px", position: "relative", background: a.type === "aggregated" ? "var(--danger-soft, rgba(227, 26, 26, 0.16))" : "transparent" } },
+          h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" } },
+            h("strong", { style: { color: "var(--danger)" } }, a.type === "aggregated" ? "Aggregated Alert" : "Critical Alert"),
+            h("button", {
+              type: "button",
+              title: "Dismiss notification",
+              style: { background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: "13px", padding: "0 4px", lineHeight: "1" },
+              onClick: () => {
+                setAlerts(prev => prev.filter((_, idx) => idx !== i));
+              }
+            }, "✕")
+          ),
+          h("div", { style: { color: "var(--muted-strong)", lineHeight: "1.4" } }, a.summary),
+          h("div", { style: { color: "var(--muted)", marginTop: "6px", fontSize: "11px", display: "flex", justifyContent: "space-between" } }, 
+            h("span", null, `IP: ${a.src_ip || "Unknown"}`),
+            a.service ? h("span", { style: { background: "var(--tag-neutral-bg)", padding: "2px 6px", borderRadius: "4px" } }, a.service) : null
+          )
+        ))
+      ) : null
+    )
   );
 }
 

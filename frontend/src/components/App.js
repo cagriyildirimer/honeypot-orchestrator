@@ -7,7 +7,8 @@ import { AnalyzePage } from './Analyze.js';
 import { LiveActivityPage } from './Live.js';
 import { LogsPage } from './Logs.js';
 import { ProfilesPage } from './Profiles.js';
-import { WhitelistPage, BlacklistPage, AppearancePage, SystemPage, UsersPage, SiemSettingsPage } from './Settings.js';
+import { WhitelistPage, BlacklistPage, SystemPage, UsersPage, SiemSettingsPage } from './Settings.js';
+
 export function App() {
   const [page, setPage] = useState(pathToPage(window.location.pathname));
   const [session, setSession] = useState(null);
@@ -23,7 +24,6 @@ export function App() {
       blocklist: "Honeypot Director Blocklist",
       profiles: "Honeypot Director Profiles",
       logs: "Honeypot Director Logs",
-      appearance: "Honeypot Director Appearance",
       system: "Honeypot Director System",
       users: "Honeypot Director Users",
       siem: "Honeypot Director SIEM Integration",
@@ -93,8 +93,6 @@ export function App() {
     pageNode = h(ProfilesPage, { session, onLogout: handleLogout });
   } else if (page === "logs") {
     pageNode = h(LogsPage, { session, onLogout: handleLogout });
-  } else if (page === "appearance") {
-    pageNode = h(AppearancePage, { session, onLogout: handleLogout });
   } else if (page === "system") {
     pageNode = h(SystemPage, { session, onLogout: handleLogout });
   } else if (page === "users") {

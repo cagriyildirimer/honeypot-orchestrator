@@ -31,7 +31,6 @@ export const NAV_ITEMS = [
   { key: "logs", label: "Logs", path: "/logs" },
 ];
 export const SETTINGS_ITEMS = [
-  { key: "appearance", label: "Appearance", path: "/settings/appearance" },
   { key: "whitelist", label: "Whitelist", path: "/settings/whitelist" },
   { key: "blocklist", label: "Blocklist", path: "/settings/blocklist" },
   { key: "siem", label: "SIEM Integration", path: "/settings/siem" },
@@ -133,9 +132,6 @@ export function pathToPage(pathname) {
   }
   if (pathname === "/logs") {
     return "logs";
-  }
-  if (pathname === "/settings/appearance") {
-    return "appearance";
   }
   if (pathname === "/settings/system") {
     return "system";

@@ -5,8 +5,9 @@ import { PageSkeleton } from './Core.js';
 export function WhitelistPage(props) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [ip, setIp] = useState("");
-  const [description, setDescription] = useState("");
+  const [mode, setMode] = useState("idle");
+  const [activeEntry, setActiveEntry] = useState(null);
+  const [form, setForm] = useState({ ip: "", description: "" });
   const [submitting, setSubmitting] = useState(false);
 
   async function loadWhitelist() {
@@ -21,25 +22,37 @@ export function WhitelistPage(props) {
     loadWhitelist().catch((error) => window.showToast(error.message, "error"));
   }, []);
 
-  async function handleAdd(event) {
-    event.preventDefault();
+  function beginCreate() {
+    setMode("create");
+    setActiveEntry(null);
+    setForm({ ip: "", description: "" });
+  }
+
+  function beginEdit(entry) {
+    setMode("edit");
+    setActiveEntry(entry);
+    setForm({ ip: entry.ip, description: entry.description || "" });
+  }
+
+  async function handleSave(event) {
+    if (event) event.preventDefault();
     if (props.session.role !== "admin") {
       window.showToast("Admin access required.", "error");
       return;
     }
-    if (!ip.trim() || !description.trim()) {
-      window.showToast("IP and Description are required.", "error");
+    if (!form.ip.trim() || !form.description.trim()) {
+      window.showToast("IP Address and Description are required.", "error");
       return;
     }
     setSubmitting(true);
     try {
       await window.requestJson("/api/whitelist", {
         method: "POST",
-        body: JSON.stringify({ ip: ip.trim(), description: description.trim() }),
+        body: JSON.stringify({ ip: form.ip.trim(), description: form.description.trim() }),
       });
-      window.showToast(`IP ${ip.trim()} added to whitelist.`, "success");
-      setIp("");
-      setDescription("");
+      window.showToast(`IP ${form.ip.trim()} saved to whitelist.`, "success");
+      setMode("idle");
+      setActiveEntry(null);
       await loadWhitelist();
     } catch (error) {
       window.showToast(error.message, "error");
@@ -53,12 +66,19 @@ export function WhitelistPage(props) {
       window.showToast("Admin access required.", "error");
       return;
     }
+    if (!confirm(`Are you sure you want to remove IP ${targetIp} from the whitelist?`)) {
+      return;
+    }
     try {
       await window.requestJson("/api/whitelist/delete", {
         method: "POST",
         body: JSON.stringify({ ip: targetIp }),
       });
       window.showToast(`IP ${targetIp} removed from whitelist.`, "success");
+      if (activeEntry && activeEntry.ip === targetIp) {
+        setMode("idle");
+        setActiveEntry(null);
+      }
       await loadWhitelist();
     } catch (error) {
       window.showToast(error.message, "error");
@@ -86,32 +106,15 @@ export function WhitelistPage(props) {
       h(
         "div",
         { className: "topbar-actions" },
-        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button secondary", onClick: loadWhitelist }, "Refresh"),
+        h("span", { className: "topbar-icons-slot" }),
+        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
       )
     ),
-    isAdmin
-      ? h(
-          "section",
-          { className: "panel" },
-          h("div", { className: "section-heading compact" }, h("div", null, h("h2", null, "Add to Whitelist"), h("p", null, "Enter details to whitelist an IP. Description is mandatory."))),
-          h(
-            "form",
-            { className: "settings-form", onSubmit: handleAdd },
-            h(
-              "div",
-              { style: { display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: "16px", alignItems: "end" } },
-              h("label", { className: "field-block", style: { marginBottom: 0 } }, h("span", null, "IP Address"), h("input", { type: "text", value: ip, onChange: (e) => setIp(e.target.value), placeholder: "e.g. 192.168.1.50", required: true })),
-              h("label", { className: "field-block", style: { marginBottom: 0 } }, h("span", null, "Reason / Description"), h("input", { type: "text", value: description, onChange: (e) => setDescription(e.target.value), placeholder: "e.g. Admin workstation for testing", required: true })),
-              h("button", { type: "submit", className: "button", disabled: submitting }, submitting ? "Adding..." : "Add IP")
-            )
-          )
-        )
-      : null,
     h(
       "section",
-      { className: "panel" },
+      { className: "panel static-panel" },
       h("div", { className: "section-heading" }, h("div", null, h("h2", null, "Whitelisted IPs"), h("p", null, "Currently whitelisted IP addresses."))),
       h(
         "div",
@@ -138,23 +141,72 @@ export function WhitelistPage(props) {
                     h(
                       "td",
                       { className: "table-actions-cell" },
-                      h("button", { type: "button", className: "button danger secondary", disabled: !isAdmin, onClick: () => handleDelete(entry.ip) }, "Remove")
+                      h("div", { style: { display: "flex", gap: "6px", justifyContent: "flex-end" } },
+                        h("button", { type: "button", className: "button secondary", disabled: !isAdmin, onClick: () => beginEdit(entry) }, "Edit"),
+                        h("button", { type: "button", className: "button danger secondary", disabled: !isAdmin, onClick: () => handleDelete(entry.ip) }, "Delete")
+                      )
                     )
                   )
                 )
               : h("tr", null, h("td", { colSpan: 4, className: "empty-row" }, "No whitelisted IPs found."))
           )
         )
-      )
-    )
+      ),
+      isAdmin
+        ? h(
+            "div",
+            { className: "button-row users-add-row", style: { marginTop: "16px" } },
+            h("button", { type: "button", className: "button secondary icon-button", "aria-label": "Add Whitelist IP", onClick: beginCreate }, "+")
+          )
+        : null
+    ),
+
+    /* Modal Overlay Panel for Create / Edit Whitelist IP */
+    isAdmin && mode !== "idle"
+      ? h(
+          "div",
+          { className: "user-modal-overlay", onClick: () => setMode("idle") },
+          h(
+            "div",
+            { className: "user-modal-card", onClick: (e) => e.stopPropagation() },
+            h(
+              "div",
+              { className: "user-modal-header" },
+              h("h3", null, mode === "create" ? "Add to Whitelist" : `Edit Whitelist IP: ${activeEntry?.ip}`),
+              h("button", { type: "button", className: "user-modal-close-icon", onClick: () => setMode("idle") }, "✕")
+            ),
+            h(
+              "form",
+              { onSubmit: handleSave, style: { display: "flex", flexDirection: "column", flex: "1 1 auto" } },
+              h(
+                "div",
+                { className: "user-modal-body" },
+                h("label", { className: "field-block" }, h("span", null, "IP Address"), h("input", { type: "text", value: form.ip, onChange: (e) => setForm({ ...form, ip: e.target.value }), placeholder: "e.g. 192.168.1.50", required: true, autoFocus: mode === "create" })),
+                h("label", { className: "field-block" }, h("span", null, "Reason / Description"), h("input", { type: "text", value: form.description, onChange: (e) => setForm({ ...form, description: e.target.value }), placeholder: "e.g. Admin workstation", required: true }))
+              ),
+              /* Bottom Right Corner: Save | (Delete if edit) | Close */
+              h(
+                "div",
+                { className: "user-modal-footer" },
+                h("button", { type: "submit", className: "button", disabled: submitting }, submitting ? "Saving..." : "Save"),
+                mode === "edit"
+                  ? h("button", { type: "button", className: "button danger", onClick: () => handleDelete(activeEntry.ip) }, "Delete")
+                  : null,
+                h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Close")
+              )
+            )
+          )
+        )
+      : null
   );
 }
 
 export function BlacklistPage(props) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [ip, setIp] = useState("");
-  const [description, setDescription] = useState("");
+  const [mode, setMode] = useState("idle");
+  const [activeEntry, setActiveEntry] = useState(null);
+  const [form, setForm] = useState({ ip: "", description: "" });
   const [submitting, setSubmitting] = useState(false);
   const [autoBlacklist, setAutoBlacklist] = useState(true);
 
@@ -200,13 +252,25 @@ export function BlacklistPage(props) {
     }
   }
 
-  async function handleAdd(event) {
-    event.preventDefault();
+  function beginCreate() {
+    setMode("create");
+    setActiveEntry(null);
+    setForm({ ip: "", description: "" });
+  }
+
+  function beginEdit(entry) {
+    setMode("edit");
+    setActiveEntry(entry);
+    setForm({ ip: entry.ip, description: entry.description || "" });
+  }
+
+  async function handleSave(event) {
+    if (event) event.preventDefault();
     if (props.session.role !== "admin") {
       window.showToast("Admin access required.", "error");
       return;
     }
-    if (!ip.trim() || !description.trim()) {
+    if (!form.ip.trim() || !form.description.trim()) {
       window.showToast("IP/MAC and Description are required.", "error");
       return;
     }
@@ -214,11 +278,11 @@ export function BlacklistPage(props) {
     try {
       await window.requestJson("/api/blacklist", {
         method: "POST",
-        body: JSON.stringify({ ip: ip.trim(), description: description.trim() }),
+        body: JSON.stringify({ ip: form.ip.trim(), description: form.description.trim() }),
       });
-      window.showToast(`Target ${ip.trim()} added to blacklist.`, "success");
-      setIp("");
-      setDescription("");
+      window.showToast(`Target ${form.ip.trim()} saved to blacklist.`, "success");
+      setMode("idle");
+      setActiveEntry(null);
       await loadBlacklist();
     } catch (error) {
       window.showToast(error.message, "error");
@@ -227,9 +291,12 @@ export function BlacklistPage(props) {
     }
   }
 
-  async function handleDelete(targetIp) {
+  async function handleUnblock(targetIp) {
     if (props.session.role !== "admin") {
       window.showToast("Admin access required.", "error");
+      return;
+    }
+    if (!confirm(`Are you sure you want to unblock ${targetIp}?`)) {
       return;
     }
     try {
@@ -237,7 +304,36 @@ export function BlacklistPage(props) {
         method: "POST",
         body: JSON.stringify({ ip: targetIp }),
       });
-      window.showToast(`Target ${targetIp} removed from blacklist.`, "success");
+      window.showToast(`Target ${targetIp} unblocked.`, "success");
+      if (activeEntry && activeEntry.ip === targetIp) {
+        setMode("idle");
+        setActiveEntry(null);
+      }
+      await loadBlacklist();
+    } catch (error) {
+      window.showToast(error.message, "error");
+    }
+  }
+
+  async function handleMoveToWhitelist() {
+    if (props.session.role !== "admin") {
+      window.showToast("Admin access required.", "error");
+      return;
+    }
+    const targetIp = form.ip.trim();
+    const desc = form.description.trim() || "Moved from Blacklist";
+    try {
+      await window.requestJson("/api/whitelist", {
+        method: "POST",
+        body: JSON.stringify({ ip: targetIp, description: desc }),
+      });
+      await window.requestJson("/api/blacklist/delete", {
+        method: "POST",
+        body: JSON.stringify({ ip: targetIp }),
+      });
+      window.showToast(`IP ${targetIp} moved to Whitelist successfully!`, "success");
+      setMode("idle");
+      setActiveEntry(null);
       await loadBlacklist();
     } catch (error) {
       window.showToast(error.message, "error");
@@ -265,8 +361,9 @@ export function BlacklistPage(props) {
       h(
         "div",
         { className: "topbar-actions" },
-        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button secondary", onClick: loadBlacklist }, "Refresh"),
+        h("span", { className: "topbar-icons-slot" }),
+        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
       )
     ),
@@ -295,27 +392,9 @@ export function BlacklistPage(props) {
         )
       )
     ),
-    isAdmin
-      ? h(
-          "section",
-          { className: "panel" },
-          h("div", { className: "section-heading compact" }, h("div", null, h("h2", null, "Add to Blacklist"), h("p", null, "Enter details to blacklist an IP or MAC address. Description is mandatory."))),
-          h(
-            "form",
-            { className: "settings-form", onSubmit: handleAdd },
-            h(
-              "div",
-              { style: { display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: "16px", alignItems: "end" } },
-              h("label", { className: "field-block", style: { marginBottom: 0 } }, h("span", null, "IP or MAC Address"), h("input", { type: "text", value: ip, onChange: (e) => setIp(e.target.value), placeholder: "e.g. 192.168.1.100 or 00:11:22:aa:bb:cc", required: true })),
-              h("label", { className: "field-block", style: { marginBottom: 0 } }, h("span", null, "Reason / Description"), h("input", { type: "text", value: description, onChange: (e) => setDescription(e.target.value), placeholder: "e.g. Automated port scanner detected", required: true })),
-              h("button", { type: "submit", className: "button", disabled: submitting }, submitting ? "Adding..." : "Block Target")
-            )
-          )
-        )
-      : null,
     h(
       "section",
-      { className: "panel" },
+      { className: "panel static-panel" },
       h("div", { className: "section-heading" }, h("div", null, h("h2", null, "Blacklisted Targets"), h("p", null, "Currently blocked IP or MAC addresses."))),
       h(
         "div",
@@ -342,114 +421,70 @@ export function BlacklistPage(props) {
                     h(
                       "td",
                       { className: "table-actions-cell" },
-                      h("button", { type: "button", className: "button danger secondary", disabled: !isAdmin, onClick: () => handleDelete(entry.ip) }, "Unblock")
+                      h("div", { style: { display: "flex", gap: "6px", justifyContent: "flex-end" } },
+                        h("button", { type: "button", className: "button secondary", disabled: !isAdmin, onClick: () => beginEdit(entry) }, "Edit"),
+                        h("button", { type: "button", className: "button danger secondary", disabled: !isAdmin, onClick: () => handleUnblock(entry.ip) }, "Unblock")
+                      )
                     )
                   )
                 )
               : h("tr", null, h("td", { colSpan: 4, className: "empty-row" }, "No blacklisted targets found."))
           )
         )
-      )
-    )
-  );
-}
-
-export function AppearancePage(props) {
-  const [theme, setTheme] = useState(window.currentTheme());
-  const [scheme, setScheme] = useState(window.currentScheme());
-
-  function selectTheme(nextTheme) {
-    window.applyTheme(nextTheme);
-    setTheme(nextTheme);
-  }
-
-  function selectScheme(nextScheme) {
-    window.applyScheme(nextScheme);
-    setScheme(nextScheme);
-  }
-
-  const schemeLabel = scheme === "light" ? "Light Mode" : "Dark Mode";
-  const accentLabel = (APPEARANCE_THEMES.find((item) => item.key === theme) || APPEARANCE_THEMES[0]).label;
-
-  return h(
-    React.Fragment,
-    null,
-    h(
-      "header",
-      { className: "topbar" },
-      h("div", null, h("h1", null, "Appearance"), h("p", { className: "page-subtitle" }, "Theme controls for the web panel.")),
-      h(
-        "div",
-        { className: "topbar-actions" },
-        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
-        h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
-      )
+      ),
+      isAdmin
+        ? h(
+            "div",
+            { className: "button-row users-add-row", style: { marginTop: "16px" } },
+            h("button", { type: "button", className: "button secondary icon-button", "aria-label": "Add Blacklist Target", onClick: beginCreate }, "+")
+          )
+        : null
     ),
-    h(
-      "section",
-      { className: "panel" },
-      h(
-        "div",
-        { className: "section-heading" },
-        h("div", null, h("h2", null, "Base Mode"), h("p", null, "Choose a light or dark foundation for the interface.")),
-        h("span", { className: "status-counter" }, schemeLabel)
-      ),
-      h(
-        "div",
-        { className: "scheme-selector" },
-        h(
-          "button",
-          {
-            type: "button",
-            className: `scheme-btn${scheme === "dark" ? " active" : ""}`,
-            onClick: () => selectScheme("dark"),
-          },
-          h("span", { className: "scheme-icon" }, "\u{1F319}"),
-          "Dark Mode"
-        ),
-        h(
-          "button",
-          {
-            type: "button",
-            className: `scheme-btn${scheme === "light" ? " active" : ""}`,
-            onClick: () => selectScheme("light"),
-          },
-          h("span", { className: "scheme-icon" }, "\u2600\uFE0F"),
-          "Light Mode"
-        )
-      ),
-      h("hr", { className: "appearance-divider" }),
-      h(
-        "div",
-        { className: "section-heading" },
-        h("div", null, h("h2", null, "Color Accent"), h("p", null, "Pick a color palette that pairs with your base mode.")),
-        h("span", { className: "status-counter" }, accentLabel)
-      ),
-      h(
-        "div",
-        { className: "theme-grid" },
-        APPEARANCE_THEMES.map((item) =>
+
+    /* Modal Overlay Panel for Create / Edit Blacklist Target */
+    isAdmin && mode !== "idle"
+      ? h(
+          "div",
+          { className: "user-modal-overlay", onClick: () => setMode("idle") },
           h(
-            "button",
-            {
-              key: item.key,
-              type: "button",
-              className: `theme-card${item.key === theme ? " active" : ""}`,
-              onClick: () => selectTheme(item.key),
-            },
+            "div",
+            { className: "user-modal-card", onClick: (e) => e.stopPropagation() },
             h(
-              "span",
-              { className: "theme-swatch-row", "aria-hidden": "true" },
-              item.colors.map((color) => h("i", { key: color, style: { background: color } }))
+              "div",
+              { className: "user-modal-header" },
+              h("h3", null, mode === "create" ? "Add to Blacklist" : `Edit Blacklist Target: ${activeEntry?.ip}`),
+              h("button", { type: "button", className: "user-modal-close-icon", onClick: () => setMode("idle") }, "✕")
             ),
-            h("strong", null, item.label),
-            h("small", null, item.note)
+            h(
+              "form",
+              { onSubmit: handleSave, style: { display: "flex", flexDirection: "column", flex: "1 1 auto" } },
+              h(
+                "div",
+                { className: "user-modal-body" },
+                h("label", { className: "field-block" }, h("span", null, "IP or MAC Address"), h("input", { type: "text", value: form.ip, onChange: (e) => setForm({ ...form, ip: e.target.value }), placeholder: "e.g. 192.168.1.100 or 00:11:22:aa:bb:cc", required: true, autoFocus: mode === "create" })),
+                h("label", { className: "field-block" }, h("span", null, "Reason / Description"), h("input", { type: "text", value: form.description, onChange: (e) => setForm({ ...form, description: e.target.value }), placeholder: "e.g. Automated port scanner detected", required: true }))
+              ),
+              /* Bottom Right Corner: Save | (Add to Whitelist & Unblock if Edit) | Close */
+              h(
+                "div",
+                { className: "user-modal-footer" },
+                h("button", { type: "submit", className: "button", disabled: submitting }, submitting ? "Saving..." : "Save"),
+                mode === "edit"
+                  ? h("button", { type: "button", className: "button secondary", style: { color: "var(--accent)", borderColor: "var(--accent)" }, onClick: handleMoveToWhitelist }, "Add to Whitelist")
+                  : null,
+                mode === "edit"
+                  ? h("button", { type: "button", className: "button danger", onClick: () => handleUnblock(activeEntry.ip) }, "Unblock")
+                  : null,
+                h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Close")
+              )
+            )
           )
         )
-      )
-    )
+      : null
   );
 }
+
+
 
 export function SystemPage(props) {
   const [payload, setPayload] = useState(null);
@@ -477,8 +512,9 @@ export function SystemPage(props) {
       h(
         "div",
         { className: "topbar-actions" },
-        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button secondary", onClick: () => loadSettings().catch((error) => window.showToast(error.message, "error")) }, "Refresh"),
+        h("span", { className: "topbar-icons-slot" }),
+        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
       )
     ),
@@ -506,24 +542,34 @@ export function SystemPage(props) {
     ),
     h(
       "div",
-      { className: "settings-grid" },
+      { className: "settings-grid system-horizontal-grid" },
       h(DetailPanel, {
-        title: "Panel",
-        copy: "Address and runtime details.",
+        title: "OS & Kernel",
+        copy: "Operating system, kernel release, and hardware architecture.",
         items: [
-          ["URL", payload.panel ? payload.panel.url : "-"],
-          ["Bind Host", payload.panel ? payload.panel.host : "-"],
-          ["Display Host", payload.panel ? payload.panel.display_host : "-"],
-          ["Port", payload.panel ? payload.panel.port : "-"],
+          ["OS & Kernel", payload.system ? `${payload.system.os === "linux" ? "Linux" : payload.system.os} ${payload.system.kernel || ""}`.trim() : "Linux"],
+          ["CPU Architecture", payload.system ? payload.system.arch : "x86_64"],
+          ["CPU Cores", payload.system ? `${payload.system.cpu_cores} Cores` : "-"],
+          ["Go Runtime", payload.system ? payload.system.go_version : "-"],
         ],
       }),
       h(DetailPanel, {
-        title: "Runtime",
-        copy: "Current server status and version.",
+        title: "Runtime & Health",
+        copy: "Current server status, uptime, and version.",
         items: [
           ["Health", h("span", { className: `status-pill ${payload.runtime && payload.runtime.health === "ok" ? "running" : "stopped"}` }, payload.runtime ? payload.runtime.health : "-")],
           ["Uptime", payload.runtime ? payload.runtime.uptime : "-"],
-          ["Version", payload.runtime ? payload.runtime.version : "-"],
+          ["Panel Version", payload.runtime ? payload.runtime.version : "-"],
+        ],
+      }),
+      h(DetailPanel, {
+        title: "Network & Bindings",
+        copy: "Address, host, and port binding configuration.",
+        items: [
+          ["Panel URL", payload.panel ? payload.panel.url : "-"],
+          ["Bind Host", payload.panel ? payload.panel.host : "-"],
+          ["Display Host", payload.panel ? payload.panel.display_host : "-"],
+          ["Port", payload.panel ? payload.panel.port : "-"],
         ],
       })
     )
@@ -677,44 +723,43 @@ export function UsersPage(props) {
     }
   }
 
-  async function saveRole(event) {
+  async function handleEditSave(event) {
     event.preventDefault();
     try {
       await window.requestJson("/api/users/role", {
         method: "POST",
         body: JSON.stringify({ username: activeUser, role: form.role }),
       });
-      window.showToast(`Role updated for ${activeUser}.`, "success");
+      if (form.password.trim()) {
+        await window.requestJson("/api/users/password", {
+          method: "POST",
+          body: JSON.stringify({ username: activeUser, password: form.password }),
+        });
+      }
+      window.showToast(`User ${activeUser} updated.`, "success");
+      setMode("idle");
+      setActiveUser("");
       await loadUsers();
     } catch (error) {
       window.showToast(error.message, "error");
     }
   }
 
-  async function changePassword(event) {
-    event.preventDefault();
-    try {
-      await window.requestJson("/api/users/password", {
-        method: "POST",
-        body: JSON.stringify({ username: activeUser, password: form.password }),
-      });
-      setForm({ ...form, password: "" });
-      window.showToast(`Password updated for ${activeUser}.`, "success");
-    } catch (error) {
-      window.showToast(error.message, "error");
-    }
-  }
-
   async function removeUser(username) {
+    if (username === props.session.username) {
+      window.showToast("The signed-in user cannot be deleted.", "error");
+      return;
+    }
+    if (!confirm(`Are you sure you want to permanently delete user '${username}'?`)) {
+      return;
+    }
     try {
       await window.requestJson("/api/users/delete", {
         method: "POST",
         body: JSON.stringify({ username }),
       });
-      if (username === activeUser) {
-        setMode("idle");
-        setActiveUser("");
-      }
+      setMode("idle");
+      setActiveUser("");
       await loadUsers();
       window.showToast(`User ${username} deleted.`, "success");
     } catch (error) {
@@ -734,14 +779,15 @@ export function UsersPage(props) {
       h(
         "div",
         { className: "topbar-actions" },
-        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button secondary", onClick: () => loadUsers().catch((error) => window.showToast(error.message, "error")) }, "Refresh"),
+        h("span", { className: "topbar-icons-slot" }),
+        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
       )
     ),
     h(
       "section",
-      { className: "panel" },
+      { className: "panel static-panel" },
       h(
         "div",
         { className: "section-heading" },
@@ -782,65 +828,72 @@ export function UsersPage(props) {
                   h("button", { type: "button", className: "button secondary", disabled: !isAdmin, onClick: () => beginEdit(user) }, "Edit")
                 )
               )
-            ),
+            )
           )
         )
       ),
       isAdmin
         ? h(
             "div",
-            { className: "button-row users-add-row" },
+            { className: "button-row users-add-row", style: { marginTop: "16px" } },
             h("button", { type: "button", className: "button secondary icon-button", "aria-label": "Create user", onClick: beginCreate }, "+")
           )
         : null
     ),
+
+    /* Modal Overlay Panel for Create / Edit User */
     isAdmin && mode !== "idle"
       ? h(
-          "section",
-          { className: "panel" },
+          "div",
+          { className: "user-modal-overlay", onClick: () => setMode("idle") },
           h(
             "div",
-            { className: "section-heading" },
+            { className: "user-modal-card", onClick: (e) => e.stopPropagation() },
             h(
               "div",
-              null,
-              h("h2", null, mode === "create" ? "Create User" : `Edit ${activeUser}`),
-              h("p", null, mode === "create" ? "Create a new dashboard user." : "Change role, reset password, or delete this account.")
-            )
-          ),
-          mode === "create"
-            ? h(
-                "form",
-                { className: "settings-form", onSubmit: createUser },
-                h("label", { className: "field-block" }, h("span", null, "Username"), h("input", { value: form.username, onChange: (event) => setForm({ ...form, username: event.target.value }), required: true })),
-                h("label", { className: "field-block" }, h("span", null, "Password"), h("input", { type: "password", value: form.password, onChange: (event) => setForm({ ...form, password: event.target.value }), required: true })),
-                h(
-                  "label",
-                  { className: "field-block" },
-                  h("span", null, "Role"),
+              { className: "user-modal-header" },
+              h("h3", null, mode === "create" ? "Create New User" : `Edit User: ${activeUser}`),
+              h("button", { type: "button", className: "user-modal-close-icon", onClick: () => setMode("idle") }, "✕")
+            ),
+            mode === "create"
+              ? h(
+                  "form",
+                  { onSubmit: createUser, style: { display: "flex", flexDirection: "column", flex: "1 1 auto" } },
                   h(
-                    "select",
-                    { value: form.role, onChange: (event) => setForm({ ...form, role: event.target.value }) },
-                    h("option", { value: "admin" }, ROLE_LABELS.admin),
-                    h("option", { value: "viewer" }, ROLE_LABELS.viewer)
-                  )
-                ),
-                h("div", { className: "button-row" }, h("button", { type: "submit", className: "button" }, "Create User"), h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Cancel"))
-              )
-            : h(
-                "div",
-                { className: "settings-grid" },
-                h(
-                  "section",
-                  { className: "panel settings-card" },
-                  h("h3", null, "Role"),
-                  h(
-                    "form",
-                    { className: "settings-form", onSubmit: saveRole },
+                    "div",
+                    { className: "user-modal-body" },
+                    h("label", { className: "field-block" }, h("span", null, "Username"), h("input", { value: form.username, onChange: (event) => setForm({ ...form, username: event.target.value }), placeholder: "Enter username", required: true, autoFocus: true })),
+                    h("label", { className: "field-block" }, h("span", null, "Password"), h("input", { type: "password", value: form.password, onChange: (event) => setForm({ ...form, password: event.target.value }), placeholder: "Enter password", required: true })),
                     h(
                       "label",
                       { className: "field-block" },
-                      h("span", null, "Access Level"),
+                      h("span", null, "Role"),
+                      h(
+                        "select",
+                        { value: form.role, onChange: (event) => setForm({ ...form, role: event.target.value }) },
+                        h("option", { value: "admin" }, ROLE_LABELS.admin),
+                        h("option", { value: "viewer" }, ROLE_LABELS.viewer)
+                      )
+                    )
+                  ),
+                  /* Bottom Right Corner: Save | Close */
+                  h(
+                    "div",
+                    { className: "user-modal-footer" },
+                    h("button", { type: "submit", className: "button" }, "Save"),
+                    h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Close")
+                  )
+                )
+              : h(
+                  "form",
+                  { onSubmit: handleEditSave, style: { display: "flex", flexDirection: "column", flex: "1 1 auto" } },
+                  h(
+                    "div",
+                    { className: "user-modal-body" },
+                    h(
+                      "label",
+                      { className: "field-block" },
+                      h("span", null, "Access Level (Role)"),
                       h(
                         "select",
                         { value: form.role, onChange: (event) => setForm({ ...form, role: event.target.value }) },
@@ -848,37 +901,18 @@ export function UsersPage(props) {
                         h("option", { value: "viewer" }, ROLE_LABELS.viewer)
                       )
                     ),
-                    h("div", { className: "button-row" }, h("button", { type: "submit", className: "button" }, "Save Role"))
-                  )
-                ),
-                h(
-                  "section",
-                  { className: "panel settings-card" },
-                  h("h3", null, "Password"),
-                  h(
-                    "form",
-                    { className: "settings-form", onSubmit: changePassword },
-                    h("label", { className: "field-block" }, h("span", null, "New Password"), h("input", { type: "password", value: form.password, onChange: (event) => setForm({ ...form, password: event.target.value }), required: true })),
-                    h("div", { className: "button-row" }, h("button", { type: "submit", className: "button" }, "Change Password"))
-                  )
-                ),
-                h(
-                  "section",
-                  { className: "panel settings-card" },
-                  h("h3", null, "Danger Zone"),
-                  h("p", { className: "support-text" }, activeUser === props.session.username ? "The signed-in user cannot be deleted." : "Delete this account permanently."),
+                    h("label", { className: "field-block" }, h("span", null, "New Password (optional)"), h("input", { type: "password", value: form.password, onChange: (event) => setForm({ ...form, password: event.target.value }), placeholder: "Leave blank to keep unchanged" }))
+                  ),
+                  /* Bottom Right Corner: Save | Delete | Close */
                   h(
                     "div",
-                    { className: "button-row" },
-                    h("button", { type: "button", className: "button danger", disabled: activeUser === props.session.username, onClick: () => removeUser(activeUser) }, "Delete User")
+                    { className: "user-modal-footer" },
+                    h("button", { type: "submit", className: "button" }, "Save"),
+                    h("button", { type: "button", className: "button danger", disabled: activeUser === props.session.username, onClick: () => removeUser(activeUser) }, "Delete"),
+                    h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Close")
                   )
-                ),
-                h(
-                  "div",
-                  { className: "button-row users-panel-close" },
-                  h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Close")
                 )
-              )
+          )
         )
       : null
   );
@@ -982,6 +1016,12 @@ export function SiemSettingsPage(props) {
     }
   }
 
+  async function toggleEnable(config) {
+    const updated = { ...config, enabled: !config.enabled };
+    const nextConfigs = configs.map((item) => item.id === config.id ? updated : item);
+    await saveConfigs(nextConfigs, `${config.name || config.host} ${updated.enabled ? "enabled" : "disabled"}.`);
+  }
+
   async function handleTest(config) {
     if (!config.enabled || !config.host) {
       window.showToast("Enable this SIEM target and set a host before testing.", "error");
@@ -1024,7 +1064,7 @@ export function SiemSettingsPage(props) {
             { className: "table-actions-cell" },
             h("button", { type: "button", className: "button secondary", disabled: !isAdmin || testingId === config.id, onClick: () => handleTest(config) }, testingId === config.id ? "Testing..." : "Test"),
             h("button", { type: "button", className: "button secondary", disabled: !isAdmin, onClick: () => beginEdit(config) }, "Edit"),
-            h("button", { type: "button", className: "button danger secondary", disabled: !isAdmin || saving, onClick: () => removeConfig(config) }, "Delete")
+            h("button", { type: "button", className: `button secondary ${config.enabled ? "danger" : ""}`, disabled: !isAdmin || saving, onClick: () => toggleEnable(config) }, config.enabled ? "Disable" : "Enable")
           )
         )
       )
@@ -1053,56 +1093,73 @@ export function SiemSettingsPage(props) {
       : null
   );
 
-  const editorPanel = isAdmin && mode !== "idle"
+  const editorModal = isAdmin && mode !== "idle"
     ? h(
-        "section",
-        { className: "panel" },
-        h("div", { className: "section-heading" }, h("div", null, h("h2", null, mode === "create" ? "Create SIEM Target" : `Edit ${activeConfig ? activeConfig.name : "SIEM Target"}`), h("p", null, "Define where and how honeypot events are forwarded."))),
+        "div",
+        { className: "user-modal-overlay", onClick: () => setMode("idle") },
         h(
-          "form",
-          { className: "settings-form siem-editor-form", onSubmit: handleSave },
-          h("label", { className: "field-block" }, h("span", null, "SIEM Name"), h("input", { value: form.name, onChange: (event) => setForm({ ...form, name: event.target.value }), placeholder: "SOC Collector", required: true })),
-          h("label", { className: "field-block" }, h("span", null, "Host / URL"), h("input", { value: form.host, onChange: (event) => setForm({ ...form, host: event.target.value }), placeholder: "192.168.1.50 or http://siem.local", required: form.enabled })),
-          h("label", { className: "field-block" }, h("span", null, "Port"), h("input", { type: "number", min: "1", max: "65535", value: String(form.port), onChange: (event) => setForm({ ...form, port: event.target.value }) })),
-          h(
-            "label",
-            { className: "field-block" },
-            h("span", null, "Protocol"),
-            h(
-              "select",
-              { value: form.protocol, onChange: (event) => setForm({ ...form, protocol: event.target.value }) },
-              h("option", { value: "udp" }, "UDP Syslog"),
-              h("option", { value: "tcp" }, "TCP Syslog"),
-              h("option", { value: "http" }, "HTTP POST")
-            )
-          ),
-          h(
-            "label",
-            { className: "field-block" },
-            h("span", null, "Forwarding Scope"),
-            h(
-              "select",
-              { value: form.scope, onChange: (event) => setForm({ ...form, scope: event.target.value }) },
-              h("option", { value: "all" }, "All Events"),
-              h("option", { value: "alerts" }, "Critical Alerts Only")
-            )
-          ),
-          h(
-            "label",
-            { className: "siem-enabled-row" },
-            h("span", null, "Enabled"),
-            h(
-              "span",
-              { className: "toggle-switch" },
-              h("input", { type: "checkbox", checked: form.enabled, onChange: (event) => setForm({ ...form, enabled: event.target.checked }) }),
-              h("span", { className: "toggle-slider" })
-            )
-          ),
+          "div",
+          { className: "user-modal-card", onClick: (e) => e.stopPropagation() },
           h(
             "div",
-            { className: "button-row" },
-            h("button", { type: "submit", className: "button", disabled: saving }, saving ? "Saving..." : mode === "create" ? "Create Target" : "Save Target"),
-            h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Cancel")
+            { className: "user-modal-header" },
+            h("h3", null, mode === "create" ? "Create SIEM Target" : `Edit SIEM Target: ${activeConfig?.name || activeConfig?.host}`),
+            h("button", { type: "button", className: "user-modal-close-icon", onClick: () => setMode("idle") }, "✕")
+          ),
+          h(
+            "form",
+            { onSubmit: handleSave, style: { display: "flex", flexDirection: "column", flex: "1 1 auto" } },
+            h(
+              "div",
+              { className: "user-modal-body" },
+              h("label", { className: "field-block" }, h("span", null, "SIEM Name"), h("input", { value: form.name, onChange: (event) => setForm({ ...form, name: event.target.value }), placeholder: "SOC Collector", required: true, autoFocus: true })),
+              h("label", { className: "field-block" }, h("span", null, "Host / URL"), h("input", { value: form.host, onChange: (event) => setForm({ ...form, host: event.target.value }), placeholder: "192.168.1.50 or http://siem.local", required: form.enabled })),
+              h("label", { className: "field-block" }, h("span", null, "Port"), h("input", { type: "number", min: "1", max: "65535", value: String(form.port), onChange: (event) => setForm({ ...form, port: event.target.value }) })),
+              h(
+                "label",
+                { className: "field-block" },
+                h("span", null, "Protocol"),
+                h(
+                  "select",
+                  { value: form.protocol, onChange: (event) => setForm({ ...form, protocol: event.target.value }) },
+                  h("option", { value: "udp" }, "UDP Syslog"),
+                  h("option", { value: "tcp" }, "TCP Syslog"),
+                  h("option", { value: "http" }, "HTTP POST")
+                )
+              ),
+              h(
+                "label",
+                { className: "field-block" },
+                h("span", null, "Forwarding Scope"),
+                h(
+                  "select",
+                  { value: form.scope, onChange: (event) => setForm({ ...form, scope: event.target.value }) },
+                  h("option", { value: "all" }, "All Events"),
+                  h("option", { value: "alerts" }, "Critical Alerts Only")
+                )
+              ),
+              h(
+                "label",
+                { className: "siem-enabled-row", style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
+                h("span", { style: { fontWeight: "600", fontSize: "14px" } }, "Enabled Status"),
+                h(
+                  "span",
+                  { className: "toggle-switch" },
+                  h("input", { type: "checkbox", checked: form.enabled, onChange: (event) => setForm({ ...form, enabled: event.target.checked }) }),
+                  h("span", { className: "toggle-slider" })
+                )
+              )
+            ),
+            /* Bottom Right Corner Action Buttons */
+            h(
+              "div",
+              { className: "user-modal-footer" },
+              h("button", { type: "submit", className: "button", disabled: saving }, saving ? "Saving..." : "Save"),
+              mode === "edit" && activeConfig
+                ? h("button", { type: "button", className: "button danger", disabled: saving, onClick: () => removeConfig(activeConfig) }, "Delete")
+                : null,
+              h("button", { type: "button", className: "button secondary", onClick: () => setMode("idle") }, "Close")
+            )
           )
         )
       )
@@ -1123,11 +1180,12 @@ export function SiemSettingsPage(props) {
       h(
         "div",
         { className: "topbar-actions" },
+        h("span", { className: "topbar-icons-slot" }),
         h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
       )
     ),
     targetsPanel,
-    editorPanel
+    editorModal
   );
 }

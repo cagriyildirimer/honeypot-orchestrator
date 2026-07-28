@@ -615,6 +615,19 @@ func (s *Server) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 	uptimeSeconds := int(s.orch.Uptime().Seconds())
 	uptimeStr := fmt.Sprintf("%dh %dm %ds", uptimeSeconds/3600, (uptimeSeconds%3600)/60, uptimeSeconds%60)
 
+	// OS & Kernel information
+	kernelVersion := ""
+	if data, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
+		kernelVersion = strings.TrimSpace(string(data))
+	} else if out, err := exec.Command("uname", "-r").Output(); err == nil {
+		kernelVersion = strings.TrimSpace(string(out))
+	}
+
+	archStr := runtime.GOARCH
+	if archStr == "amd64" {
+		archStr = "x86_64"
+	}
+
 	// Fetch users list
 	users, _ := s.db.GetAllUsers(r.Context())
 	if users == nil {
@@ -642,6 +655,13 @@ func (s *Server) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 			"uptime":         uptimeStr,
 			"health":         "ok",
 			"version":        "1.0.0",
+		},
+		"system": map[string]interface{}{
+			"os":         runtime.GOOS,
+			"kernel":     kernelVersion,
+			"arch":       archStr,
+			"cpu_cores":  runtime.NumCPU(),
+			"go_version": runtime.Version(),
 		},
 		"resources": map[string]interface{}{
 			"cpu": map[string]interface{}{

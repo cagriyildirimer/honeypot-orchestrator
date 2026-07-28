@@ -1,8 +1,13 @@
 package web
 
 import (
+	"crypto/sha256"
+	"encoding/csv"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -271,4 +276,140 @@ func (s *Server) HandleAnalyze(w http.ResponseWriter, r *http.Request) {
 	}
 
 	JSONResponse(w, http.StatusOK, payload)
+}
+
+type IocExportRow struct {
+	IP            string
+	TotalAttacks  int
+	LastService   string
+	LastEventType string
+	LastSeen      string
+}
+
+func (s *Server) queryIocs(r *http.Request) ([]IocExportRow, error) {
+	ctx := r.Context()
+	query := `
+		SELECT 
+			COALESCE(src_ip, 'unknown') AS ip, 
+			COUNT(*) AS total_attacks, 
+			COALESCE(MAX(service), 'unknown') AS last_service,
+			COALESCE(MAX(event_type), 'unknown') AS last_event_type,
+			MAX(timestamp) AS last_seen
+		FROM events 
+		WHERE src_ip IS NOT NULL 
+		  AND src_ip != '' 
+		  AND src_ip NOT IN ('127.0.0.1', '::1', 'localhost', 'unknown') 
+		  AND event_type NOT IN ('service_started', 'service_stopped', 'network_tuning_applied', 'system_tuning')
+		GROUP BY src_ip 
+		ORDER BY total_attacks DESC
+	`
+
+	rows, err := s.db.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []IocExportRow
+	for rows.Next() {
+		var row IocExportRow
+		var t time.Time
+		if err := rows.Scan(&row.IP, &row.TotalAttacks, &row.LastService, &row.LastEventType, &t); err != nil {
+			continue
+		}
+		row.LastSeen = t.Format(time.RFC3339)
+		list = append(list, row)
+	}
+	return list, nil
+}
+
+func (s *Server) HandleExportIocCSV(w http.ResponseWriter, r *http.Request) {
+	iocs, err := s.queryIocs(r)
+	if err != nil {
+		http.Error(w, "Failed to query IOCs: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"ioc_export.csv\"")
+
+	writer := csv.NewWriter(w)
+	_ = writer.Write([]string{"IP Address", "Total Attacks", "Last Attacked Service", "Last Event Type", "Last Seen"})
+
+	for _, row := range iocs {
+		_ = writer.Write([]string{
+			row.IP,
+			strconv.Itoa(row.TotalAttacks),
+			row.LastService,
+			row.LastEventType,
+			row.LastSeen,
+		})
+	}
+	writer.Flush()
+}
+
+type stixIndicator struct {
+	Type        string   `json:"type"`
+	SpecVersion string   `json:"spec_version"`
+	ID          string   `json:"id"`
+	Created     string   `json:"created"`
+	Modified    string   `json:"modified"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Pattern     string   `json:"pattern"`
+	PatternType string   `json:"pattern_type"`
+	ValidFrom   string   `json:"valid_from"`
+	Labels      []string `json:"labels"`
+}
+
+type stixBundle struct {
+	Type    string          `json:"type"`
+	ID      string          `json:"id"`
+	Objects []stixIndicator `json:"objects"`
+}
+
+func generateStixID(ip string) string {
+	hash := sha256.Sum256([]byte(ip))
+	hexStr := hex.EncodeToString(hash[:16])
+	return fmt.Sprintf("indicator--%s-%s-%s-%s-%s", hexStr[0:8], hexStr[8:12], hexStr[12:16], hexStr[16:20], hexStr[20:32])
+}
+
+func (s *Server) HandleExportIocSTIX(w http.ResponseWriter, r *http.Request) {
+	iocs, err := s.queryIocs(r)
+	if err != nil {
+		http.Error(w, "Failed to query IOCs: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	nowStr := time.Now().UTC().Format(time.RFC3339)
+	bundleID := fmt.Sprintf("bundle--%s", generateStixID("bundle-"+nowStr)[11:])
+
+	var objects []stixIndicator
+	for _, row := range iocs {
+		ind := stixIndicator{
+			Type:        "indicator",
+			SpecVersion: "2.1",
+			ID:          generateStixID(row.IP),
+			Created:     row.LastSeen,
+			Modified:    row.LastSeen,
+			Name:        fmt.Sprintf("Malicious Attacker IP: %s", row.IP),
+			Description: fmt.Sprintf("Observed %d attacks on service %s (%s). Last seen: %s", row.TotalAttacks, row.LastService, row.LastEventType, row.LastSeen),
+			Pattern:     fmt.Sprintf("[ipv4-addr:value = '%s']", row.IP),
+			PatternType: "stix",
+			ValidFrom:   row.LastSeen,
+			Labels:      []string{"malicious-activity", "honeypot-decoy-hit"},
+		}
+		objects = append(objects, ind)
+	}
+
+	bundle := stixBundle{
+		Type:    "bundle",
+		ID:      bundleID,
+		Objects: objects,
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"ioc_export.stix.json\"")
+
+	JSONResponse(w, http.StatusOK, bundle)
 }

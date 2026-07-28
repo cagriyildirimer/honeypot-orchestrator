@@ -299,6 +299,16 @@ func (o *Orchestrator) applyState(ctx context.Context, profileName string, overr
 		}
 	}
 
+	// Save updated DB state
+	state := DBState{
+		ActiveProfile:    profileName,
+		ServiceOverrides: overrides,
+		RunningServices:  runningList,
+	}
+	if stateBytes, err := json.Marshal(state); err == nil {
+		o.db.SaveSystemSetting(ctx, "orchestrator_state", string(stateBytes))
+	}
+
 	// Update network parameters & firewall based on running ports
 	var activePorts []system.PortProto
 	for _, name := range runningList {
@@ -405,7 +415,7 @@ type WebServiceStatus struct {
 }
 
 func (o *Orchestrator) GetServicesStatus(displayHost string) []WebServiceStatus {
-	// Read state from database to get latest active profile, overrides, and running services
+	// Read state from database to get latest active profile and overrides
 	state, err := o.getDBState(context.Background())
 	var activeProfile string
 	var overrides map[string]bool
@@ -418,16 +428,41 @@ func (o *Orchestrator) GetServicesStatus(displayHost string) []WebServiceStatus 
 			runningMap[s] = true
 		}
 	} else {
-		// Fallback to local memory values
 		o.mu.Lock()
 		activeProfile = o.activeProfile
 		overrides = o.overrides
-		for name, svc := range o.services {
-			if svc.IsRunning() {
+		o.mu.Unlock()
+	}
+
+	o.mu.Lock()
+	if activeProfile == "" {
+		activeProfile = o.activeProfile
+	}
+	if overrides == nil {
+		overrides = o.overrides
+	}
+
+	// Always sync live running status from registered services if loaded
+	for name, svc := range o.services {
+		if svc.IsRunning() {
+			runningMap[name] = true
+		} else {
+			runningMap[name] = false
+		}
+	}
+	o.mu.Unlock()
+
+	// Apply explicit overrides
+	for name, enabled := range overrides {
+		if !enabled {
+			runningMap[name] = false
+		} else {
+			if svc, ok := o.services[name]; ok {
+				runningMap[name] = svc.IsRunning()
+			} else {
 				runningMap[name] = true
 			}
 		}
-		o.mu.Unlock()
 	}
 
 	// Override displayHost if HONEYPOT_LAN_IP is set

@@ -69,12 +69,6 @@ export function DashboardPage(props) {
         "div",
         { className: "topbar-actions" },
         h(
-          "div",
-          { className: "user-pill" },
-          h("span", null, "Signed in as"),
-          h("strong", null, props.session.username || "-")
-        ),
-        h(
           "button",
           {
             type: "button",
@@ -82,6 +76,13 @@ export function DashboardPage(props) {
             onClick: () => loadOverview().catch((error) => window.showToast(error.message, "error")),
           },
           "Refresh"
+        ),
+        h("span", { className: "topbar-icons-slot" }),
+        h(
+          "div",
+          { className: "user-pill" },
+          h("span", null, "Signed in as"),
+          h("strong", null, props.session.username || "-")
         ),
         h(
           "button",

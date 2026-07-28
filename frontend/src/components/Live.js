@@ -42,7 +42,6 @@ export function LiveActivityPage(props) {
       h(
         "div",
         { className: "topbar-actions" },
-        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h(
           "button",
           {
@@ -52,6 +51,8 @@ export function LiveActivityPage(props) {
           },
           "Refresh"
         ),
+        h("span", { className: "topbar-icons-slot" }),
+        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h(
           "button",
           { type: "button", className: "button", onClick: props.onLogout },

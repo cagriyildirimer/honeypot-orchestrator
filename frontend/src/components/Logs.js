@@ -43,6 +43,52 @@ export function LogsPage(props) {
     setCurrentPage(1);
   }, [filters.service, filters.eventType, filters.search, filters.searchField, filters.excludeSystem]);
 
+  const availableEventTypes = useMemo(() => {
+    if (!payload) return [];
+    const stats = payload.stats || {};
+    const events = payload.events || [];
+    if (!filters.service) {
+      return Object.keys(stats.by_type || {}).sort();
+    }
+    const typesSet = new Set();
+    events.forEach(evt => {
+      if (evt.service === filters.service && evt.event_type) {
+        typesSet.add(evt.event_type);
+      }
+    });
+
+    const serviceBase = filters.service.split("_")[0].toLowerCase();
+    const defaultTypesForService = {
+      ssh: ["ssh_login", "ssh_command", "connection", "login_failed", "login_attempt"],
+      http: ["http_request", "exploit_attempt", "login_attempt", "request"],
+      ftp: ["ftp_login", "ftp_command", "login_failed", "login_attempt"],
+      telnet: ["telnet_login", "telnet_command", "login_failed"],
+      smb: ["smb_session", "ntlm_auth", "login_failed", "tree_connect"],
+      rdp: ["rdp_connect", "login_failed", "login_attempt"],
+      winrm: ["winrm_request", "login_attempt", "http_request"],
+      mssql: ["sql_login", "login_failed", "query_execution"],
+      dns: ["dns_query", "query"],
+      ldap: ["ldap_bind", "search_request", "bind_attempt"],
+      ldaps: ["ldap_bind", "search_request", "bind_attempt"],
+      rpc: ["rpc_bind", "epm_map"],
+      netbios: ["netbios_session", "name_query"],
+      nbtnns: ["name_query"],
+      llmnr: ["llmnr_query"]
+    };
+
+    if (defaultTypesForService[serviceBase]) {
+      defaultTypesForService[serviceBase].forEach(t => typesSet.add(t));
+    }
+
+    return Array.from(typesSet).sort();
+  }, [filters.service, payload]);
+
+  useEffect(() => {
+    if (filters.eventType && !availableEventTypes.includes(filters.eventType)) {
+      setFilters(prev => ({ ...prev, eventType: "" }));
+    }
+  }, [filters.service, availableEventTypes]);
+
   if (!payload) {
     return h(PageSkeleton, null);
   }
@@ -51,7 +97,6 @@ export function LogsPage(props) {
   const events = payload.events || [];
   const services = payload.services || [];
   const stats = payload.stats || {};
-  const eventTypes = Object.keys(stats.by_type || {}).sort();
 
   const totalFiltered = stats.total_filtered !== undefined ? stats.total_filtered : stats.total_recent_events || events.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
@@ -142,8 +187,9 @@ export function LogsPage(props) {
       h(
         "div",
         { className: "topbar-actions" },
-        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button secondary", onClick: () => loadLogs().catch((error) => window.showToast(error.message, "error")) }, "Refresh"),
+        h("span", { className: "topbar-icons-slot" }),
+        h("div", { className: "user-pill" }, h("span", null, "Signed in as"), h("strong", null, props.session.username || "-")),
         h("button", { type: "button", className: "button", onClick: props.onLogout }, "Log out")
       )
     ),
@@ -156,7 +202,7 @@ export function LogsPage(props) {
     ),
     h(
       "section",
-      { className: "toolbar-panel" },
+      { className: "toolbar-panel static-panel" },
       h(
         "form",
         {
@@ -174,7 +220,10 @@ export function LogsPage(props) {
               onChange: (event) => setFilters({ ...filters, service: event.target.value }),
             },
             h("option", { value: "" }, "All services"),
-            services.map((service) => h("option", { key: service.name, value: service.name }, `${service.name.toUpperCase()} - ${service.port}`))
+            services.map((service) => {
+              const cleanName = service.name.split("_")[0].toUpperCase();
+              return h("option", { key: service.name, value: service.name }, `${cleanName} (${service.port})`);
+            })
           )
         ),
         h("label", { className: "field-block" }, h("span", null, "Type"),
@@ -184,10 +233,11 @@ export function LogsPage(props) {
               value: filters.eventType,
               onChange: (event) => setFilters({ ...filters, eventType: event.target.value }),
             },
-            h("option", { value: "" }, "All event types"),
-            eventTypes.map((eventType) => h("option", { key: eventType, value: eventType }, eventType))
+            h("option", { value: "" }, filters.service ? `All ${filters.service.split("_")[0].toUpperCase()} event types` : "All event types"),
+            availableEventTypes.map((eventType) => h("option", { key: eventType, value: eventType }, eventType))
           )
         ),
+
         h("label", { className: "field-block" }, h("span", null, "Search Field"),
           h(
             "select",
@@ -207,8 +257,8 @@ export function LogsPage(props) {
           h("input", {
             type: "search",
             value: filters.search,
-            placeholder: "Search summary, source, or profile (regex supported)",
-            onChange: (event) => setFilters({ ...filters, search: event.target.value || "" }),
+            placeholder: "Search summary, source, or profile...",
+            onChange: (event) => setFilters({ ...filters, search: event.target.value }),
           })
         ),
         h("label", { className: "field-block", style: { display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", cursor: "pointer", height: "38px", marginTop: "24px" } },
