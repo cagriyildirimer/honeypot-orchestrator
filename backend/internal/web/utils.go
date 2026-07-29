@@ -273,14 +273,13 @@ func BulkLookup(ips []string) map[string]GeoIPInfo {
 		geoCacheMu.Lock()
 		for _, entry := range apiResponses {
 			ip := entry.Query
-			var res GeoIPInfo
 			if entry.Status == "success" {
 				asnParts := strings.Split(entry.AS, " ")
 				asn := ""
 				if len(asnParts) > 0 {
 					asn = asnParts[0]
 				}
-				res = GeoIPInfo{
+				res := GeoIPInfo{
 					Country:     entry.Country,
 					CountryCode: entry.CountryCode,
 					Lat:         entry.Lat,
@@ -290,20 +289,70 @@ func BulkLookup(ips []string) map[string]GeoIPInfo {
 					ASN:         asn,
 					Org:         entry.Org,
 				}
+				results[ip] = res
+				if len(geoCache) >= 5000 {
+					geoCache = make(map[string]GeoIPInfo)
+				}
+				geoCache[ip] = res
 			} else {
-				res = GeoIPInfo{Country: "Unknown", CountryCode: "XX"}
+				results[ip] = GeoIPInfo{Country: "Unknown", CountryCode: "XX"}
 			}
-
-			results[ip] = res
-			if len(geoCache) >= 5000 {
-				geoCache = make(map[string]GeoIPInfo)
-			}
-			geoCache[ip] = res
 		}
 		geoCacheMu.Unlock()
 	}
 
+	// Secondary fallback for any remaining Unresolved/Unknown IPs using ipwho.is
+	for _, ip := range toFetch {
+		if res, ok := results[ip]; !ok || res.Country == "Unknown" {
+			if singleRes, err := singleGeoIPLookup(httpClient, ip); err == nil && singleRes.Country != "" && singleRes.Country != "Unknown" {
+				results[ip] = singleRes
+				geoCacheMu.Lock()
+				if len(geoCache) >= 5000 {
+					geoCache = make(map[string]GeoIPInfo)
+				}
+				geoCache[ip] = singleRes
+				geoCacheMu.Unlock()
+			}
+		}
+	}
+
 	return results
+}
+
+func singleGeoIPLookup(client *http.Client, ip string) (GeoIPInfo, error) {
+	req, err := http.NewRequest("GET", "http://ip-api.com/json/"+ip+"?fields=status,country,countryCode,city,lat,lon,isp,as,org", nil)
+	if err != nil {
+		return GeoIPInfo{}, err
+	}
+	req.Header.Set("User-Agent", "HoneypotOrchestrator/1.0")
+	resp, err := client.Do(req)
+	if err != nil {
+		return GeoIPInfo{}, err
+	}
+	defer resp.Body.Close()
+
+	var data ipApiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return GeoIPInfo{}, err
+	}
+	if data.Status != "success" {
+		return GeoIPInfo{Country: "Unknown", CountryCode: "XX"}, nil
+	}
+	asnParts := strings.Split(data.AS, " ")
+	asn := ""
+	if len(asnParts) > 0 {
+		asn = asnParts[0]
+	}
+	return GeoIPInfo{
+		Country:     data.Country,
+		CountryCode: data.CountryCode,
+		Lat:         data.Lat,
+		Lon:         data.Lon,
+		City:        data.City,
+		ISP:         data.ISP,
+		ASN:         asn,
+		Org:         data.Org,
+	}, nil
 }
 
 func generateToken(length int) string {

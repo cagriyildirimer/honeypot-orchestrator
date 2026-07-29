@@ -273,5 +273,7 @@ Sistemde üretilen kritik alarmlar (`login_success`, `credential_attempt`, `ssh_
 118. **`NotificationBellPortal` Hedef Çözümleme İyileştirildi:** `Core.js` içerisindeki bildirim portalının hedef DOM seçimindeki 100ms gecikme (debounce) kaldırılarak sayfa geçişlerindeki anlık yanıp sönme engellendi.
 119. **Giriş Yapmış Kullanıcı İçin `/login` Yönlendirmesi Eklendi:** `login.js` içerisindeki oturum kontrolü anında splash ekranının gizlenip kullanıcıyı doğrudan kontrol paneline (`/dashboard`) aktarması sağlandı.
 120. **`AppLayout` Oturum Bağlamı Genişletildi:** `App.js` dosyasından `AppLayout` bileşenine `session` ve `onLogout` propları standart olarak geçirilerek üst bar veri erişimi modüler hale getirildi.
+121. **HTTP Web Exploit Payload Ayıklama Özelliği Eklendi:** `http.go` içerisine HTTP GET/POST istekleri içerisindeki komut enjeksiyonu ve RCE isteklerini (`wget`, `curl`, `chmod`, `cd /tmp`, `cmd=`, `mdc=`, `device.rsp`, `sdk/weblanguage` vb.) otomatik algılayıp `captured_payload` olayı üreten ayrıştırıcı eklendi. Artık web üzerinden gelen komut enjeksiyonları da "Captured Payloads & Malware" sekmesinde otomatik listelenecek.
+122. **GeoIP Çözümleme ve İkincil Sorgu İyileştirmesi:** `utils.go` içerisinde GeoIP harita çözümleme servisi güncellendi. "Unknown" dönen IP'lerin önbelleğe hatalı yazılması engellendi ve ikincil tekil IP doğrulayıcı (`singleGeoIPLookup`) eklendi.
 
 ---

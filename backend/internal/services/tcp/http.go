@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -175,6 +177,73 @@ func (h *HTTPHoneypot) handleClient(ctx context.Context, conn net.Conn) error {
 		"host":       hostHeader,
 		"summary":    fmt.Sprintf("HTTP %s %s from %s", method, path, srcIP),
 	})
+
+	// Check for HTTP exploit / command injection payload in URL path or Body
+	rawPayload := path
+	if len(body) > 0 {
+		rawPayload += " " + string(body)
+	}
+
+	decodedPayload, _ := url.QueryUnescape(rawPayload)
+	lowerPayload := strings.ToLower(decodedPayload)
+
+	if strings.Contains(lowerPayload, "wget") ||
+		strings.Contains(lowerPayload, "curl") ||
+		strings.Contains(lowerPayload, "chmod") ||
+		strings.Contains(lowerPayload, "cd ") ||
+		strings.Contains(lowerPayload, "cmd=") ||
+		strings.Contains(lowerPayload, "mdc=") ||
+		strings.Contains(lowerPayload, "exec=") ||
+		strings.Contains(lowerPayload, "___s_o_s_t_r_e_a_max___") ||
+		strings.Contains(lowerPayload, "device.rsp") ||
+		strings.Contains(lowerPayload, "sdk/weblanguage") {
+
+		filename := "http_exploit.sh"
+		if strings.Contains(lowerPayload, "arm") {
+			filename = "http_exploit_arm.sh"
+		} else if strings.Contains(lowerPayload, "mips") {
+			filename = "http_exploit_mips.sh"
+		} else if strings.Contains(lowerPayload, "x86") {
+			filename = "http_exploit_x86.sh"
+		}
+
+		payloadBytes := []byte(decodedPayload)
+		hasher := sha256.New()
+		hasher.Write(payloadBytes)
+		sha256Sum := hex.EncodeToString(hasher.Sum(nil))
+
+		malwareType, scanDetails := services.AnalyzePayload(filename, payloadBytes)
+
+		downloadURL := ""
+		if idx := strings.Index(lowerPayload, "http://"); idx != -1 {
+			endIdx := strings.IndexAny(lowerPayload[idx:], " ;'\">\n\r\t")
+			if endIdx != -1 {
+				downloadURL = decodedPayload[idx : idx+endIdx]
+			} else {
+				downloadURL = decodedPayload[idx:]
+			}
+		} else if idx := strings.Index(lowerPayload, "https://"); idx != -1 {
+			endIdx := strings.IndexAny(lowerPayload[idx:], " ;'\">\n\r\t")
+			if endIdx != -1 {
+				downloadURL = decodedPayload[idx : idx+endIdx]
+			} else {
+				downloadURL = decodedPayload[idx:]
+			}
+		}
+
+		h.baseService.LogEvent("captured_payload", map[string]interface{}{
+			"src_ip":       srcIP,
+			"src_port":     srcPort,
+			"profile":      h.profile.Name,
+			"filename":     filename,
+			"file_size":    len(payloadBytes),
+			"sha256":       sha256Sum,
+			"malware_type": malwareType,
+			"details":      scanDetails,
+			"download_url": downloadURL,
+			"summary":      fmt.Sprintf("HTTP exploit payload '%s' captured from %s", filename, srcIP),
+		})
+	}
 
 	httpProf := h.profile.HTTP
 
