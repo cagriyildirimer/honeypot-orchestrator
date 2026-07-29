@@ -86,7 +86,7 @@ async function submitLogin(event) {
   showLoginError("");
 
   try {
-    const session = await requestJson("/api/login", {
+    const session = await window.requestJson("/api/login", {
       method: "POST",
       body: JSON.stringify({ username, password }),
     });
@@ -120,7 +120,7 @@ async function bootstrapLogin() {
 
   // Check if session is already authenticated
   try {
-    const session = await requestJson("/api/session");
+    const session = await window.requestJson("/api/session");
     if (session.authenticated) {
       window.location.replace("/dashboard");
       return; // Skip splash and redirect

@@ -2,7 +2,30 @@
 
 ## 📋 To-Do & Next Steps
 
-## 🏗️ Proje Mimari ve Dosya Yapısı (Mevcut Durum)
+### 🔴 Kritik (Güvenlik)
+- [ ] `/api/test/inject-event` Auth Bypass — Route, `SessionMiddleware` ve `CSRFMiddleware` dışında tanımlı. Kimlik doğrulaması olmadan sahte olay enjekte edilebilir. Authenticated group içine taşınmalı veya kaldırılmalı. (`server.go:138`)
+- [ ] Backend Admin Role Guard Eksik — POST endpointlerinde (`/api/whitelist`, `/api/blacklist`, `/api/users`, `/api/profile`, `/api/settings/siem` vb.) backend tarafında `session.Role == "admin"` kontrolü yok. Sadece frontend kontrolü var, viewer kullanıcı doğrudan API'ye istek atarak admin işlemi yapabilir. (`management_handlers.go`)
+- [ ] IOC Export Admin Korumasız — `/api/ioc/csv` ve `/api/ioc/stix` GET endpointlerinde backend role kontrolü yok. Herhangi bir authenticated user doğrudan URL'ye gidip tüm IOC verisini indirebilir. (`server.go:152-153`)
+
+### 🟠 Orta (Bug & Fonksiyonel Eksiklik)
+- [ ] `window.text()` Runtime Bağımlılığı — `buildRiskModel` içinde `window.text(hottestService[0])` çağrısı var. `common.js` yüklenmeden çalışırsa `window.text is not a function` hatası oluşur. Inline fallback kullanılmalı. (`utils.js:336-338`)
+- [ ] CSRF Token Tek Kullanımlık Çakışma — Token kullanıldıktan sonra siliniyor. Hızlı ardışık POST'larda (role değiştir + şifre değiştir gibi) ikinci istek başarısız olur. (`server.go:81-86`)
+- [ ] Whitelist Edit Gerçek Update Değil — Edit modunda eski IP silinmeden yeni IP ekleniyor. IP değiştirilirse eski kayıt kalır. Backend'e PUT/PATCH endpoint eklenmeli veya edit'te eski IP silinmeli. (`Settings.js:49-51`)
+- [ ] `navigateClick` Tutarsız Dağıtım — Sadece `DashboardPage`'e geçiriliyor, diğer sayfalara geçirilmemiş. Şu an sadece Dashboard'daki "Open logs" linki kullanıyor. (`App.js:83`)
+- [ ] Analyze Tab Geçişlerinde Tekrar Fetch — Payloads, Credentials, Tarpit tabları her açılışta API'ye yeniden istek atıyor. Bir defa yüklenmiş veri cache'lenmeli. (`Analyze.js:100-133`)
+
+### 🟡 Düşük (UX & Kod Kalitesi)
+- [ ] `AnimatedCounter` Stale Closure Riski — `useEffect` dependency'de sadece `[value]` var ama `count` state closure üzerinden okunuyor. React Strict Mode'da animation artefact oluşabilir. (`Core.js:45-76`)
+- [ ] `analyze_handlers.go` IP Listesi Çoklama — `ips` slice'ına duplicate IP ekleniyor, `ipSet` ayrıca unique kontrol yapıyor. 5000 event'te gereksiz bellek kullanımı. (`analyze_handlers.go:114-147`)
+- [ ] `loadavg` CPU Hesaplama Yanıltıcı — Linux loadavg CPU çekirdek sayısına bölünerek yüzde gösteriliyor, gerçek CPU kullanımını yansıtmaz. (`management_handlers.go:578-589`)
+- [ ] `memFile` defer Close Scope — `defer memFile.Close()` bir if bloğu içinde, fonksiyon sonuna kadar dosya açık kalır. (`management_handlers.go:553-554`)
+- [ ] Move to Whitelist Onay Yok — Blacklist edit panelindeki "Add to Whitelist" butonu onay diyalogu olmadan çalışıyor. Yanlışlıkla tıklanabilir. (`Settings.js:476`)
+- [ ] Gereksiz `res.ok` Kontrolü — SIEM test handler'ında `requestJson` zaten hata fırlatıyor, `res.ok` hiçbir zaman false olmaz. (`Settings.js:1036`)
+
+### 🔵 Tasarım & Mimari
+- [ ] Portal Mount Yanıp Sönme — Sayfa değişiminde eski `.topbar-icons-slot` DOM'dan kalkıp yeni sayfa yüklenene kadar portal hedefi null oluyor. 100ms debounce var ama kısa süreli flicker olabilir.
+- [ ] Login Sayfası Session Redirect Yok — Zaten giriş yapmış kullanıcı `/login`'e gittiğinde tekrar form görür, `/dashboard`'a yönlendirme eksik. (`App.js:42-55`)
+- [ ] Topbar DRY İhlali — Her sayfa kendi topbar'ında `user-pill` ve `Log out` butonu tekrar oluşturuyor. `AppLayout`'a taşınabilir. (`App.js:104`)
 
 ```
 honeypot-orchestrator/
