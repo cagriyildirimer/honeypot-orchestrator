@@ -211,7 +211,7 @@ func BulkLookup(ips []string) map[string]GeoIPInfo {
 		geoCacheMu.RLock()
 		cached, ok := geoCache[ip]
 		geoCacheMu.RUnlock()
-		if ok {
+		if ok && cached.Country != "Unknown" && cached.Country != "" {
 			results[ip] = cached
 		} else {
 			toFetch = append(toFetch, ip)
@@ -320,38 +320,75 @@ func BulkLookup(ips []string) map[string]GeoIPInfo {
 }
 
 func singleGeoIPLookup(client *http.Client, ip string) (GeoIPInfo, error) {
-	req, err := http.NewRequest("GET", "http://ip-api.com/json/"+ip+"?fields=status,country,countryCode,city,lat,lon,isp,as,org", nil)
-	if err != nil {
-		return GeoIPInfo{}, err
+	// Primary Fallback: ipwho.is (HTTPS)
+	req, err := http.NewRequest("GET", "https://ipwho.is/"+ip, nil)
+	if err == nil {
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) HoneypotOrchestrator/1.0")
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			var data struct {
+				Success     bool    `json:"success"`
+				Country     string  `json:"country"`
+				CountryCode string  `json:"country_code"`
+				City        string  `json:"city"`
+				Latitude    float64 `json:"latitude"`
+				Longitude   float64 `json:"longitude"`
+				Connection  struct {
+					ISP string      `json:"isp"`
+					ASN interface{} `json:"asn"`
+					Org string      `json:"org"`
+				} `json:"connection"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&data); err == nil && data.Success && data.Country != "" {
+				asnStr := ""
+				if data.Connection.ASN != nil {
+					asnStr = fmt.Sprintf("AS%v", data.Connection.ASN)
+				}
+				return GeoIPInfo{
+					Country:     data.Country,
+					CountryCode: data.CountryCode,
+					Lat:         data.Latitude,
+					Lon:         data.Longitude,
+					City:        data.City,
+					ISP:         data.Connection.ISP,
+					ASN:         asnStr,
+					Org:         data.Connection.Org,
+				}, nil
+			}
+		}
 	}
-	req.Header.Set("User-Agent", "HoneypotOrchestrator/1.0")
-	resp, err := client.Do(req)
-	if err != nil {
-		return GeoIPInfo{}, err
-	}
-	defer resp.Body.Close()
 
-	var data ipApiResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return GeoIPInfo{}, err
+	// Secondary Fallback: ip-api.com (HTTP)
+	req2, err := http.NewRequest("GET", "http://ip-api.com/json/"+ip+"?fields=status,country,countryCode,city,lat,lon,isp,as,org", nil)
+	if err != nil {
+		return GeoIPInfo{Country: "Unknown", CountryCode: "XX"}, err
 	}
-	if data.Status != "success" {
+	req2.Header.Set("User-Agent", "HoneypotOrchestrator/1.0")
+	resp2, err := client.Do(req2)
+	if err != nil {
+		return GeoIPInfo{Country: "Unknown", CountryCode: "XX"}, err
+	}
+	defer resp2.Body.Close()
+
+	var data2 ipApiResponse
+	if err := json.NewDecoder(resp2.Body).Decode(&data2); err != nil || data2.Status != "success" {
 		return GeoIPInfo{Country: "Unknown", CountryCode: "XX"}, nil
 	}
-	asnParts := strings.Split(data.AS, " ")
+	asnParts := strings.Split(data2.AS, " ")
 	asn := ""
 	if len(asnParts) > 0 {
 		asn = asnParts[0]
 	}
 	return GeoIPInfo{
-		Country:     data.Country,
-		CountryCode: data.CountryCode,
-		Lat:         data.Lat,
-		Lon:         data.Lon,
-		City:        data.City,
-		ISP:         data.ISP,
+		Country:     data2.Country,
+		CountryCode: data2.CountryCode,
+		Lat:         data2.Lat,
+		Lon:         data2.Lon,
+		City:        data2.City,
+		ISP:         data2.ISP,
 		ASN:         asn,
-		Org:         data.Org,
+		Org:         data2.Org,
 	}, nil
 }
 

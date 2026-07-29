@@ -143,14 +143,14 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	cutoff := time.Now().Add(-24 * time.Hour)
 
-	// Fetch top 10 external attacker IPs in the last 24 hours
+	// Fetch all external attacker IPs in the last 24 hours (up to 500)
 	query := `
 		SELECT src_ip, COUNT(*) as count 
 		FROM events 
 		WHERE src_ip IS NOT NULL AND src_ip != '' AND timestamp >= $1 
 		GROUP BY src_ip 
 		ORDER BY count DESC 
-		LIMIT 10
+		LIMIT 500
 	`
 	rows, err := s.db.Pool.Query(ctx, query, cutoff)
 	if err != nil {
@@ -212,6 +212,8 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	geoResults := BulkLookup(topIPs)
+
 	var attackers []map[string]interface{}
 	torCount := 0
 	cloudCount := 0
@@ -220,10 +222,17 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 
 	for _, ip := range topIPs {
 		count := ipCounts[ip]
+		geoInfo := geoResults[ip]
 		if cachedJSON, exists := cached[ip]; exists {
 			var details map[string]interface{}
 			if err := json.Unmarshal([]byte(cachedJSON), &details); err == nil {
 				details["event_count"] = count
+				if c, _ := details["country"].(string); c == "" || c == "Unknown" {
+					details["country"] = geoInfo.Country
+				}
+				if ct, _ := details["city"].(string); ct == "" {
+					details["city"] = geoInfo.City
+				}
 				attackers = append(attackers, details)
 
 				if isTor, _ := details["is_tor"].(bool); isTor {
@@ -234,10 +243,6 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 				}
 				if abuseVal, exists := details["abuse_score"]; exists {
 					if fScore, ok := abuseVal.(float64); ok {
-						// Calculate weight based on event count and score severity
-						// Weight = event_count * (abuse_score + 1.0)
-						// This ensures highly malicious active IPs hold major weight,
-						// and low-abuse IPs don't unfairly pull down the average.
 						weight := float64(count) * (fScore + 1.0)
 						weightedAbuseSum += fScore * weight
 						totalAbuseWeight += weight
@@ -249,6 +254,8 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 		// Fallback
 		attackers = append(attackers, map[string]interface{}{
 			"ip":          ip,
+			"country":     geoInfo.Country,
+			"city":        geoInfo.City,
 			"status":      "Pending Analysis",
 			"event_count": count,
 		})
@@ -406,6 +413,7 @@ func formatEventMap(evt database.Event) map[string]interface{} {
 	if len(evt.Details) > 0 {
 		var detailsMap map[string]interface{}
 		if err := json.Unmarshal(evt.Details, &detailsMap); err == nil {
+			eventData["details"] = detailsMap
 			for k, v := range detailsMap {
 				if k != "id" && k != "timestamp" && k != "service" && k != "event_type" && k != "src_ip" && k != "src_port" && k != "summary" {
 					eventData[k] = v

@@ -3797,6 +3797,8 @@ input:checked + .toggle-slider:before {
 /* Attacker Table */
 .ti-table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 480px;
   border-radius: 14px;
   border: 1px solid var(--border);
 }

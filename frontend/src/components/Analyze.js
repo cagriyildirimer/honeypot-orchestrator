@@ -909,16 +909,22 @@ export function AnalyzePage(props) {
               ? h("tr", null, h("td", { colSpan: 7, className: "empty-row" }, "No malware payloads captured yet."))
               : payloadEvents.map((evt, idx) => {
                   const details = evt.details || {};
+                  const filename = evt.filename || details.filename || "unknown";
+                  const fileSize = evt.file_size || details.file_size;
+                  const malwareType = evt.malware_type || details.malware_type || "Generic Payload";
+                  const sha256 = evt.sha256 || details.sha256 || "N/A";
+                  const downloadUrl = evt.download_url || details.download_url;
+
                   return h(
                     "tr",
                     { key: evt.id || idx },
                     h("td", null, evt.timestamp),
                     h("td", null, h("span", { className: "table-strong" }, evt.src_ip)),
-                    h("td", null, details.filename || "unknown"),
-                    h("td", null, details.file_size ? `${(details.file_size / 1024).toFixed(2)} KB` : "unknown"),
-                    h("td", null, h("span", { className: "status-badge badge-threat" }, details.malware_type || "Generic Payload")),
-                    h("td", null, h("code", { style: { fontSize: "0.85em" } }, details.sha256 || "N/A")),
-                    h("td", null, details.download_url ? h("a", { href: details.download_url, target: "_blank", style: { color: "var(--neon-blue)" } }, "URL Link") : "Direct Upload (FTP)")
+                    h("td", null, filename),
+                    h("td", null, fileSize ? `${(fileSize / 1024).toFixed(2)} KB` : "unknown"),
+                    h("td", null, h("span", { className: "status-badge badge-threat" }, malwareType)),
+                    h("td", null, h("code", { style: { fontSize: "0.85em" } }, sha256)),
+                    h("td", null, downloadUrl ? h("a", { href: downloadUrl, target: "_blank", style: { color: "var(--neon-blue)" } }, downloadUrl) : "Direct Upload (FTP)")
                   );
                 })
         )
