@@ -442,12 +442,27 @@ func (o *Orchestrator) GetServicesStatus(displayHost string) []WebServiceStatus 
 		overrides = o.overrides
 	}
 
-	// Always sync live running status from registered services if loaded
-	for name, svc := range o.services {
-		if svc.IsRunning() {
-			runningMap[name] = true
-		} else {
-			runningMap[name] = false
+	isDecoyNode := os.Getenv("HONEYPOT_DECOYS_ENABLED") != "false"
+
+	// Always sync live running status from registered services if decoys are locally running
+	if isDecoyNode {
+		for name, svc := range o.services {
+			if svc.IsRunning() {
+				runningMap[name] = true
+			} else {
+				runningMap[name] = false
+			}
+		}
+	} else {
+		// If running in Web-only API mode (macvlan/multi-container LAN), and DB had no runningServices list yet,
+		// default target services of the active profile to running
+		if len(state.RunningServices) == 0 {
+			prof := profiles.GetProfile(activeProfile)
+			if prof != nil {
+				for _, s := range prof.Services {
+					runningMap[s] = true
+				}
+			}
 		}
 	}
 	o.mu.Unlock()
@@ -457,8 +472,12 @@ func (o *Orchestrator) GetServicesStatus(displayHost string) []WebServiceStatus 
 		if !enabled {
 			runningMap[name] = false
 		} else {
-			if svc, ok := o.services[name]; ok {
-				runningMap[name] = svc.IsRunning()
+			if isDecoyNode {
+				if svc, ok := o.services[name]; ok {
+					runningMap[name] = svc.IsRunning()
+				} else {
+					runningMap[name] = true
+				}
 			} else {
 				runningMap[name] = true
 			}
