@@ -275,5 +275,6 @@ Sistemde üretilen kritik alarmlar (`login_success`, `credential_attempt`, `ssh_
 120. **`AppLayout` Oturum Bağlamı Genişletildi:** `App.js` dosyasından `AppLayout` bileşenine `session` ve `onLogout` propları standart olarak geçirilerek üst bar veri erişimi modüler hale getirildi.
 121. **HTTP Web Exploit Payload Ayıklama Özelliği Eklendi:** `http.go` içerisine HTTP GET/POST istekleri içerisindeki komut enjeksiyonu ve RCE isteklerini (`wget`, `curl`, `chmod`, `cd /tmp`, `cmd=`, `mdc=`, `device.rsp`, `sdk/weblanguage` vb.) otomatik algılayıp `captured_payload` olayı üreten ayrıştırıcı eklendi. Artık web üzerinden gelen komut enjeksiyonları da "Captured Payloads & Malware" sekmesinde otomatik listelenecek.
 122. **GeoIP Çözümleme ve İkincil Sorgu İyileştirmesi:** `utils.go` içerisinde GeoIP harita çözümleme servisi güncellendi. "Unknown" dönen IP'lerin önbelleğe hatalı yazılması engellendi ve ikincil tekil IP doğrulayıcı (`singleGeoIPLookup`) eklendi.
+123. **Güvenli ve Kesintisiz Otomatik Güncelleme Betiği (`scripts/update.sh`):** Canlı Macvlan / Standart Docker ortamında veritabanını ve aktif bağlantıları bozmadan, PostgreSQL otomatik yedeğini alarak (`pg_dump`), arka planda yeni imajları derleyip (`--no-deps`) sıfır veri kaybı ile saniyeler içinde güncelleyen korumalı bash güncelleme betiği yazıldı ve doğrulandı.
 
 ---
