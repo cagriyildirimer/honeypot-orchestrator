@@ -227,12 +227,23 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 			var details map[string]interface{}
 			if err := json.Unmarshal([]byte(cachedJSON), &details); err == nil {
 				details["event_count"] = count
-				if (details["country"] == "" || details["country"] == "Unknown") && geoInfo.Country != "" && geoInfo.Country != "Unknown" {
-					details["country"] = geoInfo.Country
-					details["city"] = geoInfo.City
-					if updatedBytes, err := json.Marshal(details); err == nil {
-						_ = s.db.SaveThreatIntel(ctx, ip, string(updatedBytes))
+				cVal, _ := details["country"].(string)
+				if cVal == "" || strings.EqualFold(cVal, "unknown") {
+					if geoInfo.Country != "" && !strings.EqualFold(geoInfo.Country, "unknown") {
+						details["country"] = geoInfo.Country
+						details["city"] = geoInfo.City
+						details["lat"] = geoInfo.Lat
+						details["lon"] = geoInfo.Lon
+						if updatedBytes, err := json.Marshal(details); err == nil {
+							_ = s.db.SaveThreatIntel(ctx, ip, string(updatedBytes))
+						}
 					}
+				}
+				if c, _ := details["country"].(string); c == "" || strings.EqualFold(c, "unknown") {
+					details["country"] = geoInfo.Country
+				}
+				if ct, _ := details["city"].(string); ct == "" {
+					details["city"] = geoInfo.City
 				}
 				attackers = append(attackers, details)
 
@@ -257,6 +268,8 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 			"ip":          ip,
 			"country":     geoInfo.Country,
 			"city":        geoInfo.City,
+			"lat":         geoInfo.Lat,
+			"lon":         geoInfo.Lon,
 			"status":      "Pending Analysis",
 			"event_count": count,
 		})
@@ -530,6 +543,36 @@ func (s *Server) getCachedStats(ctx context.Context) map[string]interface{} {
 			}
 		}
 		ipRows.Close()
+	}
+
+	if len(topIPsList) == 0 {
+		historicalIPQuery := `
+			SELECT src_ip, COUNT(*) FROM events
+			WHERE src_ip IS NOT NULL
+			  AND src_ip != '127.0.0.1'
+			  AND src_ip != '::1'
+			  AND src_ip != 'localhost'
+			  AND src_ip != 'unknown'
+			GROUP BY src_ip
+			ORDER BY COUNT(*) DESC
+			LIMIT 200
+		`
+		hRows, err := s.db.Pool.Query(ctx, historicalIPQuery)
+		if err == nil {
+			for hRows.Next() {
+				var ip string
+				var count int
+				if err := hRows.Scan(&ip, &count); err == nil && ip != "" {
+					ipTotals[ip] = count
+					topIPsList = append(topIPsList, ip)
+					if count > maxCount {
+						maxCount = count
+						topIP = ip
+					}
+				}
+			}
+			hRows.Close()
+		}
 	}
 
 	topMac := "N/A"
