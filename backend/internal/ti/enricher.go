@@ -84,6 +84,52 @@ func queryGeoIPBulk(ips []string) map[string]ipApiResponse {
 			results[item.Query] = item
 		}
 	}
+
+	// Fallback single lookup using ipwho.is (HTTPS) for any failed/missing IPs
+	for _, ip := range ips {
+		res, ok := results[ip]
+		if !ok || res.Status != "success" || res.Country == "" || res.Country == "Unknown" {
+			req, err := http.NewRequest("GET", "https://ipwho.is/"+ip, nil)
+			if err == nil {
+				req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) HoneypotOrchestrator/1.0")
+				if resp, err := httpClient.Do(req); err == nil {
+					var data struct {
+						Success     bool    `json:"success"`
+						Country     string  `json:"country"`
+						CountryCode string  `json:"country_code"`
+						City        string  `json:"city"`
+						Latitude    float64 `json:"latitude"`
+						Longitude   float64 `json:"longitude"`
+						Connection  struct {
+							ISP string      `json:"isp"`
+							ASN interface{} `json:"asn"`
+							Org string      `json:"org"`
+						} `json:"connection"`
+					}
+					if err := json.NewDecoder(resp.Body).Decode(&data); err == nil && data.Success && data.Country != "" {
+						asnStr := ""
+						if data.Connection.ASN != nil {
+							asnStr = fmt.Sprintf("AS%v", data.Connection.ASN)
+						}
+						results[ip] = ipApiResponse{
+							Status:      "success",
+							Query:       ip,
+							Country:     data.Country,
+							CountryCode: data.CountryCode,
+							City:        data.City,
+							Lat:         data.Latitude,
+							Lon:         data.Longitude,
+							ISP:         data.Connection.ISP,
+							AS:          asnStr,
+							Org:         data.Connection.Org,
+						}
+					}
+					resp.Body.Close()
+				}
+			}
+		}
+	}
+
 	return results
 }
 

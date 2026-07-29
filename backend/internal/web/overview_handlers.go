@@ -227,11 +227,12 @@ func (s *Server) HandleThreatIntel(w http.ResponseWriter, r *http.Request) {
 			var details map[string]interface{}
 			if err := json.Unmarshal([]byte(cachedJSON), &details); err == nil {
 				details["event_count"] = count
-				if c, _ := details["country"].(string); c == "" || c == "Unknown" {
+				if (details["country"] == "" || details["country"] == "Unknown") && geoInfo.Country != "" && geoInfo.Country != "Unknown" {
 					details["country"] = geoInfo.Country
-				}
-				if ct, _ := details["city"].(string); ct == "" {
 					details["city"] = geoInfo.City
+					if updatedBytes, err := json.Marshal(details); err == nil {
+						_ = s.db.SaveThreatIntel(ctx, ip, string(updatedBytes))
+					}
 				}
 				attackers = append(attackers, details)
 

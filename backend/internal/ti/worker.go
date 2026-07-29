@@ -81,8 +81,19 @@ func analyzeAndEnrich(ctx context.Context, db *database.DB, cfg *config.AppConfi
 
 	var toEnrich []string
 	for _, ip := range candidateIPs {
-		if _, exists := cachedMap[ip]; !exists {
+		rawJSON, exists := cachedMap[ip]
+		if !exists {
 			toEnrich = append(toEnrich, ip)
+		} else {
+			var entry map[string]interface{}
+			if err := json.Unmarshal([]byte(rawJSON), &entry); err == nil {
+				c, _ := entry["country"].(string)
+				if c == "" || c == "Unknown" {
+					toEnrich = append(toEnrich, ip)
+				}
+			} else {
+				toEnrich = append(toEnrich, ip)
+			}
 		}
 	}
 
