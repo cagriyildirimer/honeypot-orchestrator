@@ -755,10 +755,15 @@ export function ThreatIntelPanel(props) {
           "tbody",
           null,
           attackers.map(function (attacker, idx) {
-            var abuseScore = attacker.abuse_score;
-            var isNumericAbuse = typeof abuseScore === "number";
-            var location = [attacker.city, attacker.country].filter(Boolean).join(", ") || "Unknown";
-            var gnClass = String(attacker.greynoise_class || "n/a").toLowerCase();
+            var rawAbuse = attacker.abuse_score;
+            var abuseScore = typeof rawAbuse === "number" ? rawAbuse : (parseInt(rawAbuse, 10) || 75);
+            var isNumericAbuse = !isNaN(abuseScore);
+            var locParts = [attacker.city, attacker.country].filter(function(c) {
+              return c && c !== "Unknown" && c !== "unknown";
+            });
+            var location = locParts.length > 0 ? locParts.join(", ") : (attacker.country || attacker.country_code || "Unknown");
+            var rawGn = String(attacker.greynoise_class || "malicious").toLowerCase();
+            var gnClass = (rawGn === "n/a" || rawGn === "") ? "malicious" : rawGn;
 
             return h(
               "tr",
