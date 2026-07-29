@@ -82,24 +82,24 @@ export function App() {
   if (page === "dashboard") {
     pageNode = h(DashboardPage, { session, onLogout: handleLogout, navigateClick });
   } else if (page === "analyze") {
-    pageNode = h(AnalyzePage, { session, onLogout: handleLogout });
+    pageNode = h(AnalyzePage, { session, onLogout: handleLogout, navigateClick });
   } else if (page === "live") {
-    pageNode = h(LiveActivityPage, { session, onLogout: handleLogout });
+    pageNode = h(LiveActivityPage, { session, onLogout: handleLogout, navigateClick });
   } else if (page === "whitelist") {
-    pageNode = h(WhitelistPage, { session, onLogout: handleLogout });
+    pageNode = h(WhitelistPage, { session, onLogout: handleLogout, navigateClick });
   } else if (page === "blacklist" || page === "blocklist") {
-    pageNode = h(BlacklistPage, { session, onLogout: handleLogout });
+    pageNode = h(BlacklistPage, { session, onLogout: handleLogout, navigateClick });
   } else if (page === "profiles") {
-    pageNode = h(ProfilesPage, { session, onLogout: handleLogout });
+    pageNode = h(ProfilesPage, { session, onLogout: handleLogout, navigateClick });
   } else if (page === "logs") {
-    pageNode = h(LogsPage, { session, onLogout: handleLogout });
+    pageNode = h(LogsPage, { session, onLogout: handleLogout, navigateClick });
   } else if (page === "system") {
-    pageNode = h(SystemPage, { session, onLogout: handleLogout });
+    pageNode = h(SystemPage, { session, onLogout: handleLogout, navigateClick });
   } else if (page === "users") {
-    pageNode = h(UsersPage, { session, onLogout: handleLogout });
+    pageNode = h(UsersPage, { session, onLogout: handleLogout, navigateClick });
   } else if (page === "siem") {
-    pageNode = h(SiemSettingsPage, { session, onLogout: handleLogout });
+    pageNode = h(SiemSettingsPage, { session, onLogout: handleLogout, navigateClick });
   }
 
-  return h(AppLayout, { page, session, navigateClick }, pageNode);
+  return h(AppLayout, { page, session, onLogout: handleLogout, navigateClick }, pageNode);
 }

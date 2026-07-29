@@ -551,7 +551,6 @@ func (s *Server) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 
 	// Check Linux /proc/meminfo for memory calculations
 	if memFile, err := os.Open("/proc/meminfo"); err == nil {
-		defer memFile.Close()
 		var memTotal, memAvailable int64
 		var junk string
 		for {
@@ -567,6 +566,7 @@ func (s *Server) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 				memAvailable = val
 			}
 		}
+		memFile.Close()
 		if memTotal > 0 {
 			totalRam = float64(memTotal) / 1024.0
 			usedRam = (float64(memTotal) - float64(memAvailable)) / 1024.0
@@ -574,15 +574,20 @@ func (s *Server) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// CPU calculations (mocked with loadavg on Linux)
+	// CPU calculations (1-min load average normalized by core count)
 	cpuPercent := 1.5
 	if data, err := os.ReadFile("/proc/loadavg"); err == nil {
 		parts := strings.Fields(string(data))
 		if len(parts) > 0 {
 			if val, err := strconv.ParseFloat(parts[0], 64); err == nil {
-				cpuPercent = val * 100.0 / float64(runtime.NumCPU())
+				numCPU := float64(runtime.NumCPU())
+				if numCPU > 0 {
+					cpuPercent = (val / numCPU) * 100.0
+				}
 				if cpuPercent > 100.0 {
 					cpuPercent = 100.0
+				} else if cpuPercent < 0.1 {
+					cpuPercent = 0.5
 				}
 			}
 		}

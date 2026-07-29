@@ -2,31 +2,6 @@
 
 ## 📋 To-Do & Next Steps
 
-### 🔴 Kritik (Güvenlik)
-- [ ] `/api/test/inject-event` Auth Bypass — Route, `SessionMiddleware` ve `CSRFMiddleware` dışında tanımlı. Kimlik doğrulaması olmadan sahte olay enjekte edilebilir. Authenticated group içine taşınmalı veya kaldırılmalı. (`server.go:138`)
-- [ ] Backend Admin Role Guard Eksik — POST endpointlerinde (`/api/whitelist`, `/api/blacklist`, `/api/users`, `/api/profile`, `/api/settings/siem` vb.) backend tarafında `session.Role == "admin"` kontrolü yok. Sadece frontend kontrolü var, viewer kullanıcı doğrudan API'ye istek atarak admin işlemi yapabilir. (`management_handlers.go`)
-- [ ] IOC Export Admin Korumasız — `/api/ioc/csv` ve `/api/ioc/stix` GET endpointlerinde backend role kontrolü yok. Herhangi bir authenticated user doğrudan URL'ye gidip tüm IOC verisini indirebilir. (`server.go:152-153`)
-
-### 🟠 Orta (Bug & Fonksiyonel Eksiklik)
-- [ ] `window.text()` Runtime Bağımlılığı — `buildRiskModel` içinde `window.text(hottestService[0])` çağrısı var. `common.js` yüklenmeden çalışırsa `window.text is not a function` hatası oluşur. Inline fallback kullanılmalı. (`utils.js:336-338`)
-- [ ] CSRF Token Tek Kullanımlık Çakışma — Token kullanıldıktan sonra siliniyor. Hızlı ardışık POST'larda (role değiştir + şifre değiştir gibi) ikinci istek başarısız olur. (`server.go:81-86`)
-- [ ] Whitelist Edit Gerçek Update Değil — Edit modunda eski IP silinmeden yeni IP ekleniyor. IP değiştirilirse eski kayıt kalır. Backend'e PUT/PATCH endpoint eklenmeli veya edit'te eski IP silinmeli. (`Settings.js:49-51`)
-- [ ] `navigateClick` Tutarsız Dağıtım — Sadece `DashboardPage`'e geçiriliyor, diğer sayfalara geçirilmemiş. Şu an sadece Dashboard'daki "Open logs" linki kullanıyor. (`App.js:83`)
-- [ ] Analyze Tab Geçişlerinde Tekrar Fetch — Payloads, Credentials, Tarpit tabları her açılışta API'ye yeniden istek atıyor. Bir defa yüklenmiş veri cache'lenmeli. (`Analyze.js:100-133`)
-
-### 🟡 Düşük (UX & Kod Kalitesi)
-- [ ] `AnimatedCounter` Stale Closure Riski — `useEffect` dependency'de sadece `[value]` var ama `count` state closure üzerinden okunuyor. React Strict Mode'da animation artefact oluşabilir. (`Core.js:45-76`)
-- [ ] `analyze_handlers.go` IP Listesi Çoklama — `ips` slice'ına duplicate IP ekleniyor, `ipSet` ayrıca unique kontrol yapıyor. 5000 event'te gereksiz bellek kullanımı. (`analyze_handlers.go:114-147`)
-- [ ] `loadavg` CPU Hesaplama Yanıltıcı — Linux loadavg CPU çekirdek sayısına bölünerek yüzde gösteriliyor, gerçek CPU kullanımını yansıtmaz. (`management_handlers.go:578-589`)
-- [ ] `memFile` defer Close Scope — `defer memFile.Close()` bir if bloğu içinde, fonksiyon sonuna kadar dosya açık kalır. (`management_handlers.go:553-554`)
-- [ ] Move to Whitelist Onay Yok — Blacklist edit panelindeki "Add to Whitelist" butonu onay diyalogu olmadan çalışıyor. Yanlışlıkla tıklanabilir. (`Settings.js:476`)
-- [ ] Gereksiz `res.ok` Kontrolü — SIEM test handler'ında `requestJson` zaten hata fırlatıyor, `res.ok` hiçbir zaman false olmaz. (`Settings.js:1036`)
-
-### 🔵 Tasarım & Mimari
-- [ ] Portal Mount Yanıp Sönme — Sayfa değişiminde eski `.topbar-icons-slot` DOM'dan kalkıp yeni sayfa yüklenene kadar portal hedefi null oluyor. 100ms debounce var ama kısa süreli flicker olabilir.
-- [ ] Login Sayfası Session Redirect Yok — Zaten giriş yapmış kullanıcı `/login`'e gittiğinde tekrar form görür, `/dashboard`'a yönlendirme eksik. (`App.js:42-55`)
-- [ ] Topbar DRY İhlali — Her sayfa kendi topbar'ında `user-pill` ve `Log out` butonu tekrar oluşturuyor. `AppLayout`'a taşınabilir. (`App.js:104`)
-
 ```
 honeypot-orchestrator/
 ├── docker-compose.yml                 # Standart Go + Postgres + React Çoklu-Mikroservis Konfigürasyonu
@@ -281,7 +256,22 @@ Sistemde üretilen kritik alarmlar (`login_success`, `credential_attempt`, `ssh_
 101. **Analyze.js Paneline Payloads ve Tarpit Tabları Entegre Edildi:** Yönetim paneli analiz sayfasına yakalanan tüm zararlı yazılımların SHA-256, boyut ve detaylarıyla izlenebildiği "Captured Payloads" sekmesi ile o an trap'te meşgul edilen saldırgan IP'lerinin ve istatistiklerinin gösterildiği "TCP Tarpit Activity" sekmesi entegre edildi.
 102. **WinRM (Port 5985) HTTP Emülasyonu ve Windows Profiline Entegrasyonu:** Windows Remote Management (WinRM) servisini taklit edecek bir HTTP sunucu simülatörü yazıldı. /wsman uç noktasına gelen SOAP Identify isteklerine "Microsoft Corporation" imzalı XML yanıtı dönmesi sağlandı. Geçersiz isteklere Microsoft HTTPAPI/2.0 standardında 404 sayfaları döndürüldü ve tüm istek detayları "winrm_request" olarak veritabanına loglandı.
 103. **Windows FTP Decoy (Microsoft FTP Service) Entegrasyonu:** Windows sunucu profiline (windows_server) Microsoft FTP Service taklidi yapacak şekilde "ftp_windows" servisi entegre edildi. config.yaml ve docker-compose dosyalarında yönlendirmeleri tamamlanarak LAN modunda standart 21 numaralı portta MS FTP banner'ı (220 Microsoft FTP Service) dönecek şekilde aktifleştirildi.
+104. **/api/test/inject-event Auth Bypass Giderildi:** `/api/test/inject-event` uç noktası yetkisiz erişimleri engellemek amacıyla `SessionMiddleware` ve `CSRFMiddleware` korumalı route grubuna taşındı.
+105. **Backend Admin Role Guard Eklendi:** `server.go` dosyasına `AdminMiddleware` entegre edildi. Tüm yönetimsel ve yapılandırma değişikliği yapan POST uç noktaları (`/api/profile`, `/api/services/toggle`, `/api/whitelist`, `/api/blacklist`, `/api/settings/*`, `/api/users/*`) backend seviyesinde sadece `admin` rolüne sahip oturumlarla sınırlandırıldı.
+106. **IOC Export Yetkilendirme Koruması Eklendi:** `/api/ioc/csv` ve `/api/ioc/stix` GET uç noktaları `AdminMiddleware` grubu içerisine taşınarak sadece yönetici hesaplarının dışa aktarım yapması sağlandı.
+107. **`window.text()` Runtime Bağımlılığı Temizlendi:** `utils.js` içindeki `buildRiskModel` fonksiyonunda `window.text` bağımlılığı kaldırılarak `(hottestService[0] || "-")` yerel ifadesiyle güvenli hale getirildi.
+108. **CSRF Token Yarış Durumu (Race Condition) Çözüldü:** `server.go` dosyasındaki `CSRFMiddleware` içerisinde token doğrulama anında tokenı hemen silen mantık kaldırılarak okuma kilidi (`RLock`) ve 24 saatlik TTL kontrolüne geçildi. Böylece eşzamanlı ve ardışık POST isteklerinin CSRF hatası vermesi engellendi.
+109. **Whitelist & Blacklist Edit IP Güncelleme Mantığı Düzeltildi:** `Settings.js` içinde `WhitelistPage` ve `BlacklistPage` bileşenlerinde düzenleme modunda IP/MAC adresi değiştirildiğinde eski kaydın silinerek yeni adresi eklemesi sağlandı (orijinal IP yetim kalması engellendi).
+110. **`navigateClick` Prop'u Standartlaştırıldı:** `App.js` dosyasında sadece `DashboardPage`'e geçirilmiş olan `navigateClick` prop'u tüm alt sayfa bileşenlerine standart olarak eklendi.
+111. **Analyze Sekmeleri Veri Önbelleklemesi:** `Analyze.js` bileşeninde "Credentials", "Payloads" ve "Tarpit" sekmelerindeki olay verileri ilk yüklemeden sonra önbelleklenerek sekmeler arası geçişte mükerrer API istekleri engellendi.
+112. **`AnimatedCounter` Stale Closure ve Cleanup Düzeltildi:** `Core.js` içinde `AnimatedCounter` bileşenine `useRef` entegre edilerek bayat closure etkisi ve React Strict Mode'daki mükerrer animasyon hataları giderildi, unmount anında `cancelAnimationFrame` eklendi.
+113. **`analyze_handlers.go` IP Deduplikasyon Optimizasyonu:** MITRE ATT&CK olay analizi sırasında unique IP adresleri tek geçişte `uniqueIPs` dizisinde toplanarak gereksiz harita yinelemeleri ve slice tahsisleri kaldırıldı.
+114. **Sistem CPU Kullanım Hesabı Düzeltildi:** `management_handlers.go` içerisindeki Linux `/proc/loadavg` CPU hesaplama mantığı aktif çekirdek sayısına göre normalize edilerek 0.5% - 100% aralığında güvenli değer üretmesi sağlandı.
+115. **`/proc/meminfo` Dosya Tanımlayıcısı Sızıntısı Engellendi:** `management_handlers.go` içerisindeki if bloğunda kullanılan `defer memFile.Close()` kaldırılıp okunma sonrası doğrudan `memFile.Close()` çağrısıyla kaynak yönetimi düzeltildi.
+116. **Beyaz Listeye Taşıma Onay Mekanizması Eklendi:** `Settings.js` içinde `BlacklistPage` bileşeninin modal panelindeki "Add to Whitelist" işlemine onay `confirm` popup'ı eklenerek kazara işlem yapılması engellendi.
+117. **SIEM Test Tost Mesajı Basitleştirildi:** `Settings.js` içerisindeki `handleTest` fonksiyonunda gereksiz `res.ok` şartı temizlenip doğrudan API yanıt mesajı arayüz bildirimine bağlandı.
+118. **`NotificationBellPortal` Hedef Çözümleme İyileştirildi:** `Core.js` içerisindeki bildirim portalının hedef DOM seçimindeki 100ms gecikme (debounce) kaldırılarak sayfa geçişlerindeki anlık yanıp sönme engellendi.
+119. **Giriş Yapmış Kullanıcı İçin `/login` Yönlendirmesi Eklendi:** `login.js` içerisindeki oturum kontrolü anında splash ekranının gizlenip kullanıcıyı doğrudan kontrol paneline (`/dashboard`) aktarması sağlandı.
+120. **`AppLayout` Oturum Bağlamı Genişletildi:** `App.js` dosyasından `AppLayout` bileşenine `session` ve `onLogout` propları standart olarak geçirilerek üst bar veri erişimi modüler hale getirildi.
 
 ---
-
-

@@ -112,6 +112,7 @@ func (s *Server) HandleAnalyze(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var ips []string
+	var uniqueIPs []string
 	ipSet := make(map[string]bool)
 
 	for _, evt := range events {
@@ -141,16 +142,15 @@ func (s *Server) HandleAnalyze(w http.ResponseWriter, r *http.Request) {
 			ip := *evt.SrcIP
 			if ip != "127.0.0.1" && ip != "::1" && ip != "localhost" && ip != "unknown" {
 				ips = append(ips, ip)
-				ipSet[ip] = true
+				if !ipSet[ip] {
+					ipSet[ip] = true
+					uniqueIPs = append(uniqueIPs, ip)
+				}
 			}
 		}
 	}
 
 	// Bulk GeoIP Lookup
-	var uniqueIPs []string
-	for ip := range ipSet {
-		uniqueIPs = append(uniqueIPs, ip)
-	}
 	geoData := BulkLookup(uniqueIPs)
 
 	// Country breakdown aggregation

@@ -122,6 +122,8 @@ async function bootstrapLogin() {
   try {
     const session = await window.requestJson("/api/session");
     if (session.authenticated) {
+      const splash = document.querySelector("#splashScreen");
+      if (splash) splash.style.display = "none";
       window.location.replace("/dashboard");
       return; // Skip splash and redirect
     }

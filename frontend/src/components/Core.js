@@ -47,9 +47,11 @@ export function AnimatedCounter(props) {
   if (isNaN(value)) return h("strong", null, props.value);
 
   const [count, setCount] = useState(0);
+  const countRef = useRef(0);
 
   useEffect(() => {
-    let start = count;
+    let animId;
+    const start = countRef.current;
     const end = value;
     if (start === end) return;
     
@@ -60,16 +62,22 @@ export function AnimatedCounter(props) {
       if (!startTimestamp) startTimestamp = timestamp;
       const progress = Math.min((timestamp - startTimestamp) / duration, 1);
       const easeProgress = 1 - Math.pow(1 - progress, 4);
-      setCount(Math.floor(start + easeProgress * (end - start)));
+      const current = Math.floor(start + easeProgress * (end - start));
+      countRef.current = current;
+      setCount(current);
       
       if (progress < 1) {
-        window.requestAnimationFrame(step);
+        animId = window.requestAnimationFrame(step);
       } else {
+        countRef.current = end;
         setCount(end);
       }
     };
     
-    window.requestAnimationFrame(step);
+    animId = window.requestAnimationFrame(step);
+    return () => {
+      if (animId) window.cancelAnimationFrame(animId);
+    };
   }, [value]);
 
   return h("strong", null, count.toString());
@@ -244,26 +252,21 @@ export function NotificationBellPortal(props) {
   const [portalTarget, setPortalTarget] = useState(null);
 
   useEffect(() => {
-    let debounceTimer;
     const updateTarget = () => {
       const target = document.querySelector(".topbar-icons-slot");
       setPortalTarget(target);
     };
 
-    const debouncedUpdate = () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(updateTarget, 100);
-    };
-
     updateTarget();
-    const timer = setTimeout(updateTarget, 50);
+    const animId = window.requestAnimationFrame(updateTarget);
 
-    const observer = new MutationObserver(debouncedUpdate);
+    const observer = new MutationObserver(() => {
+      updateTarget();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => {
-      clearTimeout(timer);
-      clearTimeout(debounceTimer);
+      window.cancelAnimationFrame(animId);
       observer.disconnect();
     };
   }, [props.page]);

@@ -46,6 +46,12 @@ export function WhitelistPage(props) {
     }
     setSubmitting(true);
     try {
+      if (mode === "edit" && activeEntry && activeEntry.ip !== form.ip.trim()) {
+        await window.requestJson("/api/whitelist/delete", {
+          method: "POST",
+          body: JSON.stringify({ ip: activeEntry.ip }),
+        });
+      }
       await window.requestJson("/api/whitelist", {
         method: "POST",
         body: JSON.stringify({ ip: form.ip.trim(), description: form.description.trim() }),
@@ -276,6 +282,12 @@ export function BlacklistPage(props) {
     }
     setSubmitting(true);
     try {
+      if (mode === "edit" && activeEntry && activeEntry.ip !== form.ip.trim()) {
+        await window.requestJson("/api/blacklist/delete", {
+          method: "POST",
+          body: JSON.stringify({ ip: activeEntry.ip }),
+        });
+      }
       await window.requestJson("/api/blacklist", {
         method: "POST",
         body: JSON.stringify({ ip: form.ip.trim(), description: form.description.trim() }),
@@ -322,6 +334,9 @@ export function BlacklistPage(props) {
     }
     const targetIp = form.ip.trim();
     const desc = form.description.trim() || "Moved from Blacklist";
+    if (!confirm(`Are you sure you want to unblock ${targetIp} and add it to the Whitelist?`)) {
+      return;
+    }
     try {
       await window.requestJson("/api/whitelist", {
         method: "POST",
@@ -1033,9 +1048,7 @@ export function SiemSettingsPage(props) {
         method: "POST",
         body: JSON.stringify({ id: config.id })
       });
-      if (res.ok) {
-        window.showToast(`Test event sent to ${config.name || config.host}.`, "success");
-      }
+      window.showToast(res.message || `Test event sent to ${config.name || config.host}.`, "success");
     } catch (e) {
       window.showToast("Test failed: " + e.message, "error");
     } finally {

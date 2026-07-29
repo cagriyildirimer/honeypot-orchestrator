@@ -78,12 +78,9 @@ func (s *Server) CSRFMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		s.csrfMu.Lock()
+		s.csrfMu.RLock()
 		created, exists := s.csrfTokens[token]
-		if exists {
-			delete(s.csrfTokens, token)
-		}
-		s.csrfMu.Unlock()
+		s.csrfMu.RUnlock()
 
 		if !exists || time.Since(created) > 24*time.Hour {
 			JSONResponse(w, http.StatusForbidden, map[string]string{"error": "Invalid or expired CSRF token"})
@@ -113,6 +110,17 @@ func (s *Server) SessionMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) AdminMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, ok := r.Context().Value(sessionContextKey).(*database.Session)
+		if !ok || session == nil || session.Role != "admin" {
+			JSONResponse(w, http.StatusForbidden, map[string]string{"error": "Admin access required"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) StartServer(ctx context.Context) error {
 	s.alertStreamer.Start(ctx)
 	r := chi.NewRouter()
@@ -135,12 +143,12 @@ func (s *Server) StartServer(ctx context.Context) error {
 	r.Get("/api/csrf", s.HandleCSRF)
 	r.Post("/api/login", s.HandleLogin)
 	r.Post("/api/logout", s.HandleLogout)
-	r.Post("/api/test/inject-event", s.HandleInjectEvent)
 
 	r.Group(func(r chi.Router) {
 		r.Use(s.SessionMiddleware)
 		r.Use(s.CSRFMiddleware)
 
+		r.Post("/api/test/inject-event", s.HandleInjectEvent)
 		r.Get("/api/session", s.HandleSession)
 		r.Get("/api/status", s.HandleStatus)
 		r.Get("/api/overview", s.HandleOverview)
@@ -149,41 +157,35 @@ func (s *Server) StartServer(ctx context.Context) error {
 		r.Get("/api/events", s.HandleEvents)
 		r.Get("/api/stats", s.HandleStats)
 		r.Get("/api/alerts/stream", s.alertStreamer.ServeHTTP)
-		r.Get("/api/ioc/csv", s.HandleExportIocCSV)
-		r.Get("/api/ioc/stix", s.HandleExportIocSTIX)
 
-		// Profiles and Service controls
-		r.Post("/api/profile", s.HandleProfile)
-		r.Post("/api/services/toggle", s.HandleServicesToggle)
-
-		// Whitelist controls
+		// Read-only controls for Whitelist/Blacklist/SIEM/Users/Settings
 		r.Get("/api/whitelist", s.HandleGetWhitelist)
-		r.Post("/api/whitelist", s.HandleAddWhitelist)
-		r.Post("/api/whitelist/delete", s.HandleDeleteWhitelist)
-
-		// Blacklist controls
 		r.Get("/api/blacklist", s.HandleGetBlacklist)
-		r.Post("/api/blacklist", s.HandleAddBlacklist)
-		r.Post("/api/blacklist/delete", s.HandleDeleteBlacklist)
-
-		// Whitelist/Blacklist Settings
 		r.Get("/api/settings/auto-blacklist", s.HandleGetAutoBlacklist)
-		r.Post("/api/settings/auto-blacklist", s.HandleSetAutoBlacklist)
-
-		// SIEM Target Settings
 		r.Get("/api/settings/siem", s.HandleGetSiem)
-		r.Post("/api/settings/siem", s.HandleSetSiem)
-		r.Post("/api/settings/siem/test", s.HandleTestSiem)
-
-		// User Management
 		r.Get("/api/users", s.HandleGetUsers)
-		r.Post("/api/users", s.HandleCreateUser)
-		r.Post("/api/users/delete", s.HandleDeleteUser)
-		r.Post("/api/users/password", s.HandleChangePassword)
-		r.Post("/api/users/role", s.HandleChangeRole)
-
-		// Settings Overview Page
 		r.Get("/api/settings", s.HandleGetSettings)
+
+		// Admin-only management endpoints
+		r.Group(func(r chi.Router) {
+			r.Use(s.AdminMiddleware)
+
+			r.Get("/api/ioc/csv", s.HandleExportIocCSV)
+			r.Get("/api/ioc/stix", s.HandleExportIocSTIX)
+			r.Post("/api/profile", s.HandleProfile)
+			r.Post("/api/services/toggle", s.HandleServicesToggle)
+			r.Post("/api/whitelist", s.HandleAddWhitelist)
+			r.Post("/api/whitelist/delete", s.HandleDeleteWhitelist)
+			r.Post("/api/blacklist", s.HandleAddBlacklist)
+			r.Post("/api/blacklist/delete", s.HandleDeleteBlacklist)
+			r.Post("/api/settings/auto-blacklist", s.HandleSetAutoBlacklist)
+			r.Post("/api/settings/siem", s.HandleSetSiem)
+			r.Post("/api/settings/siem/test", s.HandleTestSiem)
+			r.Post("/api/users", s.HandleCreateUser)
+			r.Post("/api/users/delete", s.HandleDeleteUser)
+			r.Post("/api/users/password", s.HandleChangePassword)
+			r.Post("/api/users/role", s.HandleChangeRole)
+		})
 	})
 
 	addr := fmt.Sprintf("%s:%d", s.config.Web.Host, s.config.Web.Port)

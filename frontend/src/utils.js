@@ -333,9 +333,9 @@ export function buildRiskModel(events) {
     buckets,
     summary:
       score >= 65
-        ? `Traffic clustered around ${window.text(hottestService[0])} during the busiest window.`
+        ? `Traffic clustered around ${hottestService[0] || "-"} during the busiest window.`
         : score >= 20
-          ? `Recent pressure is centered on ${window.text(hottestService[0])}.`
+          ? `Recent pressure is centered on ${hottestService[0] || "-"}.`
           : "No meaningful burst pattern in the recent event window.",
   };
 }

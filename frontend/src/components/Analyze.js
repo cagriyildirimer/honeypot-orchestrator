@@ -80,7 +80,7 @@ export function AnalyzePage(props) {
 
   // Fetch harvest credentials when credentials tab is activated
   useEffect(() => {
-    if (activeTab !== "credentials") return;
+    if (activeTab !== "credentials" || harvestEvents.length > 0) return;
     setHarvestLoading(true);
     window.requestJson("/api/events?event_type=login_attempt&limit=200")
       .then(res => {
@@ -94,11 +94,11 @@ export function AnalyzePage(props) {
       .finally(() => {
         setHarvestLoading(false);
       });
-  }, [activeTab]);
+  }, [activeTab, harvestEvents.length]);
 
   // Fetch captured payloads when payloads tab is activated
   useEffect(() => {
-    if (activeTab !== "payloads") return;
+    if (activeTab !== "payloads" || payloadEvents.length > 0) return;
     setPayloadsLoading(true);
     window.requestJson("/api/events?event_type=captured_payload&limit=200")
       .then(res => {
@@ -112,11 +112,11 @@ export function AnalyzePage(props) {
       .finally(() => {
         setPayloadsLoading(false);
       });
-  }, [activeTab]);
+  }, [activeTab, payloadEvents.length]);
 
   // Fetch tarpit events when tarpit tab is activated
   useEffect(() => {
-    if (activeTab !== "tarpit") return;
+    if (activeTab !== "tarpit" || tarpitEvents.length > 0) return;
     setTarpitLoading(true);
     window.requestJson("/api/events?search=tarpit&limit=500")
       .then(res => {
@@ -130,7 +130,7 @@ export function AnalyzePage(props) {
       .finally(() => {
         setTarpitLoading(false);
       });
-  }, [activeTab]);
+  }, [activeTab, tarpitEvents.length]);
 
   // Extract techniques and calculate total counts
   const techniques = Array.isArray(analyzeData?.techniques) ? analyzeData.techniques : [];
