@@ -228,23 +228,38 @@ func queryGreyNoise(ctx context.Context, ip, apiKey string) string {
 	return strings.ToLower(apiResp.Classification)
 }
 
+var inFlightEnrichments sync.Map
+
 func EnrichAttackerIPs(ctx context.Context, ips []string, abuseKey, greyKey string) map[string]EnrichedAttacker {
 	results := make(map[string]EnrichedAttacker)
 	if len(ips) == 0 {
 		return results
 	}
 
+	// Deduplicate IPs that are currently being enriched
+	var toProcess []string
+	for _, ip := range ips {
+		if _, loaded := inFlightEnrichments.LoadOrStore(ip, true); !loaded {
+			toProcess = append(toProcess, ip)
+		}
+	}
+
+	if len(toProcess) == 0 {
+		return results
+	}
+
 	// 1. Bulk GeoIP Lookup
-	geoData := queryGeoIPBulk(ips)
+	geoData := queryGeoIPBulk(toProcess)
 
 	// 2. Concurrently enrich each IP details
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	for _, ip := range ips {
+	for _, ip := range toProcess {
 		wg.Add(1)
 		go func(targetIP string) {
 			defer wg.Done()
+			defer inFlightEnrichments.Delete(targetIP)
 
 			geo := geoData[targetIP]
 			rdns := resolveRDNS(targetIP)

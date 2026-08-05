@@ -265,7 +265,7 @@ func (db *DB) GetThreatIntelBulk(ctx context.Context, ips []string) (map[string]
 	if len(ips) == 0 {
 		return results, nil
 	}
-	query := "SELECT ip, data FROM threat_intel_cache WHERE ip = ANY($1) AND updated_at > NOW() - INTERVAL '1 hour'"
+	query := "SELECT ip, data FROM threat_intel_cache WHERE ip = ANY($1)"
 	rows, err := db.Pool.Query(ctx, query, ips)
 	if err != nil {
 		return nil, err
