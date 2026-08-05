@@ -1,6 +1,89 @@
 # Honeypot Orchestrator - Memory & Next Steps
 
-## 📋 To-Do & Next Steps
+### 📋 To-Do & Next Steps
+
+### 🔍 Kapsamlı Kod Tabanı Denetim Raporu & Yapılacaklar Listesi (Full Exhaustive Audit & Actionable Tasks)
+
+#### **1. 🚨 Hatalar ve Performans/Kararlılık Riskleri (Bugs & Critical Fixes)**
+- [ ] **1.1. PostgreSQL `events` Tablosu İndeks Eksikliği (Database Query Bottleneck):**
+  - **Dosya:** [database.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/database/database.go)
+  - **Açıklama:** `events` tablosunda `timestamp`, `src_ip`, `service`, `event_type` sütunlarında veritabanı indeksleri bulunmuyor. Yoğun trafikte Dashboard, Timeline, Analyze ve Logs sorguları `Seq Scan` yaparak veritabanını ve Web API'yi yavaşlatıyor.
+  - **Yapılacak:** `initSchema` fonksiyonu içerisine şu SQL indekslerini eklemek:
+    - `CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);`
+    - `CREATE INDEX IF NOT EXISTS idx_events_src_ip ON events(src_ip);`
+    - `CREATE INDEX IF NOT EXISTS idx_events_service ON events(service);`
+    - `CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);`
+
+- [ ] **1.2. PostgreSQL Bağlantı Havuzu (`pgxpool`) Konfigürasyonu (Connection Exhaustion):**
+  - **Dosya:** [database.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/database/database.go)
+  - **Açıklama:** `Connect` fonksiyonunda `pgxpool.ParseConfig` sonrasında havuz sınırları (`MaxConns`, `MinConns`, `MaxConnIdleTime`) ayarlanmamış. Yoğun saldırıda varsayılan bağlantı limiti dolması durumunda sorgular kilitleniyor.
+  - **Yapılacak:** `config.MaxConns = 50`, `config.MinConns = 5`, `config.MaxConnIdleTime = 30 * time.Minute` değerlerini atamak.
+
+- [ ] **1.3. Zamanı Geçmiş Oturumların Temizlenmemesi (Session Leak & DB Bloat):**
+  - **Dosya:** [database.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/database/database.go) & [server.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/web/server.go)
+  - **Açıklama:** `CleanupExpiredSessions` fonksiyonu `database.go` içerisinde mevcut ancak hiçbir yerel zamanlayıcı (ticker/cron) tarafından çalıştırılmıyor. Oturumlar veritabanında birikiyor.
+  - **Yapılacak:** `server.go` veya `main.go` başlatılırken her 1 saatte bir `CleanupExpiredSessions(ctx)` çalıştıran arka plan goroutine'i başlatmak.
+
+- [ ] **1.4. FTP PASV Modu Veri Soketi Sızıntısı (FTP Passive Mode Socket Leak):**
+  - **Dosya:** [ftp.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/services/tcp/ftp.go#L291-L308)
+  - **Açıklama:** İstemci `PASV` komutu gönderdiğinde yeni bir TCP dinleyicisi (`dataListener`) açılıyor. İstemci `PASV` dedikten sonra bağlantıyı kapatırsa veya hiç `LIST`/`RETR`/`STOR` atmadan ayrılırsa `dataListener` açık kalıyor ve port sızıntısı oluşuyor.
+  - **Yapılacak:** `PASV` ile açılan `dataListener` için 30 saniyelik bir `SetReadDeadline` / `Accept` zamanaşımı koruması koymak ve istemci ayrıldığında `dataListener.Close()` çağrısını garantiye almak.
+
+- [ ] **1.5. HTTP Header Exploit & Payload Ayrıştırma Eksikliği (Header Exploits Missed):**
+  - **Dosya:** [http.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/services/tcp/http.go#L370-L425)
+  - **Açıklama:** HTTP exploit parser sadece URL path, body ve `User-Agent` kontrolü yapıyor. `Referer`, `X-Api-Version`, `X-Forwarded-For` gibi başlıklara gömülü Log4j (`${jndi:...}`) veya Spring4Shell exploitlerini kaçırabiliyor.
+  - **Yapılacak:** `http.go` içerisindeki payload parser'a tüm HTTP başlıklarını (`headers` haritası) tarayan genel döngüyü dahil etmek.
+
+- [ ] **1.6. Threat Intel `AbuseScore` Tip Esnekliği (Abuse Score Type Consistency):**
+  - **Dosya:** [ti.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/ti/ti.go#L26) & [enricher.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/ti/enricher.go)
+  - **Açıklama:** `EnrichedAttacker.AbuseScore` alanı `interface{}` tutulduğu için JSON veya frontend tarafında tip uyumsuzluklarına yol açma potansiyeli taşıyor.
+  - **Yapılacak:** `AbuseScore` alanını her durumda tam `int` (0-100) döndürecek şekilde tipikleştirip frontend ile %100 tip uyumlu yapmak.
+
+---
+
+#### **2. 🗑️ Fazlalıklar ve Kod Tekrarları (Dead Code & Redundancy)**
+- [ ] **2.1. `profiles.go` İçerisindeki Ölü HTTP Profil Yapısı (Unused Code Cleanup):**
+  - **Dosya:** [profiles.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/profiles/profiles.go#L10-L16)
+  - **Açıklama:** HTTP servisi doğrudan gelişmiş FortiGate SSL-VPN emülasyonuna geçtiği için `profiles.go` içindeki `HTTPProfile` yapısı (`TemplateName`, `BodyHTML`, `Title`, `ServerHeader`) ölü durumdadır.
+  - **Yapılacak:** `profiles.go` içindeki gereksiz `HTTPProfile` alanlarını temizlemek.
+
+- [ ] **2.2. SSH ve Telnet İçerisindeki %90 Kod Tekrarı (DRY Refactoring):**
+  - **Dosyalar:** [ssh.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/services/tcp/ssh.go) ve [telnet.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/services/tcp/telnet.go)
+  - **Açıklama:** `executeMockCommand` (`whoami`, `cd`, `ls`, `cat`, `cat`, `ipconfig`, `systeminfo`, `wget`, `curl`), `resolveWindowsPath`, `resolveLinuxPath` ve `getMockFileContent` fonksiyonları her iki dosyada birebir aynı kodlar olarak kopyalanmıştır.
+  - **Yapılacak:** Ortak bir `mock_shell.go` modülü oluşturup SSH ve Telnet servislerini bu ortak mock shell üzerinden çalıştırmak.
+
+---
+
+#### **3. 🛡️ Eksik Korumalar ve Dayanıklılık (Robustness & Security)**
+- [ ] **3.1. Zararlı Dosya İndirme Boyut Sınırı (Malware Size Cap):**
+  - **Dosyalar:** [ssh.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/services/tcp/ssh.go#L440-L460) ve [telnet.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/services/tcp/telnet.go#L370-L390)
+  - **Açıklama:** `wget` / `curl` simülasyonlarında dış URL'den indirilen dosyalar için maks dosya boyutu sınırı konulmamıştır. Saldırgan çok büyük dosya indirterek sunucunun belleğini tüketebilir.
+  - **Yapılacak:** `io.LimitReader(resp.Body, 20*1024*1024)` ile maksimum 20 MB indirme sınırı koymak.
+
+- [ ] **3.2. Yönetici İşlem Günlüğü Tablosu (Audit Logging):**
+  - **Dosyalar:** [database.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/database/database.go) ve [management_handlers.go](file:///c:/Users/BERN/honeypot-orchestrator/backend/internal/web/management_handlers.go)
+  - **Açıklama:** Yönetim panelinde profil değiştirme, IP engelleme/kaldırma ve kullanıcı/şifre güncellemelerini takip eden bir audit log tablosu eksik.
+  - **Yapılacak:** `audit_logs` tablosu ekleyip yetkili admin işlemlerini bu tabloya kaydetmek.
+
+---
+
+#### **4. 💡 Kullanışlı Yapılabilecek & Eklenebilecek Özellik/Fikirler (New Feature Roadmap)**
+- [ ] **4.1. 🤖 AI / Otomatik Tehdit Analizcisi (LLM Threat Insights):**
+  - **Açıklama:** Yakalanan exploit taleplerini, RCE payload'larını veya SSH/Telnet komut dizilerini analiz edip Dashboard'da **"Saldırı Amacı: Mirai Botnet Katılımı / Ransomware Dropper / Log4j RCE Denemesi"** şeklinde otomatik Türkçe/İngilizce tehdit özetleri üretme.
+
+- [ ] **4.2. 🔔 Canlı Telegram / Discord / Webhook Alarm Botu:**
+  - **Açıklama:** Karalisteye otomatik yeni bir IP eklendiğinde veya yüksek riskli bir zararlı yazılım (`captured_payload`) yakalandığında anında Telegram grubuna veya Discord kanalına şık bir uyarı kartı gönderme.
+
+- [ ] **4.3. 🗺️ Canlı 3D Saldırı Haritası Lazer Çizgileri (Attack Map Lasers):**
+  - **Açıklama:** 3D Dünya Haritasında gelen saldırıları sadece nokta olarak değil, saldırganın ülkesinden bizim honeypot lokasyonumuza doğru canlı lazer çizgileri saçan interaktif siber saldırı haritası animasyonu ekleme.
+
+- [ ] **4.4. 📦 PCAP Trafik Dökümü (Network Packet Capture):**
+  - **Açıklama:** Karalisteye alınan şüpheli IP'lerden gelen ham TCP paket dökümlerini diske `.pcap` olarak kaydedip Dashboard üzerinden Wireshark uyumlu olarak indirme imkanı sunma.
+
+- [ ] **4.5. 🎯 MITRE ATT&CK Teknik Eşlemesi (TTP Tagging):**
+  - **Açıklama:** Yakalanan olaylara göre MITRE ATT&CK kodlarını (Örn: *Credential Stuffing T1110*, *Command Shell T1059*, *Exploit Public App T1190*) otomatik etiketleyip Analyze sayfasında gösterim.
+
+---
 
 ```
 honeypot-orchestrator/
@@ -485,5 +568,6 @@ Sistemde üretilen kritik alarmlar (`login_success`, `credential_attempt`, `ssh_
 135. **HTTP Servisi İçin Doğrudan FortiGate Firewall Giriş Ekranı ve Credential Toplayıcı Entegre Edildi:** Ekstra sistem profili oluşturulmadan doğrudan `http.go` içerisine otantik FortiGate-VM64 (FortiOS v7.2.4 GA) SSL-VPN/Firewall web arayüzü eklendi. Tüm HTTP isteklerine FortiGate başlıkları (`Server: FortiGate`, `Set-Cookie: SVPNCOOKIE=...; Secure; HttpOnly`), `/remote/logincheck` kullanıcı girişlerini yakalayıp `credential_attempt` olarak kaydetme ve FortiOS API / CVE tarama tespitleri entegre edildi.
 136. **Statik Exploit İsimlendirmeleri Kaldırıldı, Tam Dinamik HTTP Payload & Exploit Ayrıştırıcısı (Dynamic Payload Parser & Filename Generator) Entegre Edildi:** `http.go` içerisindeki `device.rsp`, `___s_o_s_t_r_e_a_max___` veya `http_exploit_arm.sh` gibi statik metin kontrolleri tamamen temizlendi. Yerine gelen her türlü RCE/Command Injection (`wget`, `curl`, `chmod`, `exec`, `powershell`, `busybox`), Path Traversal (`../`, `passwd`, `fgt_lang`), SQL Injection, SSTI, JNDI (`jndi:`), Web Shell (`<?php`, `<%`) ve özel POST/CGI taramalarını dinamik olarak yakalayan jenerik bir altyapı kuruldu. Dosya isimleri sabit stringler yerine isteğin atıldığı URL slug'ından ve dosyanın sihirli baytlarından (ELF, PE, PHP, JSON, XML) otomatik türetilmekte (`deriveDynamicPayloadFilename`), SHA-256 özeti çıkarılıp Malware Scanner'a gönderilmektedir.
 137. **Resmi Orijinal Fortinet SVG Logoları ve Favicon İkonu Entegre Edildi:** `http.go` içerisindeki logolar `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/fortinet.svg` kaynağından alınan resmi Fortinet vektör path'i ile güncellendi. Login kutusu yeşil üst barda bu logonun beyaz renkli vektör versiyonu (`fill="white"`), tarayıcı sekmesi ve `/favicon.ico` uç noktasında ise kırmızı renkli (`fill="#ee3124"`) resmi Fortinet ikon SVG'si entegre edildi.
+138. **Kapsamlı Kod Tabanı Denetim Raporu, Hata/Eksik/Fazlalık Tespiti ve Geliştirme Fikirleri:** Tüm backend ve frontend kodları taranarak hatalar, eksikler, fazlalıklar ve adım adım uygulanacak çözümler `memory.md` ile kullanıcıya raporlandı.
 
 ---
