@@ -8,7 +8,7 @@ export function DashboardPage(props) {
   const [timelineRangeKey, setTimelineRangeKey] = useState("day");
   const [selectedEvent, setSelectedEvent] = useState(null);
   async function loadOverview() {
-    const next = await window.requestJson("/api/overview?limit=2000");
+    const next = await window.requestJson("/api/overview?limit=-1");
     setPayload(next);
     setLoading(false);
   }
@@ -35,7 +35,7 @@ export function DashboardPage(props) {
     return timelineReference.getTime() - ts <= 60000;
   }).length;
 
-  const risk = buildRiskModel(events);
+  const risk = buildRiskModel(events, timelineReference);
   const suspiciousOverview = buildSuspiciousOverview(events, timelineReference);
   const timelineRange = timelineRangeConfig(timelineRangeKey);
   const timeline = buildTimelineBuckets(events, timelineReference, timelineRangeKey);
@@ -339,7 +339,7 @@ export function DashboardPage(props) {
 
 export function ActivityHeatGrid(props) {
   const model = props.model;
-  const services = model.topServices.length ? model.topServices : ["web", "orchestrator"];
+  const services = model.topServices && model.topServices.length ? model.topServices : ["ssh", "http", "smb", "ftp", "rdp"];
   const peak = Math.max(
     1,
     ...model.buckets.flatMap((bucket) => services.map((service) => Number(bucket.counts[service] || 0)))
@@ -357,7 +357,8 @@ export function ActivityHeatGrid(props) {
     );
   });
   services.forEach((service) => {
-    children.push(h("div", { key: `label-${service}`, className: "heat-service-label" }, service));
+    const displayLabel = String(service || "unknown").toUpperCase();
+    children.push(h("div", { key: `label-${service}`, className: "heat-service-label" }, displayLabel));
     model.buckets.forEach((bucket, index) => {
       const value = Number(bucket.counts[service] || 0);
       const intensity = Math.min(1, value / peak);
@@ -367,7 +368,7 @@ export function ActivityHeatGrid(props) {
           key: `${service}-${index}`,
           className: "heat-cell",
           "data-level": level,
-          title: `${service} | ${summarizeRangeLabel(bucket.start, bucket.end)} | ${value.toFixed(1)} weighted`,
+          title: `${displayLabel} | ${summarizeRangeLabel(bucket.start, bucket.end)} | ${value <= 0 ? "No activity" : `${value.toFixed(1)} signals`}`,
           style: { "--heat-intensity": intensity.toFixed(3) },
         })
       );

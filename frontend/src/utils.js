@@ -265,8 +265,10 @@ export function buildSuspiciousOverview(events, referenceDate) {
   };
 }
 
-export function buildRiskModel(events) {
-  const now = Date.now();
+export function buildRiskModel(events, referenceDate) {
+  const now = referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+    ? referenceDate.getTime()
+    : Date.now();
   const windowMs = 24 * 60 * 60 * 1000;
   const start = now - windowMs;
   const bucketCount = 6;
@@ -308,7 +310,9 @@ export function buildRiskModel(events) {
   }
 
   const sortedServices = Object.entries(serviceTotals).sort((left, right) => right[1] - left[1]);
-  const topServices = sortedServices.slice(0, 3).map(([service]) => service);
+  const topServices = sortedServices.length > 0 
+    ? sortedServices.slice(0, 5).map(([service]) => service)
+    : ["ssh", "http", "smb", "ftp", "rdp"];
   const strongestBucket = buckets.reduce(
     (best, bucket) => (bucket.total > best.total ? bucket : best),
     buckets[0] || { total: 0, start: new Date(now), end: new Date(now), counts: {} }

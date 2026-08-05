@@ -1653,6 +1653,12 @@ th,
   opacity: calc(0.72 + var(--heat-intensity, 0) * 0.28);
 }
 
+.heat-cell[data-level="quiet"] {
+  background: var(--surface-subtle);
+  border: 1px dashed rgba(255, 255, 255, 0.07);
+  opacity: 0.35;
+}
+
 .heat-cell[data-level="cool"] {
   background: color-mix(in srgb, #94a3b8 calc(18% + (var(--heat-intensity, 0) * 18%)), var(--surface-subtle));
 }
