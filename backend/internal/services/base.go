@@ -153,6 +153,15 @@ func (s *BaseTCPService) acceptLoop() {
 		s.wg.Add(1)
 		go func(c net.Conn) {
 			defer s.wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					remote := "unknown"
+					if c != nil && c.RemoteAddr() != nil {
+						remote = c.RemoteAddr().String()
+					}
+					log.Printf("[%s] Panic recovered in connection handler for %s: %v\n", s.name, remote, r)
+				}
+			}()
 			s.handleConnection(c)
 		}(conn)
 	}
@@ -385,6 +394,15 @@ func (s *BaseUDPService) readLoop() {
 		s.wg.Add(1)
 		go func(d []byte, addr *net.UDPAddr) {
 			defer s.wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					remote := "unknown"
+					if addr != nil {
+						remote = addr.String()
+					}
+					log.Printf("[%s] Panic recovered in datagram handler for %s: %v\n", s.name, remote, r)
+				}
+			}()
 			s.handleDatagram(d, addr)
 		}(data, srcAddr)
 	}

@@ -335,11 +335,18 @@ func (o *Orchestrator) applyState(ctx context.Context, profileName string, overr
 
 func (o *Orchestrator) syncLoop() {
 	defer o.wg.Done()
-	ticker := time.NewTicker(3 * time.Second)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[ORCHESTRATOR] Panic recovered in syncLoop: %v\n", r)
+		}
+	}()
+
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	lastProfile := o.activeProfile
-	lastOverridesJson := ""
+	initialOverridesBytes, _ := json.Marshal(o.overrides)
+	lastOverridesJson := string(initialOverridesBytes)
 
 	for {
 		select {
