@@ -45,6 +45,13 @@ type UserRequest struct {
 	Role     string `json:"role,omitempty"`
 }
 
+func getUserFromContext(r *http.Request) string {
+	if session, ok := r.Context().Value(sessionContextKey).(*database.Session); ok && session != nil {
+		return session.Username
+	}
+	return "system"
+}
+
 func (s *Server) HandleProfile(w http.ResponseWriter, r *http.Request) {
 	var req ProfileRequest
 	if err := DecodeJSON(r, &req); err != nil {
@@ -57,6 +64,7 @@ func (s *Server) HandleProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_ = s.db.SaveAuditLog(r.Context(), getUserFromContext(r), "change_profile", fmt.Sprintf("Changed profile to %s", req.Profile))
 	s.HandleStatus(w, r)
 }
 
@@ -68,6 +76,9 @@ func (s *Server) HandleServicesToggle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	success := s.orch.ToggleService(r.Context(), req.Service, req.Enabled)
+	if success {
+		_ = s.db.SaveAuditLog(r.Context(), getUserFromContext(r), "toggle_service", fmt.Sprintf("Set service %s enabled=%t", req.Service, req.Enabled))
+	}
 	JSONResponse(w, http.StatusOK, map[string]bool{"ok": success})
 }
 
@@ -708,4 +719,23 @@ func (s *Server) HandleInjectEvent(w http.ResponseWriter, r *http.Request) {
 		"status":  "event_injected",
 		"message": "Event successfully logged, saved to DB, and broadcasted to Web UI",
 	})
+}
+
+func (s *Server) HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
+	limitStr := r.URL.Query().Get("limit")
+	limit := 100
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	logs, err := s.db.GetAuditLogs(r.Context(), limit)
+	if err != nil {
+		JSONResponse(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if logs == nil {
+		logs = []database.AuditLogEntry{}
+	}
+	JSONResponse(w, http.StatusOK, map[string]interface{}{"audit_logs": logs})
 }

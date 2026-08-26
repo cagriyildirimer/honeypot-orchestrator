@@ -13,17 +13,44 @@ type DefenseSystem struct {
 	db                 *database.DB
 	suspiciousCounters map[string]int
 	rateLimits         map[string][]time.Time
+	lastSeen           map[string]time.Time
 	mu                 sync.RWMutex
 	onBlacklistHook    func(ip string)
 	onUnblacklistHook  func(ip string)
 }
 
 func NewDefenseSystem(db *database.DB) *DefenseSystem {
-	return &DefenseSystem{
+	ds := &DefenseSystem{
 		db:                 db,
 		suspiciousCounters: make(map[string]int),
 		rateLimits:         make(map[string][]time.Time),
+		lastSeen:           make(map[string]time.Time),
 	}
+	return ds
+}
+
+func (ds *DefenseSystem) StartCleanupRoutine(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Minute)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				ds.mu.Lock()
+				now := time.Now()
+				for ip, t := range ds.lastSeen {
+					if now.Sub(t) > 1*time.Hour {
+						delete(ds.suspiciousCounters, ip)
+						delete(ds.rateLimits, ip)
+						delete(ds.lastSeen, ip)
+					}
+				}
+				ds.mu.Unlock()
+			}
+		}
+	}()
 }
 
 func (ds *DefenseSystem) RegisterHooks(onAdd, onDel func(ip string)) {
@@ -176,13 +203,16 @@ func (ds *DefenseSystem) RecordSuspiciousEvent(ctx context.Context, ip string) {
 		return
 	}
 
+	now := time.Now()
 	ds.mu.Lock()
 	ds.suspiciousCounters[ip]++
+	ds.lastSeen[ip] = now
 	count := ds.suspiciousCounters[ip]
 
 	if count >= 100 {
 		delete(ds.suspiciousCounters, ip)
 		delete(ds.rateLimits, ip)
+		delete(ds.lastSeen, ip)
 		ds.mu.Unlock()
 		log.Printf("[DEFENSE] IP %s banned: reached 100 suspicious events\n", ip)
 		go func() {
@@ -193,7 +223,6 @@ func (ds *DefenseSystem) RecordSuspiciousEvent(ctx context.Context, ip string) {
 		return
 	}
 
-	now := time.Now()
 	history := ds.rateLimits[ip]
 
 	var cleanHistory []time.Time
@@ -210,6 +239,7 @@ func (ds *DefenseSystem) RecordSuspiciousEvent(ctx context.Context, ip string) {
 		ds.mu.Lock()
 		delete(ds.suspiciousCounters, ip)
 		delete(ds.rateLimits, ip)
+		delete(ds.lastSeen, ip)
 		ds.mu.Unlock()
 		log.Printf("[DEFENSE] IP %s banned: rate limit exceeded (10 events/sec)\n", ip)
 		go func() {

@@ -771,9 +771,9 @@ func (s *Server) HandleOverview(w http.ResponseWriter, r *http.Request) {
 	activeProfileName := s.getActiveProfileName(ctx)
 
 	limitVal := queryVals.Get("limit")
-	limit := safeInt(limitVal, 50, 1, 100000)
+	limit := safeInt(limitVal, 50, 1, 1000)
 	if limitVal == "-1" {
-		limit = -1
+		limit = 1000
 	}
 	page := safeInt(queryVals.Get("page"), 1, 1, 10000000)
 

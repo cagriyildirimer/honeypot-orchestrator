@@ -367,6 +367,11 @@ const fortigateLoginHTML = `<!DOCTYPE html>
 	if len(body) > 0 {
 		rawPayload += " " + string(body)
 	}
+	for hName, hVal := range headers {
+		if hName != "host" {
+			rawPayload += " " + hVal
+		}
+	}
 
 	decodedPayload, _ := url.QueryUnescape(rawPayload)
 	lowerPayload := strings.ToLower(decodedPayload)

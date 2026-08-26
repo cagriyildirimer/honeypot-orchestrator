@@ -8,11 +8,8 @@ type TelnetProfile struct {
 }
 
 type HTTPProfile struct {
-	TemplateName  string
-	ServerHeader  string
-	DefaultStatus string
-	Title         string
-	BodyHTML      string
+	TemplateName string
+	ServerHeader string
 }
 
 type FTPProfile struct {
@@ -67,11 +64,8 @@ var Profiles = map[string]*HoneypotProfile{
 			LoginFailedResponse: "",
 		},
 		HTTP: HTTPProfile{
-			TemplateName:  "http_empty",
-			ServerHeader:  "Honeypot-Orchestrator",
-			DefaultStatus: "200 OK",
-			Title:         "No Active Profile",
-			BodyHTML:      "<html><head><title>No Active Profile</title></head><body><h1>No Active Profile</h1></body></html>\n",
+			TemplateName: "http_empty",
+			ServerHeader: "Honeypot-Orchestrator",
 		},
 		FTP: FTPProfile{
 			TemplateName:        "ftp_empty",
@@ -111,11 +105,8 @@ var Profiles = map[string]*HoneypotProfile{
 			LoginFailedResponse: "\r\nLogin incorrect\r\n",
 		},
 		HTTP: HTTPProfile{
-			TemplateName:  "http_linux",
-			ServerHeader:  "nginx/1.18.0",
-			DefaultStatus: "200 OK",
-			Title:         "Welcome to nginx!",
-			BodyHTML:      "<html><head><title>Welcome to nginx!</title></head><body><h1>Welcome to nginx!</h1><p>If you see this page, the nginx web server is successfully installed and working.</p></body></html>\n",
+			TemplateName: "http_linux",
+			ServerHeader: "nginx/1.18.0",
 		},
 		FTP: FTPProfile{
 			TemplateName:        "ftp_linux",
@@ -155,11 +146,8 @@ var Profiles = map[string]*HoneypotProfile{
 			LoginFailedResponse: "\r\nLogon failure: unknown user name or bad password.\r\n",
 		},
 		HTTP: HTTPProfile{
-			TemplateName:  "http_windows",
-			ServerHeader:  "Microsoft-IIS/10.0",
-			DefaultStatus: "200 OK",
-			Title:         "IIS Windows Server",
-			BodyHTML:      "<html><head><title>IIS Windows Server</title></head><body><h1>Internet Information Services</h1><p>Windows Server role services are installed and ready to be configured.</p></body></html>\n",
+			TemplateName: "http_windows",
+			ServerHeader: "Microsoft-IIS/10.0",
 		},
 		FTP: FTPProfile{
 			TemplateName:        "ftp_windows",

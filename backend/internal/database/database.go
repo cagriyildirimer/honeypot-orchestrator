@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -29,6 +30,10 @@ func Connect(ctx context.Context, connStr string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse database connection string: %w", err)
 	}
+
+	config.MaxConns = 50
+	config.MinConns = 5
+	config.MaxConnIdleTime = 30 * time.Minute
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
@@ -61,6 +66,10 @@ func (db *DB) initSchema(ctx context.Context) error {
 			summary TEXT,
 			details JSONB
 		);`,
+		`CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_events_src_ip ON events(src_ip);`,
+		`CREATE INDEX IF NOT EXISTS idx_events_service ON events(service);`,
+		`CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);`,
 		`CREATE TABLE IF NOT EXISTS users (
 			id SERIAL PRIMARY KEY,
 			username VARCHAR(255) UNIQUE NOT NULL,
@@ -95,6 +104,14 @@ func (db *DB) initSchema(ctx context.Context) error {
 			setting_value TEXT NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);`,
+		`CREATE TABLE IF NOT EXISTS audit_logs (
+			id SERIAL PRIMARY KEY,
+			timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			username VARCHAR(255) NOT NULL,
+			action VARCHAR(255) NOT NULL,
+			details TEXT
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);`,
 	}
 
 	for _, q := range queries {
@@ -142,6 +159,42 @@ func (db *DB) InsertEvent(ctx context.Context, evt *Event) error {
 		detailsVal,
 	).Scan(&evt.ID)
 
+	return err
+}
+
+func (db *DB) InsertEventsBatch(ctx context.Context, events []*Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+	if len(events) == 1 {
+		return db.InsertEvent(ctx, events[0])
+	}
+
+	entries := make([][]interface{}, len(events))
+	for i, evt := range events {
+		var detailsVal interface{}
+		if len(evt.Details) > 0 {
+			detailsVal = evt.Details
+		} else {
+			detailsVal = nil
+		}
+		entries[i] = []interface{}{
+			evt.Timestamp,
+			evt.Service,
+			evt.EventType,
+			evt.SrcIP,
+			evt.SrcPort,
+			evt.Summary,
+			detailsVal,
+		}
+	}
+
+	_, err := db.Pool.CopyFrom(
+		ctx,
+		pgx.Identifier{"events"},
+		[]string{"timestamp", "service", "event_type", "src_ip", "src_port", "summary", "details"},
+		pgx.CopyFromRows(entries),
+	)
 	return err
 }
 
@@ -290,4 +343,40 @@ func (db *DB) SaveThreatIntel(ctx context.Context, ip string, dataJSON string) e
 	`
 	_, err := db.Pool.Exec(ctx, query, ip, dataJSON)
 	return err
+}
+
+type AuditLogEntry struct {
+	ID        int       `json:"id"`
+	Timestamp time.Time `json:"timestamp"`
+	Username  string    `json:"username"`
+	Action    string    `json:"action"`
+	Details   string    `json:"details"`
+}
+
+func (db *DB) SaveAuditLog(ctx context.Context, username, action, details string) error {
+	query := `INSERT INTO audit_logs (timestamp, username, action, details) VALUES (NOW(), $1, $2, $3)`
+	_, err := db.Pool.Exec(ctx, query, username, action, details)
+	return err
+}
+
+func (db *DB) GetAuditLogs(ctx context.Context, limit int) ([]AuditLogEntry, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	query := "SELECT id, timestamp, username, action, COALESCE(details, '') FROM audit_logs ORDER BY timestamp DESC LIMIT $1"
+	rows, err := db.Pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []AuditLogEntry
+	for rows.Next() {
+		var entry AuditLogEntry
+		if err := rows.Scan(&entry.ID, &entry.Timestamp, &entry.Username, &entry.Action, &entry.Details); err != nil {
+			return nil, err
+		}
+		logs = append(logs, entry)
+	}
+	return logs, nil
 }

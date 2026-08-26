@@ -72,6 +72,9 @@ func (f *FTPHoneypot) SetProfile(prof *profiles.HoneypotProfile) {
 
 func (f *FTPHoneypot) getDataConnection(activeAddr string, dataListener net.Listener) (net.Conn, error) {
 	if dataListener != nil {
+		if tcpL, ok := dataListener.(*net.TCPListener); ok {
+			_ = tcpL.SetDeadline(time.Now().Add(15 * time.Second))
+		}
 		dataConn, err := dataListener.Accept()
 		if err != nil {
 			return nil, err

@@ -172,6 +172,7 @@ func (s *Server) StartServer(ctx context.Context) error {
 
 			r.Get("/api/ioc/csv", s.HandleExportIocCSV)
 			r.Get("/api/ioc/stix", s.HandleExportIocSTIX)
+			r.Get("/api/audit-logs", s.HandleGetAuditLogs)
 			r.Post("/api/profile", s.HandleProfile)
 			r.Post("/api/services/toggle", s.HandleServicesToggle)
 			r.Post("/api/whitelist", s.HandleAddWhitelist)

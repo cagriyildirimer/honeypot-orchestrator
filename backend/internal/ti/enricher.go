@@ -153,7 +153,7 @@ func calculateHeuristicAbuseScore(ip string) int {
 	return score
 }
 
-func queryAbuseIPDB(ctx context.Context, ip, apiKey string) interface{} {
+func queryAbuseIPDB(ctx context.Context, ip, apiKey string) int {
 	if apiKey == "" {
 		return calculateHeuristicAbuseScore(ip)
 	}

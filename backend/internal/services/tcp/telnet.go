@@ -260,7 +260,7 @@ func (t *TelnetHoneypot) executeMockCommand(conn net.Conn, baseCmd, arg, usernam
 				*currentDir = "C:"
 				return ""
 			}
-			targetDir := resolveWindowsPath(*currentDir, arg)
+			targetDir := ResolveWindowsPath(*currentDir, arg)
 			*currentDir = targetDir
 			return ""
 		case "dir", "ls":
@@ -284,7 +284,7 @@ func (t *TelnetHoneypot) executeMockCommand(conn net.Conn, baseCmd, arg, usernam
 			if content, ok := t.getVirtualFileContent(srcIP, arg); ok {
 				return string(content) + "\r\n"
 			}
-			return getMockFileContent(arg)
+			return GetMockFileContent(arg)
 		case "ipconfig":
 			return "\r\nWindows IP Configuration\r\n\r\nEthernet adapter Ethernet0:\r\n\r\n   Connection-specific DNS Suffix  . : corp.local\r\n   IPv4 Address. . . . . . . . . . . : 192.168.1.240\r\n   Subnet Mask . . . . . . . . . . . : 255.255.255.0\r\n   Default Gateway . . . . . . . . . : 192.168.1.1\r\n"
 		case "systeminfo":
@@ -315,7 +315,7 @@ func (t *TelnetHoneypot) executeMockCommand(conn net.Conn, baseCmd, arg, usernam
 				}
 				return ""
 			}
-			*currentDir = resolveLinuxPath(*currentDir, arg)
+			*currentDir = ResolveLinuxPath(*currentDir, arg)
 			return ""
 		case "ls", "dir":
 			if strings.Contains(*currentDir, "etc") {
@@ -337,7 +337,7 @@ func (t *TelnetHoneypot) executeMockCommand(conn net.Conn, baseCmd, arg, usernam
 			if content, ok := t.getVirtualFileContent(srcIP, arg); ok {
 				return string(content) + "\r\n"
 			}
-			return getMockFileContent(arg)
+			return GetMockFileContent(arg)
 		case "wget", "curl":
 			if arg == "" {
 				if baseCmd == "wget" {
@@ -375,7 +375,7 @@ func (t *TelnetHoneypot) executeMockCommand(conn net.Conn, baseCmd, arg, usernam
 			client := &http.Client{Timeout: 3 * time.Second}
 			resp, err := client.Get(rawURL)
 			if err == nil && resp.StatusCode == http.StatusOK {
-				fileBytes, _ = io.ReadAll(resp.Body)
+				fileBytes, _ = io.ReadAll(io.LimitReader(resp.Body, 20*1024*1024))
 				resp.Body.Close()
 			}
 			if len(fileBytes) == 0 {

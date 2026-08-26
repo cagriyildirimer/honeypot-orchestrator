@@ -73,6 +73,8 @@ func main() {
 	runCtx, runCancel := context.WithCancel(context.Background())
 	defer runCancel()
 
+	defenseSys.StartCleanupRoutine(runCtx)
+
 	if err := orch.Start(runCtx); err != nil {
 		log.Fatalf("Failed to start Honeypot Orchestrator: %v\n", err)
 	}

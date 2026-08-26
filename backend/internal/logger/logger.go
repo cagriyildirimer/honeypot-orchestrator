@@ -114,10 +114,8 @@ func (el *EventLogger) run() {
 			return
 		}
 		flushCtx := context.Background()
-		for _, evt := range batch {
-			if err := el.db.InsertEvent(flushCtx, evt); err != nil {
-				log.Println("Error inserting event into DB:", err)
-			}
+		if err := el.db.InsertEventsBatch(flushCtx, batch); err != nil {
+			log.Println("Error inserting batch events into DB:", err)
 		}
 		batch = batch[:0]
 	}

@@ -12,19 +12,19 @@ import (
 )
 
 type EnrichedAttacker struct {
-	IP             string      `json:"ip"`
-	RDNS           string      `json:"rdns"`
-	ASN            string      `json:"asn"`
-	Org            string      `json:"org"`
-	Country        string      `json:"country"`
-	CountryCode    string      `json:"countryCode"`
-	City           string      `json:"city"`
-	Lat            float64     `json:"lat"`
-	Lon            float64     `json:"lon"`
-	IsTor          bool        `json:"is_tor"`
-	CloudProvider  string      `json:"cloud_provider"`
-	AbuseScore     interface{} `json:"abuse_score"` // int or string ("N/A")
-	GreyNoiseClass string      `json:"greynoise_class"`
+	IP             string  `json:"ip"`
+	RDNS           string  `json:"rdns"`
+	ASN            string  `json:"asn"`
+	Org            string  `json:"org"`
+	Country        string  `json:"country"`
+	CountryCode    string  `json:"countryCode"`
+	City           string  `json:"city"`
+	Lat            float64 `json:"lat"`
+	Lon            float64 `json:"lon"`
+	IsTor          bool    `json:"is_tor"`
+	CloudProvider  string  `json:"cloud_provider"`
+	AbuseScore     int     `json:"abuse_score"`
+	GreyNoiseClass string  `json:"greynoise_class"`
 }
 
 type CloudNetwork struct {
@@ -188,11 +188,15 @@ func refreshTorExitNodes() {
 }
 
 func IsTorExit(ipStr string) bool {
-	go refreshTorExitNodes() // Trigger background refresh if stale
-
 	torMu.RLock()
-	defer torMu.RUnlock()
-	return torExitNodes[ipStr]
+	stale := time.Since(torLastFetch) >= 24*time.Hour
+	isTor := torExitNodes[ipStr]
+	torMu.RUnlock()
+
+	if stale {
+		go refreshTorExitNodes()
+	}
+	return isTor
 }
 
 func IsPrivateIP(ipStr string) bool {

@@ -554,6 +554,7 @@ export function EventDrawer(props) {
 export function GeoWorldMap(props) {
   const containerRef = React.useRef(null);
   const globeRef = React.useRef(null);
+  const prevMarkersRef = React.useRef("");
   const markers = props.markers || [];
 
   // Initialize the globe and window resize listener
@@ -561,57 +562,84 @@ export function GeoWorldMap(props) {
     if (!containerRef.current) return;
     if (!globeRef.current && window.Globe) {
       const parent = containerRef.current.parentElement;
-      const initialWidth = parent ? Math.min(800, parent.clientWidth) : 800;
+      const parentW = parent && parent.clientWidth > 0 ? parent.clientWidth : 700;
+      const initialWidth = Math.min(800, parentW);
       const initialHeight = Math.min(400, Math.max(250, initialWidth * 0.5));
 
-      globeRef.current = window.Globe()(containerRef.current)
-        .globeImageUrl('/vendor/earth-blue-marble.jpg')
-        .bumpImageUrl('/vendor/earth-topology.png')
-        .backgroundColor('rgba(0,0,0,0)')
-        .width(initialWidth)
-        .height(initialHeight)
-        .pointOfView({ altitude: 2.0 });
+      try {
+        const instance = window.Globe()(containerRef.current)
+          .globeImageUrl('/vendor/earth-blue-marble.jpg')
+          .bumpImageUrl('/vendor/earth-topology.png')
+          .backgroundColor('rgba(0,0,0,0)')
+          .width(initialWidth)
+          .height(initialHeight)
+          .pointOfView({ altitude: 2.0 });
 
-      globeRef.current.controls().autoRotate = true;
-      globeRef.current.controls().autoRotateSpeed = 1.0;
-      globeRef.current.controls().enableZoom = false;
+        if (instance.controls) {
+          instance.controls().autoRotate = true;
+          instance.controls().autoRotateSpeed = 1.0;
+          instance.controls().enableZoom = false;
+        }
+
+        globeRef.current = instance;
+      } catch (err) {
+        console.error("3D Globe initialization error:", err);
+      }
     }
 
     const handleResize = () => {
-      if (containerRef.current && containerRef.current.parentElement && globeRef.current) {
-        const w = Math.min(800, containerRef.current.parentElement.clientWidth);
+      if (containerRef.current && globeRef.current) {
+        const parent = containerRef.current.parentElement;
+        const parentW = parent && parent.clientWidth > 0 ? parent.clientWidth : 700;
+        const w = Math.min(800, parentW);
         const h = Math.min(400, Math.max(250, w * 0.5));
         globeRef.current.width(w).height(h);
       }
     };
 
+    let resizeObserver = null;
+    if (typeof ResizeObserver !== "undefined" && containerRef.current.parentElement) {
+      resizeObserver = new ResizeObserver(() => handleResize());
+      resizeObserver.observe(containerRef.current.parentElement);
+    }
+
     window.addEventListener('resize', handleResize);
-    // Ensure size is correct after layout settles
     const timer = setTimeout(handleResize, 100);
 
     return () => {
+      if (resizeObserver) resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
       clearTimeout(timer);
     };
   }, []);
 
-  // Update marker points when data changes
+  // Update marker points ONLY when data actually changes (prevents WebGL context loss & flicker)
   React.useEffect(() => {
     const globe = globeRef.current;
-    if (globe) {
-      const points = markers.map(m => ({
-        lat: m.lat,
-        lng: m.lon,
-        size: Math.max(0.1, Math.min(1.0, m.count / 10)),
-        color: '#e31a1a',
-        name: `${m.city ? m.city + ', ' : ''}${m.country} (${m.count} events - IP: ${m.ip})`
-      }));
+    if (!globe) return;
 
+    const markersJson = JSON.stringify(markers);
+    if (prevMarkersRef.current === markersJson) {
+      return;
+    }
+    prevMarkersRef.current = markersJson;
+
+    const points = markers.map(m => ({
+      lat: Number(m.lat) || 0,
+      lng: Number(m.lon) || 0,
+      size: Math.max(0.1, Math.min(1.0, (Number(m.count) || 1) / 10)),
+      color: '#e31a1a',
+      name: `${m.city ? m.city + ', ' : ''}${m.country || 'Unknown'} (${m.count || 0} events - IP: ${m.ip})`
+    }));
+
+    try {
       globe.pointsData(points)
         .pointAltitude(d => d.size * 0.1)
         .pointColor('color')
         .pointRadius(d => d.size * 2)
         .pointLabel('name');
+    } catch (err) {
+      console.warn("Globe points update error:", err);
     }
   }, [markers]);
 
