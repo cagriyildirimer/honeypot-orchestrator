@@ -908,8 +908,16 @@ export function AnalyzePage(props) {
             : payloadEvents.length === 0
               ? h("tr", null, h("td", { colSpan: 7, className: "empty-row" }, "No malware payloads captured yet."))
               : payloadEvents.map((evt, idx) => {
-                  const details = evt.details || {};
-                  const filename = evt.filename || details.filename || "unknown";
+                  let rawName = evt.filename || details.filename;
+                  if (!rawName || rawName === "http exploit" || rawName === "http_exploit") {
+                    if (evt.summary && evt.summary.includes("'")) {
+                      const parts = evt.summary.split("'");
+                      if (parts.length >= 3 && parts[1]) {
+                        rawName = parts[1];
+                      }
+                    }
+                  }
+                  const filename = rawName || "http_payload.txt";
                   const fileSize = evt.file_size || details.file_size;
                   const malwareType = evt.malware_type || details.malware_type || "Generic Payload";
                   const sha256 = evt.sha256 || details.sha256 || "N/A";

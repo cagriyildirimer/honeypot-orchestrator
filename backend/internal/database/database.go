@@ -127,6 +127,15 @@ func (db *DB) initSchema(ctx context.Context) error {
 		fmt.Printf("Database schema migration notice: %v (setting_value type change may already be applied)\n", err)
 	}
 
+	// Clean up legacy "http exploit" or "http_exploit" string filenames in details column for captured payloads
+	cleanupQuery := `
+		UPDATE events 
+		SET details = jsonb_set(details, '{filename}', '"http_payload.txt"'::jsonb)
+		WHERE event_type = 'captured_payload'
+		  AND (details->>'filename' = 'http exploit' OR details->>'filename' = 'http_exploit' OR details->>'filename' = 'http_exploit.bin');
+	`
+	_, _ = db.Pool.Exec(ctx, cleanupQuery)
+
 	return nil
 }
 

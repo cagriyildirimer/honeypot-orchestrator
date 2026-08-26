@@ -438,12 +438,6 @@ const fortigateLoginHTML = `<!DOCTYPE html>
 		hasher := sha256.New()
 		hasher.Write(payloadBytes)
 		sha256Sum := hex.EncodeToString(hasher.Sum(nil))
-
-		// Derive dynamic filename based on path and payload type
-		dynamicFilename := deriveDynamicPayloadFilename(cleanPath, payloadBytes, lowerPayload)
-
-		malwareType, scanDetails := services.AnalyzePayload(dynamicFilename, payloadBytes)
-
 		// Extract download URL dynamically
 		downloadURL := ""
 		for _, scheme := range []string{"http://", "https://", "ftp://", "tftp://"} {
@@ -457,6 +451,11 @@ const fortigateLoginHTML = `<!DOCTYPE html>
 				break
 			}
 		}
+
+		// Derive dynamic filename based on path, download URL, and payload type
+		dynamicFilename := deriveDynamicPayloadFilename(cleanPath, payloadBytes, lowerPayload, downloadURL)
+
+		malwareType, scanDetails := services.AnalyzePayload(dynamicFilename, payloadBytes)
 
 		h.baseService.LogEvent("captured_payload", map[string]interface{}{
 			"src_ip":       srcIP,
@@ -542,10 +541,23 @@ const fortigateLoginHTML = `<!DOCTYPE html>
 	return err
 }
 
-func deriveDynamicPayloadFilename(cleanPath string, body []byte, lowerPayload string) string {
+func deriveDynamicPayloadFilename(cleanPath string, body []byte, lowerPayload string, downloadURL string) string {
+	// 1. If payload contains a download URL with a file (e.g. http://site.com/path/payload.sh), extract actual filename
+	if downloadURL != "" {
+		if u, err := url.Parse(downloadURL); err == nil && u.Path != "" {
+			parts := strings.Split(strings.TrimRight(u.Path, "/"), "/")
+			if len(parts) > 0 {
+				last := parts[len(parts)-1]
+				if last != "" && !strings.Contains(last, "?") {
+					return last
+				}
+			}
+		}
+	}
+
 	cleanPath = strings.Trim(cleanPath, "/")
 
-	// 1. Check binary magic headers
+	// 2. Check binary magic headers
 	if len(body) >= 4 && string(body[:4]) == "\x7fELF" {
 		return "elf_executable.bin"
 	}
@@ -553,7 +565,16 @@ func deriveDynamicPayloadFilename(cleanPath string, body []byte, lowerPayload st
 		return "pe_windows_executable.exe"
 	}
 
-	// 2. Check content signatures (PHP, JSON, XML)
+	// 3. Check content and exploit signatures (JNDI/Log4j, Spring4Shell, Shellshock, PHP, JSON, XML)
+	if strings.Contains(lowerPayload, "${jndi:") || strings.Contains(lowerPayload, "log4j") {
+		return "log4j_jndi_exploit.txt"
+	}
+	if strings.Contains(lowerPayload, "class.module.classloader") {
+		return "spring4shell_exploit.txt"
+	}
+	if strings.Contains(lowerPayload, "() { :; };") {
+		return "shellshock_exploit.sh"
+	}
 	if strings.Contains(lowerPayload, "<?php") || strings.HasSuffix(cleanPath, ".php") {
 		return "php_webshell.php"
 	}
@@ -564,7 +585,7 @@ func deriveDynamicPayloadFilename(cleanPath string, body []byte, lowerPayload st
 		return "http_xml_soap_payload.xml"
 	}
 
-	// 3. Derive filename dynamically from requested URL path slug
+	// 4. Derive filename dynamically from requested URL path slug
 	if cleanPath != "" {
 		slug := strings.ReplaceAll(cleanPath, "/", "_")
 		slug = strings.ReplaceAll(slug, "-", "_")
